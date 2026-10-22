@@ -287,8 +287,9 @@ def ui(wt, cmd):
 
 
 def karma(wt, tests):
-    """One compile of the karma-test build, then one Karma run per namespace: the filter takes one."""
-    built = ui(wt, "npx shadow-cljs compile karma-test")
+    """One compile of the karma-test build, then one Karma run per namespace: the filter takes one. The root
+    postinstall rebuilds the gitignored loyto packages first, since a merge of the base leaves them stale."""
+    built = ui(wt, "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test")
     if not built["ok"]:
         return [{"ns": "shadow-cljs compile karma-test", **built}]
     return [{"ns": ns, **ui(wt, f"npx karma start --single-run --client.args iprally_ui.karma_runner_test.init "

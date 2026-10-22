@@ -441,8 +441,9 @@ def fixing(pr, state, fixes):
 
 
 def ready(pr, seen, fixed):
-    """Clean for good: a clean review, or a fix pass on my posted head that left nothing to push."""
-    if pr["viewerDidAuthor"] and seen.get("status") == "posted":
+    """Clean for good: a clean review, or a fix pass on my posted head that left nothing to push. On my PR,
+    a fix pass on the head that did not settle (red CI it could not land a fix for) overrides a clean review."""
+    if pr["viewerDidAuthor"] and (seen.get("status") == "posted" or fixed.get("sha") == pr["headRefOid"]):
         return fixed.get("sha") == pr["headRefOid"] and fixed.get("status") in SETTLED
     return seen.get("verdict") in READY
 
