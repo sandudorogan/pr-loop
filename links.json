@@ -10,6 +10,7 @@
   },
   "templates": {
     "Library/LaunchAgents/local.review-queue-prune.plist": "launchd/local.review-queue-prune.plist.tmpl",
-    "Library/LaunchAgents/local.review-queue.plist": "launchd/local.review-queue.plist.tmpl"
+    "Library/LaunchAgents/local.review-queue.plist": "launchd/local.review-queue.plist.tmpl",
+    "Library/LaunchAgents/local.review-queue-gitops.plist": "launchd/local.review-queue-gitops.plist.tmpl"
   }
 }

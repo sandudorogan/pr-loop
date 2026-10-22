@@ -36,7 +36,7 @@ from pr_review import LIMIT, REPO, REPO_ROOT, brief
 SCHEMA = os.path.join(DIR, "fix-schema.json")
 PROMPT = os.path.join(DIR, "prompts", "fix.md")
 MERGE_PROMPT = os.path.join(DIR, "prompts", "merge.md")
-STATE = os.path.expanduser("~/.local/state/pr-fix")
+STATE = os.path.expanduser("~/.local/state/pr-fix" + ("" if REPO == "iprally/iprally" else f"-{REPO.split('/')[1]}"))
 TIMEOUT = 2700
 TEST_RETRIES = 2
 UI_TIMEOUT = 1800

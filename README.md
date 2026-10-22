@@ -4,6 +4,7 @@ Personal PR review and fix service. MIT licensed.
 The queue runs Claude Code and Codex reviewers, then fixes actionable feedback on authored PRs.
 Its current defaults target `iprally/iprally` in `~/workdir/iprally`.
 The prompts and fix checks also contain IPRally conventions.
+A second service runs the fix lane alone on `iprally/gitops` (`IPR_REPO=iprally/gitops`).
 
 ```text
 GitHub PR -> review-queue -> Claude + Codex + quality reviews

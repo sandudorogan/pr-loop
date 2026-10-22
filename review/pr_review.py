@@ -39,7 +39,7 @@ SCHEMA = os.path.join(DIR, "review-schema.json")
 PROMPTS = os.path.join(DIR, "prompts")
 
 REPO = os.environ.get("IPR_REPO", "iprally/iprally")
-REPO_ROOT = os.environ.get("IPR_REPO_ROOT", os.path.expanduser("~/workdir/iprally"))
+REPO_ROOT = os.environ.get("IPR_REPO_ROOT", os.path.expanduser(f"~/workdir/{REPO.split('/')[1]}"))
 TIMEOUT = int(os.environ.get("IPR_REVIEW_TIMEOUT", "2700"))
 
 INLINE_SEVERITIES = {"critical", "high", "medium"}

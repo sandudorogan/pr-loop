@@ -25,6 +25,9 @@ A push from it is the next review round.
 Labels opt a PR out: no-auto-review skips the reviewers (the fix lane then acts on feedback alone),
 no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
+IPR_REPO=owner/name runs it on another repo, checked out at ~/workdir/<name>: the fix lane alone, under
+its own state files and launchd label.
+
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
        └────────────────────────────────────────────────────────────────┘
@@ -41,17 +44,19 @@ HOME = os.path.expanduser("~")
 REVIEW_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "review")
 PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
 PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
-STATE = f"{HOME}/.local/state/review-queue.json"
-FIXES = f"{HOME}/.local/state/review-queue.fixes.json"
+REPO = os.environ.get("IPR_REPO", "iprally/iprally")
+REPO_ROOT = os.environ.get("IPR_REPO_ROOT", f"{HOME}/workdir/{REPO.split('/')[1]}")
+MONOREPO = REPO == "iprally/iprally"
+TAG = "" if MONOREPO else f"-{REPO.split('/')[1]}"
+STATE = f"{HOME}/.local/state/review-queue{TAG}.json"
+FIXES = f"{HOME}/.local/state/review-queue{TAG}.fixes.json"
 LOG = f"{HOME}/Library/Logs/review-queue.log"
-LOCK = f"{HOME}/.local/state/review-queue.lock"
-NOWS = f"{HOME}/.local/state/review-queue.now.d"
-LOCKS = f"{HOME}/.local/state/review-queue.locks"
-PID = f"{HOME}/.local/state/review-queue.pid"
-NEXT = f"{HOME}/.local/state/review-queue.next"
-REPO = "iprally/iprally"
-REPO_ROOT = f"{HOME}/workdir/iprally"
-LABEL = "local.review-queue"
+LOCK = f"{HOME}/.local/state/review-queue{TAG}.lock"
+NOWS = f"{HOME}/.local/state/review-queue{TAG}.now.d"
+LOCKS = f"{HOME}/.local/state/review-queue{TAG}.locks"
+PID = f"{HOME}/.local/state/review-queue{TAG}.pid"
+NEXT = f"{HOME}/.local/state/review-queue{TAG}.next"
+LABEL = f"local.review-queue{TAG}"
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
 NOTIFIER = f"{HOME}/.local/share/review-queue/Review Queue.app/Contents/MacOS/terminal-notifier"
 
@@ -112,7 +117,7 @@ ACTIVE, NOTED = {}, {}
 
 
 def log(pr, msg):
-    line = f"{datetime.now():%F %T}  #{pr:<6} {msg}"
+    line = f"{datetime.now():%F %T}  {TAG[1:]}#{pr:<6} {msg}"
     sys.stdout.write(line + "\n")
     sys.stdout.flush()
     if sys.stdout.isatty():
@@ -205,6 +210,11 @@ def approved(pr):
 
 def labeled(pr, label):
     return any(l["name"] == label for l in pr["labels"]["nodes"])
+
+
+def unreviewed(pr):
+    """The review prompts carry the monorepo's conventions: another repo gets the fix lane alone."""
+    return not MONOREPO or labeled(pr, NO_REVIEW)
 
 
 def colleague_approved(pr):
@@ -356,8 +366,8 @@ def handle(pr, first, only, dry_run):
         seen = {}
     if approved(pr) and not only:
         return log_once(n, "approved by me, not re-requested")
-    if labeled(pr, NO_REVIEW) and not only:
-        return log_once(n, f"labeled {NO_REVIEW}")
+    if unreviewed(pr) and not only:
+        return log_once(n, NO_REVIEW)
     if seen.get("sha") == pr["headRefOid"] and seen.get("status") != "limited" and not only:
         return log_once(n, f"same head {pr['headRefOid'][:12]} ({seen['status']} {seen['at']})")
     try:
@@ -416,7 +426,7 @@ def fixable(pr, state, fixes):
     """My PR whose head the reviewers are done with (or skip), carrying feedback, a conflict or red CI no fix
     pass has seen."""
     seen = state.get(str(pr["number"]), {})
-    reviewed = labeled(pr, NO_REVIEW) or seen.get("sha") == pr["headRefOid"] and seen.get("status") != "limited"
+    reviewed = unreviewed(pr) or seen.get("sha") == pr["headRefOid"] and seen.get("status") != "limited"
     return (pr["viewerDidAuthor"] and not labeled(pr, NO_FIX) and reviewed
             and fixes.get(str(pr["number"]), {}).get("key") != feedback_key(pr))
 
@@ -619,14 +629,14 @@ def wait(numbers, timeout):
     state = load()
     pending = [n for n, pr in heads(numbers).items()
                if state.get(str(n), {}).get("sha") != pr["headRefOid"] and not state.get(str(n), {}).get("hold")
-               and not labeled(pr, NO_REVIEW)]
+               and not unreviewed(pr)]
     save_bumped(pending + [x for x in bumped() if x not in pending])
     wake()
     deadline = time.monotonic() + timeout
     while True:
         state, fixes, now = load(), load(FIXES), reviewing()
         prs = heads(numbers)
-        skipped = {n for n, pr in prs.items() if labeled(pr, NO_REVIEW)}
+        skipped = {n for n, pr in prs.items() if unreviewed(pr)}
         reviewed = {n for n, pr in prs.items() if state.get(str(n), {}).get("sha") == pr["headRefOid"]} - skipped
         owed = {n for n in reviewed if fixing(prs[n], state, fixes)}
         fixed = {n: {k: v for k, v in fixes[str(n)].items() if k not in ("sha", "key")}
@@ -672,7 +682,7 @@ def row(pr, seen, now, first, fixed={}):
         detail = (f"fix {fixed['status']}" if fixed.get("sha") == pr["headRefOid"]
                   else NO_FIX if owed and labeled(pr, NO_FIX) else "fix queued" if owed else seen["at"])
         return 4, seen.get("verdict") or seen["status"], detail
-    if labeled(pr, NO_REVIEW):
+    if unreviewed(pr):
         return 4, "skipped", NO_REVIEW
     if not seen and baselined(pr, requested):
         return 4, "new", "baseline on next run"
