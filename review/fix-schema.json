@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["commit_message", "summary", "items"],
+  "properties": {
+    "commit_message": {
+      "type": "string",
+      "description": "Subject line, blank line, body. Empty when you changed no file."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Two or three sentences: what you changed and what you left."
+    },
+    "items": {
+      "type": "array",
+      "description": "One entry per feedback ref, every ref exactly once.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "disposition", "reply"],
+        "properties": {
+          "ref": {"type": "string", "description": "The ref from the feedback file, copied exactly."},
+          "disposition": {
+            "type": "string",
+            "enum": ["fixed", "refuted", "deferred"],
+            "description": "fixed: the code on the branch now addresses it, through your change or an earlier commit. refuted: the claim is wrong or not worth acting on. deferred: a product decision for the PR author."
+          },
+          "reply": {
+            "type": "string",
+            "description": "refuted: one short, casual, concrete sentence that says why (for a ci ref: why the PR did not cause the failure). fixed and deferred: empty."
+          }
+        }
+      }
+    }
+  }
+}

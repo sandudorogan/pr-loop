@@ -1,0 +1,15 @@
+{
+  "links": {
+    ".local/bin/review-queue": "bin/review-queue",
+    ".claude/skills/delegator/pr_review.py": "review/pr_review.py",
+    ".claude/skills/delegator/pr_fix.py": "review/pr_fix.py",
+    ".claude/skills/delegator/review-schema.json": "review/review-schema.json",
+    ".claude/skills/delegator/fix-schema.json": "review/fix-schema.json",
+    ".claude/skills/delegator/prompts": "review/prompts",
+    ".claude/skills/pr-review-loop": "claude/skills/pr-review-loop"
+  },
+  "templates": {
+    "Library/LaunchAgents/local.review-queue-prune.plist": "launchd/local.review-queue-prune.plist.tmpl",
+    "Library/LaunchAgents/local.review-queue.plist": "launchd/local.review-queue.plist.tmpl"
+  }
+}

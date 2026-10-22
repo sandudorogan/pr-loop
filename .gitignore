@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.local/
+.worktrees/
+briefs/
+.clean-reviews.json
+state.json
+prs.json
