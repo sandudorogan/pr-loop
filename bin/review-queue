@@ -62,6 +62,7 @@ FIX_TIMEOUT = 4 * 3600
 FIX_ERRORS = 3
 REFRESH = 300
 IDLE_REFRESH = 60
+LIST_CACHE = "30s"
 ATTEMPTS = 3
 BACKOFF = (60, 180)
 MAX_ADDED = 4000
@@ -178,16 +179,16 @@ def save(state, path=STATE):
     os.replace(f"{path}.tmp", path)
 
 
-def queue(only):
+def queue(only, *flags):
     """My own PRs and review requests (drafts too), plus PRs I reviewed before, since a posted
-    review drops the request. `only` fetches that one PR."""
+    review drops the request. `only` fetches that one PR; `flags` go to the queue's `gh api` call."""
     if only:
         owner, name = REPO.split("/")
         pr = json.loads(sh("gh", "api", "graphql", "-f", f"query={PR_QUERY}", "-f", f"owner={owner}",
                            "-f", f"name={name}", "-F", f"number={only}"))["data"]["repository"]["pullRequest"]
         return [dict(pr, requested=True)] if pr["state"] == "OPEN" else []
     scope = f"repo:{REPO} is:pr is:open"
-    data = json.loads(sh("gh", "api", "graphql", "-f", f"query={QUEUE_QUERY}",
+    data = json.loads(sh("gh", "api", "graphql", *flags, "-f", f"query={QUEUE_QUERY}",
                          "-f", f"mine={scope} author:@me",
                          "-f", f"requested={scope} user-review-requested:@me",
                          "-f", f"reviewed={scope} reviewed-by:@me -author:@me"))["data"]
@@ -567,7 +568,7 @@ def daemon():
                     log("-", f"queue refreshed: {len(prs)} PR(s), {len(pending.busy)} in review, "
                              f"{len(fixes.prs) + len(fixes.busy)} to fix")
             except Exception as e:
-                log("-", f"queue refresh failed: {str(e)[-200:]}")
+                log("-", f"queue refresh failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
             idle = False
             while not refresh_now.wait(IDLE_REFRESH):
                 if time.monotonic() - started >= REFRESH:
@@ -696,7 +697,7 @@ def bump(n):
 def show(prs=None):
     state, fixed, tty, now, first = load(), load(FIXES), sys.stdout.isatty(), reviewing(), bumped()
     listed = ((*row(pr, state.get(str(pr["number"]), {}), now, first, fixed.get(str(pr["number"]), {})), pr)
-              for pr in prs or queue(None))
+              for pr in prs or queue(None, "--cache", LIST_CACHE))
     rows = sorted((r for r in listed if r[0] == 0 or not approved(r[3])),
                   key=lambda r: (r[0], priority(r[3], first), r[3]["number"] < max(now, default=0), r[3]["number"]))
     rank = 0
@@ -733,7 +734,11 @@ def worktree_prs(trees):
     flags = [f for v, t, value in variables for f in ("-F" if t == "Int" else "-f", f"{v}={value}")]
     out = subprocess.run(["gh", "api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}",
                           *flags], cwd=REPO_ROOT, capture_output=True, text=True, timeout=600)
-    repo = json.loads(out.stdout)["data"]["repository"]
+    body = json.loads(out.stdout)
+    if "data" not in body:
+        log("-", f"prune skipped: {out.stderr.strip()[-200:]}")
+        sys.exit(1)
+    repo = body["data"]["repository"]
     prs = lambda i: (repo.get(f"h{i}") or {}).get("nodes") or [p for p in [repo.get(f"n{i}")] if p]
     return {path: [dict(p, requested=any(r["requestedReviewer"].get("isViewer") for r in p["reviewRequests"]["nodes"]))
                    for p in prs(i)] for i, (path, *_) in enumerate(trees)}
