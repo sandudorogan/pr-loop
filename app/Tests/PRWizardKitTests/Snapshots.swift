@@ -29,10 +29,12 @@ enum Snapshots {
     }
 
     static func queue(
-        rev: String = "b71e09c4d2a35f18", lanes: JSONValue? = nil, items: (([JSONValue]) -> [JSONValue])? = nil
+        rev: String = "b71e09c4d2a35f18", lanes: JSONValue? = nil, items: (([JSONValue]) -> [JSONValue])? = nil,
+        fetchedAt: String? = nil
     ) throws -> QueueSnapshot {
         var queue = try JSONDecoder().decode([String: JSONValue].self, from: Fixture.data("queue.json"))
         queue["rev"] = .string(rev)
+        if let fetchedAt { queue["refresh"] = .object(["last_at": .string(fetchedAt), "last_error": .null]) }
         queue["lanes"] = lanes ?? queue["lanes"]
         if let items, case .array(let list) = queue["items"] { queue["items"] = .array(items(list)) }
         return try JSONDecoder.daemon.decode(QueueSnapshot.self, from: JSONEncoder().encode(queue))

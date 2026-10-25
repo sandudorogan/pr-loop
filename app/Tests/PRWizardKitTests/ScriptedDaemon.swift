@@ -52,6 +52,10 @@ actor ScriptedDaemon: DaemonAPI {
         errors[call] = error
     }
 
+    func serve(_ snapshot: QueueSnapshot) {
+        snapshots.append(.success(snapshot))
+    }
+
     func info() async throws -> DaemonInfo {
         calls.append(.info)
         return try Self.next(&infos)

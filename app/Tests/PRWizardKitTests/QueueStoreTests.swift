@@ -130,6 +130,33 @@ private actor Launches: DaemonLauncher {
         #expect(store.pendingActions.isEmpty)
     }
 
+    @Test("refresh stays pending past the 202 until a snapshot shows a new fetch")
+    func refreshing() async throws {
+        let daemon = ScriptedDaemon(
+            info: Array(repeating: .success(try Snapshots.info()), count: 3),
+            queue: [.success(try Snapshots.queue(rev: "a"))])
+        let store = store(daemon)
+        await store.run()
+        await store.refresh()
+        #expect(store.isRefreshing)
+        await daemon.serve(try Snapshots.queue(rev: "b"))
+        await store.run()
+        #expect(store.isRefreshing)
+        await daemon.serve(try Snapshots.queue(rev: "c", fetchedAt: "2026-10-25T12:05:00+03:00"))
+        await store.run()
+        #expect(!store.isRefreshing)
+    }
+
+    @Test("a refused refresh stops refreshing")
+    func refreshRefused() async throws {
+        let daemon = ScriptedDaemon(info: [.success(try Snapshots.info())], queue: [.success(try Snapshots.queue())])
+        await daemon.fail(.refresh, with: APIError.down)
+        let store = store(daemon)
+        await store.run()
+        await store.refresh()
+        #expect(!store.isRefreshing)
+    }
+
     @Test("409 busy shows for 6 s and clears the pending state")
     func busyBanner() async {
         let gate = Gate()

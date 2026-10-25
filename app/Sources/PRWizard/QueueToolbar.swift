@@ -15,9 +15,10 @@ struct QueueToolbar: ToolbarContent {
                 Task { await store.refresh() }
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
+                    .symbolEffect(.rotate, options: .repeat(.continuous), isActive: store.isRefreshing)
             }
-            .disabled(store.snapshot == nil || store.pendingActions.contains(.refresh))
-            .help("Fetch the PRs from GitHub now")
+            .disabled(store.snapshot == nil || store.isRefreshing)
+            .help(store.isRefreshing ? "Fetching the PRs from GitHub…" : "Fetch the PRs from GitHub now")
             Button {
                 showsInspector.toggle()
             } label: {
@@ -53,7 +54,9 @@ private struct DaemonStatus: View {
                 Button("Retry") { store.retry() }
             }
         case .live(let snapshot):
-            if let error = snapshot.refresh.lastError {
+            if store.isRefreshing {
+                status("Fetching PRs from GitHub…", .neutral)
+            } else if let error = snapshot.refresh.lastError {
                 status(
                     Text(
                         "GitHub fetch failed \(snapshot.refresh.lastAt?.formatted(date: .omitted, time: .shortened) ?? "")"

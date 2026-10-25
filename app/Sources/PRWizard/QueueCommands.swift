@@ -18,7 +18,7 @@ struct QueueCommands: Commands {
             Divider()
             Button("Refresh") { Task { await store.refresh() } }
                 .keyboardShortcut("r")
-                .disabled(store.snapshot == nil)
+                .disabled(store.snapshot == nil || store.isRefreshing)
             Divider()
             Button("All Repos") { focus?.sidebar.wrappedValue = .all }
                 .keyboardShortcut("0")

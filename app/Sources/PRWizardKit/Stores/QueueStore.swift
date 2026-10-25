@@ -6,6 +6,7 @@ import Observation
     public private(set) var info: DaemonInfo?
     public private(set) var pendingActions: Set<PendingAction> = []
     public private(set) var lastActionError: ActionFailure?
+    public var isRefreshing: Bool { pendingActions.contains(.refresh) || refreshingFrom != nil }
 
     public var snapshot: QueueSnapshot? { phase.snapshot }
     public var projects: [ProjectSummary] {
@@ -17,6 +18,7 @@ import Observation
     private let now: () -> Date
     private let sleep: LongPoll<QueueFeed.Update>.Sleep
     private var task: Task<Void, Never>?
+    private var refreshingFrom: RefreshStatus?
 
     public init(
         daemon: any DaemonAPI, wait: Duration = .seconds(55), now: @escaping () -> Date = { Date() },
@@ -53,8 +55,10 @@ import Observation
         }
     }
 
+    /// Stays refreshing past the 202 until a snapshot shows the daemon finished a fetch.
     public func refresh() async {
-        await perform([.refresh], on: nil) { try await daemon.refresh() }
+        refreshingFrom = snapshot?.refresh
+        if !(await perform([.refresh], on: nil) { try await daemon.refresh() }) { refreshingFrom = nil }
     }
 
     public func moveToFront(_ prs: [PRRef]) async {
@@ -83,19 +87,24 @@ import Observation
         case .value(let update):
             info = update.info ?? info
             phase = .live(update.snapshot)
+            if update.snapshot.refresh.lastAt != refreshingFrom?.lastAt { refreshingFrom = nil }
         case .failure(APIError.incompatible(let api), _):
+            refreshingFrom = nil
             phase = .incompatible(api: api)
         case .failure(let error, let delay):
+            refreshingFrom = nil
             let retryAt = now().addingTimeInterval(delay / .seconds(1))
             phase = snapshot.map { .stale($0, error, retryAt: retryAt) } ?? .down(error, retryAt: retryAt)
         }
     }
 
-    private func perform(_ actions: [PendingAction], on pr: PRRef?, _ request: () async throws -> Void) async {
+    @discardableResult
+    private func perform(_ actions: [PendingAction], on pr: PRRef?, _ request: () async throws -> Void) async -> Bool {
         pendingActions.formUnion(actions)
         do {
             try await request()
             pendingActions.subtract(actions)
+            return true
         } catch {
             pendingActions.subtract(actions)
             let failure = ActionFailure(pr: pr, error: error)
@@ -104,6 +113,7 @@ import Observation
                 try? await sleep(.seconds(6))
                 if lastActionError?.id == failure.id { lastActionError = nil }
             }
+            return false
         }
     }
 }
