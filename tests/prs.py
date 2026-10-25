@@ -1,9 +1,11 @@
 """Shared fixtures: the three scripts as modules, and builders for queue PRs and GitHub payloads."""
 from pathlib import Path
+import os
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "review"))
+os.environ["PR_WIZARD_CONFIG"] = "/nonexistent/config.json"
 
 from pr_wizard import queue as rq  # noqa: E402
 import pr_fix, pr_review  # noqa: E402
