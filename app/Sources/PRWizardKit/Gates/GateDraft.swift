@@ -5,15 +5,7 @@ import Foundation
 /// `gate` builds the `GateConfig` the daemon takes. Blank text becomes an absent key, and keys the app does not
 /// know ride through `base`.
 public struct GateDraft: Hashable, Sendable {
-    public struct Pair: Hashable, Sendable {
-        public var from = ""
-        public var to = ""
-
-        public init(from: String = "", to: String = "") {
-            self.from = from
-            self.to = to
-        }
-    }
+    public typealias Pair = StringPair
 
     public struct Problem: Hashable, Sendable {
         public let path: String
@@ -65,7 +57,7 @@ public struct GateDraft: Hashable, Sendable {
         targetMap = (targets?.map ?? []).map { Pair(from: $0.first ?? "", to: $0.dropFirst().first ?? "") }
         targetKeep = targets?.keep ?? ""
         targetExists = targets?.exists ?? false
-        targetItems = (targets?.item ?? [:]).sorted { $0.key < $1.key }.map { Pair(from: $0.key, to: $0.value) }
+        targetItems = targets?.item ?? []
         targetValid = targets?.valid ?? ""
         hasSetup = gate.setup != nil
         setupName = gate.setup?.name ?? ""
@@ -96,7 +88,7 @@ public struct GateDraft: Hashable, Sendable {
         out.map = targetMap.filter { !$0.isBlank }.map { [$0.from, $0.to] }.nilIfEmpty
         out.keep = Self.text(targetKeep)
         out.exists = targetExists ? true : out.exists.map { _ in false }
-        out.item = Dictionary(targetItems.filter { !$0.isBlank }.map { ($0.from, $0.to) }) { $1 }.nilIfEmpty
+        out.item = targetItems.filter { !$0.isBlank }.nilIfEmpty
         out.valid = Self.text(targetValid)
         return out
     }

@@ -21,7 +21,7 @@ extension GateDraft {
             }
             expect("targets.keep", targets.keep.map(PythonRegex.compiles) ?? true, regex)
             expect("targets.valid", targets.valid.map(PythonRegex.compiles) ?? true, regex)
-            expect("targets.item", !(targets.item ?? [:]).keys.contains(""), "needs a character to replace")
+            expect("targets.item", !(targets.item ?? []).contains { $0.from.isEmpty }, "needs a character to replace")
         }
         if let setup = gate.setup {
             expect("setup.name", !setup.name.isEmpty, text)

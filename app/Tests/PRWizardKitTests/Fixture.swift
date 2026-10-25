@@ -20,6 +20,6 @@ enum Fixture {
     }
 
     static func decode<Value: Decodable>(_ type: Value.Type, from name: String) throws -> Value {
-        try JSONDecoder.daemon.decode(type, from: data(name))
+        try JSONValue(parsing: data(name)).decoded(type, using: .daemon)
     }
 }

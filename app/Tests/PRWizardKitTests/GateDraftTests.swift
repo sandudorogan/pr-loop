@@ -28,6 +28,20 @@ import Testing
         }
     }
 
+    @Test("chained item replacements keep their order through decode, edit and encode", arguments: [false, true])
+    func itemOrder(reversed: Bool) throws {
+        let pairs = reversed ? #""b":"c","a":"b""# : #""a":"b","b":"c""#
+        let text = #"{"name":"t","kind":"test","when":["*"],"run":"x {item}","targets":{"item":{\#(pairs)}}}"#
+        var draft = GateDraft(try JSONValue(parsing: Data(text.utf8)).decoded(GateConfig.self))
+        #expect(draft.targetItems.map(\.from) == (reversed ? ["b", "a"] : ["a", "b"]))
+        draft.name = "t2"
+        draft.targetItems.append(.init(from: "c", to: "d"))
+        var list = GateList(.array([]))
+        list.save(draft.gate, at: nil)
+        let wire = String(decoding: list.value.data, as: UTF8.self)
+        #expect(wire.contains(#""item":{\#(pairs),"c":"d"}"#))
+    }
+
     @Test("a key the app does not know survives an edit")
     func unknownKeys() throws {
         let tree = JSONValue.merged(

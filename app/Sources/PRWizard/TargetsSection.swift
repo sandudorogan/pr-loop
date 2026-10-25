@@ -19,7 +19,7 @@ struct TargetsSection: View {
                 Toggle("The target file must exist", isOn: $draft.targetExists)
                 PairsEditor(
                     title: "Item", pairs: $draft.targetItems, from: "/", to: ".",
-                    caption: "Swaps characters in the item: this character for that one.")
+                    caption: "Swaps characters in the item, top to bottom: each pair sees the result of the one above.")
                 FieldError(messages: errors("targets.item"))
                 field("Valid", $draft.targetValid, "An item must match this regex, or it is skipped.", "targets.valid")
             }

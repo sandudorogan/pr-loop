@@ -36,7 +36,7 @@ import Testing
         #expect(karma.cwd == "ui")
         #expect(karma.usesSlot == true)
         #expect(karma.timeout == 1800)
-        #expect(karma.targets?.item == ["/": ".", "_": "-"])
+        #expect(karma.targets?.item == [.init(from: "/", to: "."), .init(from: "_", to: "-")])
         #expect(karma.setup?.name == "shadow-cljs compile karma-test")
         #expect(gates[0].targets == nil)
         #expect(gates[0].cwd == nil)
