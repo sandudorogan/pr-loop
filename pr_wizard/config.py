@@ -278,6 +278,57 @@ def validate(doc, level="config", base=None):
     return out
 
 
+# ---------------------------------------------------------------- load, save
+
+def default_path():
+    return os.environ.get("PR_WIZARD_CONFIG") or os.path.expanduser("~/.config/pr-wizard/config.json")
+
+
+class Loaded(NamedTuple):
+    config: dict
+    source: str
+    error: str | None
+    path: str
+    real_path: str
+    rev: str
+
+
+def load(path=None):
+    """Never raises. A missing file gives the defaults. An unreadable or invalid one gives the defaults and an `error`."""
+    path = path or default_path()
+    config, source, error = copy.deepcopy(DEFAULTS), "defaults", None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            merged = merge(DEFAULTS, json.load(fh))
+        problems = validate(merged) if isinstance(merged, dict) else [problem("", "must be an object")]
+        error = next((f"{p['path']}: {p['message']}".removeprefix(": ") for p in problems), None)
+        if not problems:
+            config, source = merged, "file"
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError) as e:
+        error = f"{type(e).__name__}: {e}"
+    return Loaded(config, source, error, path, os.path.realpath(path), rev(config))
+
+
+def save(config, path=None):
+    """Temp file + rename beside the resolved real path, so a chezmoi symlink at `path` survives."""
+    real = os.path.realpath(path or default_path())
+    os.makedirs(os.path.dirname(real), exist_ok=True)
+    tmp = f"{real}.tmp-{os.getpid()}"
+    try:
+        mode = os.stat(real).st_mode & 0o7777 if os.path.exists(real) else 0o644
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(config, indent=2) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+            os.fchmod(fh.fileno(), mode)
+        os.replace(tmp, real)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 # ---------------------------------------------------------------- effective
 
 def effective(config, repo, pr_override=None, labels=()):
@@ -288,3 +339,39 @@ def effective(config, repo, pr_override=None, labels=()):
         if label in labels:
             eff[lane]["enabled"] = False
     return eff
+
+
+# ---------------------------------------------------------------- choices
+
+def toml_top_level(path, *keys):
+    found = {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if line.lstrip().startswith("["):
+                    break
+                m = re.match(r'\s*(\w+)\s*=\s*"([^"]*)"', line)
+                if m and m[1] in keys:
+                    found[m[1]] = m[2]
+    except OSError:
+        pass
+    return found
+
+
+def choices(codex_home=None):
+    """The picker lists for the app. The Codex lists are suggestions read from `~/.codex`; empty when unreadable."""
+    home = codex_home or CODEX_HOME
+    try:
+        with open(os.path.join(home, "models_cache.json"), encoding="utf-8") as fh:
+            models = [{"model": m["slug"], "efforts": [lv["effort"] for lv in m["supported_reasoning_levels"]],
+                       "default_effort": m.get("default_reasoning_level")}
+                      for m in json.load(fh)["models"] if m.get("visibility") != "hide"]
+    except (OSError, ValueError, KeyError, TypeError):
+        models = []
+    top = toml_top_level(os.path.join(home, "config.toml"), "model", "model_reasoning_effort")
+    return {
+        "engines": ENGINES, "fix_engines": FIX_ENGINES, "gate_kinds": GATE_KINDS,
+        "claude_efforts": CLAUDE_EFFORTS, "codex_efforts": CODEX_EFFORTS, "claude_models": CLAUDE_MODELS,
+        "codex_default": {"model": top["model"], "effort": top.get("model_reasoning_effort")} if "model" in top else None,
+        "codex_models": models, "prompts": prompts(),
+    }

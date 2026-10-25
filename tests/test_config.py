@@ -1,7 +1,17 @@
 import copy
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import tempfile
 import unittest
+from unittest import mock
 
 from pr_wizard import config as c
+
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def doc(**changes):
     return c.merge(c.DEFAULTS, changes)
@@ -11,6 +21,16 @@ def with_reviewers(**edit):
     reviewers = copy.deepcopy(c.DEFAULTS["review"]["reviewers"])
     reviewers[0].update(edit)
     return {"review": {"reviewers": reviewers}}
+
+
+class Tmp(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.path = str(self.dir / "config.json")
+
+    def write(self, text):
+        Path(self.path).write_text(text)
 
 
 class Defaults(unittest.TestCase):
@@ -45,6 +65,45 @@ class Defaults(unittest.TestCase):
         self.assertEqual(karma["setup"]["run"], "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test")
         self.assertEqual(karma["run"], "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init "
                                        "--client.args {item}")
+
+
+class Load(Tmp):
+    def test_missing_file_gives_defaults_without_error(self):
+        got = c.load(self.path)
+        self.assertEqual((got.config, got.source, got.error), (c.DEFAULTS, "defaults", None))
+
+    def test_bad_files_give_defaults_and_an_error(self):
+        for text in ("{nope", "[]", "null", '{"review": {"workers": 0}}', '{"mystery": 1}', "\xff"):
+            with self.subTest(text=text):
+                self.write(text)
+                got = c.load(self.path)
+                self.assertEqual((got.config, got.source), (c.DEFAULTS, "defaults"))
+                self.assertTrue(got.error)
+
+    def test_error_names_the_first_problem(self):
+        self.write('{"review": {"workers": 0}}')
+        self.assertEqual(c.load(self.path).error, "review.workers: must be an integer 1-8")
+
+    def test_unreadable_path_gives_defaults_and_an_error(self):
+        got = c.load(str(self.dir))
+        self.assertEqual((got.source, bool(got.error)), ("defaults", True))
+
+    def test_partial_file_merges_over_defaults(self):
+        self.write('{"review": {"workers": 2}}')
+        got = c.load(self.path)
+        self.assertEqual((got.source, got.error, got.config["review"]["workers"], got.config["fix"]["workers"]),
+                         ("file", None, 2, 3))
+        self.assertEqual(got.config["review"]["reviewers"], c.DEFAULTS["review"]["reviewers"])
+
+    def test_env_picks_the_path(self):
+        with mock.patch.dict(os.environ, {"PR_WIZARD_CONFIG": self.path}):
+            self.assertEqual(c.default_path(), self.path)
+            self.write('{"fix": {"workers": 1}}')
+            self.assertEqual(c.load().config["fix"]["workers"], 1)
+
+    def test_loaded_config_is_not_the_shared_defaults(self):
+        c.load(self.path).config["review"]["workers"] = 8
+        self.assertEqual(c.DEFAULTS["review"]["workers"], 3)
 
 
 class Validate(unittest.TestCase):
@@ -235,6 +294,101 @@ class Rev(unittest.TestCase):
     def test_rev_moves_with_the_content(self):
         self.assertNotEqual(c.rev(c.DEFAULTS), c.rev(doc(fix={"workers": 1})))
         self.assertEqual(c.rev({}), c.rev({}))
+
+    def test_load_reports_the_rev_of_its_config(self):
+        self.assertEqual(c.load("/nonexistent/x").rev, c.rev(c.DEFAULTS))
+
+
+class Save(Tmp):
+    def test_round_trip(self):
+        cfg = doc(review={"workers": 2})
+        c.save(cfg, self.path)
+        got = c.load(self.path)
+        self.assertEqual((got.source, got.config, got.rev), ("file", cfg, c.rev(cfg)))
+
+    def test_format_is_indented_json_with_a_newline_in_default_order(self):
+        cfg = doc(review={"workers": 2})
+        c.save(cfg, self.path)
+        text = Path(self.path).read_text()
+        self.assertEqual(text, json.dumps(cfg, indent=2) + "\n")
+        self.assertEqual(list(json.loads(text)), list(c.DEFAULTS))
+
+    def test_symlink_survives_and_the_real_file_changes(self):
+        real_dir = self.dir / "chezmoi" / ".pr-wizard"
+        real_dir.mkdir(parents=True)
+        real = real_dir / "config.json"
+        real.write_text("{}")
+        link = self.dir / "config-link.json"
+        link.symlink_to(real)
+        c.save(doc(fix={"workers": 1}), str(link))
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(os.readlink(link), str(real))
+        self.assertEqual(json.loads(real.read_text())["fix"]["workers"], 1)
+        self.assertEqual(c.load(str(link)).real_path, str(real.resolve()))
+
+    def test_temp_file_sits_beside_the_resolved_real_path(self):
+        real_dir = self.dir / "src"
+        real_dir.mkdir()
+        real = real_dir / "config.json"
+        link = self.dir / "link.json"
+        link.symlink_to(real)
+        with mock.patch("os.replace", wraps=os.replace) as replace:
+            c.save(c.DEFAULTS, str(link))
+        tmp, dest = replace.call_args.args
+        self.assertEqual((os.path.dirname(tmp), dest), (str(real_dir.resolve()), str(real.resolve())))
+        self.assertEqual(os.listdir(real_dir), ["config.json"])
+
+    def test_mode_is_copied_and_new_files_are_0644(self):
+        c.save(c.DEFAULTS, self.path)
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o644)
+        os.chmod(self.path, 0o600)
+        c.save(doc(fix={"workers": 2}), self.path)
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
+
+    def test_creates_a_missing_directory(self):
+        path = str(self.dir / "new" / "dir" / "config.json")
+        c.save(c.DEFAULTS, path)
+        self.assertEqual(c.load(path).source, "file")
+
+    def test_a_failed_write_leaves_no_temp_and_keeps_the_file(self):
+        c.save(c.DEFAULTS, self.path)
+        before = Path(self.path).read_text()
+        with mock.patch("os.replace", side_effect=OSError("boom")), self.assertRaises(OSError):
+            c.save(doc(fix={"workers": 2}), self.path)
+        self.assertEqual((Path(self.path).read_text(), os.listdir(self.dir)), (before, ["config.json"]))
+
+
+class Choices(Tmp):
+    def test_static_lists_and_prompts(self):
+        got = c.choices(str(self.dir))
+        self.assertEqual(got["engines"], ["claude", "codex"])
+        self.assertEqual(got["fix_engines"], ["codex"])
+        self.assertEqual(got["gate_kinds"], ["format", "test"])
+        self.assertEqual(got["claude_efforts"], ["low", "medium", "high", "xhigh", "max"])
+        self.assertEqual(got["codex_efforts"][-1], "ultra")
+        self.assertEqual(got["prompts"], sorted(p.name for p in (ROOT / "review/prompts").glob("*.md")))
+
+    def test_unreadable_codex_home_gives_empty_suggestions(self):
+        got = c.choices(str(self.dir / "none"))
+        self.assertEqual((got["codex_models"], got["codex_default"]), ([], None))
+
+    def test_codex_models_and_default_are_read(self):
+        (self.dir / "models_cache.json").write_text(json.dumps({"models": [
+            {"slug": "m1", "default_reasoning_level": "medium", "visibility": "list",
+             "supported_reasoning_levels": [{"effort": "low"}, {"effort": "high"}]},
+            {"slug": "hidden", "visibility": "hide", "supported_reasoning_levels": []}]}))
+        (self.dir / "config.toml").write_text('model = "m1"\nmodel_reasoning_effort = "high"\n[projects]\nmodel = "x"\n')
+        got = c.choices(str(self.dir))
+        self.assertEqual(got["codex_models"], [{"model": "m1", "efforts": ["low", "high"], "default_effort": "medium"}])
+        self.assertEqual(got["codex_default"], {"model": "m1", "effort": "high"})
+
+    def test_a_model_line_without_effort(self):
+        (self.dir / "config.toml").write_text('model = "m1"\n')
+        self.assertEqual(c.choices(str(self.dir))["codex_default"], {"model": "m1", "effort": None})
+
+    def test_a_garbled_cache_gives_no_models(self):
+        (self.dir / "models_cache.json").write_text('{"models": [{"nope": 1}]}')
+        self.assertEqual(c.choices(str(self.dir))["codex_models"], [])
 
 
 if __name__ == "__main__":
