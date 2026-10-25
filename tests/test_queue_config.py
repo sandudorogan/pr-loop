@@ -225,13 +225,21 @@ class Verdict(Configured):
 class FixNote(Configured):
     def test_a_red_gate_names_itself(self):
         res = {"status": "tests-red", "gate": "pytest", "failing": ["tests/test_a.py"], "worktree": "/wt"}
-        self.assertEqual(rq.fix_note(res, "", NEW), "pytest red in tests/test_a.py — /wt")
+        self.assertEqual(rq.fix_note(res, "", ()), "pytest red in tests/test_a.py — /wt")
 
     def test_without_a_gate_key_it_names_the_projects_test_gates(self):
         gate = {"name": "go test", "kind": "test", "when": ["*.go"], "run": "go test ./..."}
         self.write({"projects": {NEW: {"root": "/src/w", "fix": {"gates": [gate]}}}})
         res = {"status": "tests-red", "failing": ["pkg"], "worktree": "/wt"}
-        self.assertEqual(rq.fix_note(res, "", NEW), "go test red in pkg — /wt")
+        self.assertEqual(rq.fix_note(res, "", rq.effective(NEW)["fix"]["gates"]), "go test red in pkg — /wt")
+
+    def test_the_fix_pass_names_the_prs_own_gates(self):
+        self.write({"projects": {NEW: {"root": "/src/w"}}})
+        db.put_pr_override(NEW, 1, {"fix": {"gates": [{"name": "pr gate", "kind": "test", "when": ["*"], "run": "x"}]}})
+        out = CompletedProcess([], 0, '{"status": "tests-red", "failing": ["pkg"], "worktree": "/wt"}', "")
+        with patch.object(rq.subprocess, "run", return_value=out), patch.object(rq, "log"), patch.object(rq, "in_review"):
+            rq.fix(pr(repo=NEW), [])
+        self.assertEqual(rq.load(NEW, rq.FIXES)["1"]["note"], "pr gate red in pkg — /wt")
 
 
 if __name__ == "__main__":

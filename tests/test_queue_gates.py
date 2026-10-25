@@ -248,7 +248,7 @@ class FixNote(unittest.TestCase):
 
     def test_tests_red(self):
         res = {"status": "tests-red", "failing": ["a.b", "c.d"], "worktree": "/wt"}
-        self.assertEqual(rq.fix_note(res, ""), "Karma red in a.b, c.d — /wt")
+        self.assertEqual(rq.fix_note(res, "", rq.effective(MONOREPO)["fix"]["gates"]), "Karma red in a.b, c.d — /wt")
 
     def test_error_is_the_last_stderr_line_capped_at_200_chars(self):
         self.assertEqual(rq.fix_note({}, "first\nlast line\n"), "last line")

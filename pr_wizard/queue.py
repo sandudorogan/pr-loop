@@ -551,13 +551,13 @@ def ready(pr, seen, fixed):
     return seen.get("verdict") in READY
 
 
-def fix_note(res, err, repo=MONOREPO):
+def fix_note(res, err, gates=()):
     status = res.get("status", "error")
     if status == "pushed":
         merged = "merged the base, " if res.get("merged") else ""
         return f"pushed {res['pushed'][:12]}: {merged}{res['fixed']} fixed, {res['refuted']} refuted, {res['deferred']} deferred"
     if status == "tests-red":
-        gate = res.get("gate") or ", ".join(g["name"] for g in effective(repo)["fix"]["gates"] if g["kind"] == "test")
+        gate = res.get("gate") or ", ".join(g["name"] for g in gates if g["kind"] == "test")
         return f"{gate} red in {', '.join(res['failing'])} — {res['worktree']}"
     if status == "error":
         return (err.strip().splitlines() or ["pr_fix.py printed nothing"])[-1][-200:]
@@ -578,7 +578,7 @@ def fix(pr, first):
         res = json.loads(out.stdout)
     except ValueError:
         res = {}
-    status, note = res.get("status", "error"), fix_note(res, out.stderr, repo)
+    status, note = res.get("status", "error"), fix_note(res, out.stderr, knobs["gates"])
     log(repo, n, f"fix {status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     if status == "limited":
         return

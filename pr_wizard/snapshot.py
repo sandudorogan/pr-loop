@@ -27,13 +27,13 @@ def iso(at):
     return datetime.fromisoformat(at).astimezone().isoformat(timespec="seconds")
 
 
-def findings(repo, seen, results, head, cfg):
+def findings(repo, seen, results, head, cfg, override=None):
     """The digest of the last reviewed head. A reviewer that failed or hit the limit there stores no row: the
     review status names its result."""
     if not results:
         return None
     sha = next(iter(results.values()))["sha"]
-    known = {r["id"]: r for r in config.effective(cfg, repo)["review"]["reviewers"]}
+    known = {r["id"]: r for r in config.effective(cfg, repo, override)["review"]["reviewers"]}
     derived = seen.get("status") if seen.get("sha") == sha and seen.get("status") in ("failed", "limited") else None
     reviewers = []
     for rid in known:
@@ -70,7 +70,7 @@ def entry(pr, rows, runs, cfg, first, override):
                            "reviewers": run["reviewers"] if run["lane"] == "review" else None},
         "review": {k: v for k, v in seen.items() if k != "files"} | {"current": seen["sha"] == head, "at": iso(seen["at"])}
         if seen else None,
-        "findings": findings(repo, seen, rows["results"].get(n), head, cfg),
+        "findings": findings(repo, seen, rows["results"].get(n), head, cfg, override),
         "fix": {k: v for k, v in fixed.items() if k not in ("key", "gate")}
         | {"current": fixed["sha"] == head, "parked": fixed["errors"] >= config.effective(cfg, repo, override)["fix"]["max_errors"], "at": iso(fixed["at"])}
         if fixed else None,

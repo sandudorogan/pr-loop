@@ -11,7 +11,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from prs import GITOPS, MONOREPO, pr, rq
-from pr_wizard import db, names, snapshot
+from pr_wizard import config, db, names, snapshot
 
 FIXTURES = Path(__file__).parent / "fixtures"
 OLD, HEAD = "0" * 40, "a" * 40
@@ -171,6 +171,16 @@ class Snapshot(unittest.TestCase):
         self.assertEqual([(r["id"], r["result"], r["label"]) for r in f["reviewers"]],
                          [("opus", "posted", "Claude Opus 5.5"), ("codex", "posted", "Codex"),
                           ("quality", "clean", "Claude Haiku 5.5 · quality self-review")])
+
+    def test_a_reviewer_only_the_pr_override_adds_shows_in_the_digest(self):
+        extra = {**config.DEFAULTS["review"]["reviewers"][0], "id": "x", "label": "Extra"}
+        db.put_pr_override(MONOREPO, 10, {"review": {"reviewers": [*config.DEFAULTS["review"]["reviewers"], extra]}})
+        db.put_reviewer_result(MONOREPO, 10, OLD, "x", {"result": "clean", "engine": "claude", "round": 1,
+                                                        "digest": digest()})
+        items = self.items()
+        self.assertEqual([r["id"] for r in items["iprally/iprally#10"]["findings"]["reviewers"]],
+                         ["opus", "codex", "quality", "x"])
+        self.assertEqual([r["id"] for r in items["iprally/iprally#13"]["findings"]["reviewers"]], ["quality"])
 
     def test_failed_reviewers_come_from_the_review_status(self):
         f = self.items()["iprally/iprally#16"]["findings"]
