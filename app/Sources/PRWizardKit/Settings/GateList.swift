@@ -28,3 +28,23 @@ public struct GateList: Hashable, Sendable {
         gates.insert(gates[index].setting(.string("\(name) copy"), at: ["name"]), at: index + 1)
     }
 }
+
+extension GateList {
+    public var canAdd: Bool { gates.count < GateDraft.maxGates }
+
+    /// Replaces the gate at `index`, or inserts a new one (or one whose kind changed) at the end of its kind, so
+    /// format gates stay ahead of test gates. Returns where the gate landed.
+    @discardableResult public mutating func save(_ gate: GateConfig, at index: Int?) -> Int {
+        guard let value = try? JSONValue(encoding: gate) else { return index ?? gates.count }
+        if let index, gates[index][["kind"]]?.string == gate.kind.rawValue {
+            gates[index] = value
+            return index
+        }
+        if let index { gates.remove(at: index) }
+        let landing =
+            gates.lastIndex { $0[["kind"]]?.string == gate.kind.rawValue }.map { $0 + 1 }
+            ?? (gate.kind == .format ? 0 : gates.count)
+        gates.insert(value, at: landing)
+        return landing
+    }
+}

@@ -8,7 +8,7 @@ struct FixerPane: View {
 
     private static let keys = [
         "fix.engine", "fix.model", "fix.effort", "fix.prompt", "fix.merge_prompt", "fix.test_retries", "fix.ci_tries",
-        "fix.ci_apps", "fix.max_errors", "fix.turn_timeout_s", "fix.pass_timeout_s",
+        "fix.ci_apps", "fix.max_errors", "fix.turn_timeout_s", "fix.pass_timeout_s", "fix.gates",
     ]
 
     @Environment(QueueStore.self) private var queue

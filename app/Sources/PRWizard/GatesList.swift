@@ -9,6 +9,7 @@ struct GatesList: View {
 
     private struct Editing: Identifiable {
         let id = UUID()
+        let index: Int?
         let gate: GateConfig?
     }
 
@@ -34,6 +35,7 @@ struct GatesList: View {
                 table(rows)
             }
             bar(rows)
+            ForEach(settings.errors.gates(in: scope), id: \.self) { FieldError(messages: [problem($0, rows)]) }
         } header: {
             HStack {
                 Text("Gates")
@@ -47,7 +49,9 @@ struct GatesList: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .onChange(of: scope) { selection = nil }
-        .sheet(item: $editing) { GateEditorSheet(gate: $0.gate) }
+        .sheet(item: $editing) { editing in
+            GateEditorSheet(scope: scope, index: editing.index, gate: editing.gate) { selection = $0 }
+        }
         .confirmationDialog(question, isPresented: $confirmsDefault) {
             Button("Remove Gates", role: .destructive) { settings.useDefault("fix.gates", in: scope) }
         } message: {
@@ -82,7 +86,15 @@ struct GatesList: View {
 
     private func table(_ rows: [Row]) -> some View {
         Table(rows, selection: $selection) {
-            TableColumn("Name") { Text(verbatim: $0.gate.name) }
+            TableColumn("Name") { row in
+                HStack(spacing: 4) {
+                    if settings.errors.gates(in: scope).contains(where: { $0.index == row.id }) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Tone.attention.color)
+                            .accessibilityLabel("Has errors")
+                    }
+                    Text(verbatim: row.gate.name)
+                }
+            }
             TableColumn("Kind") { Text(verbatim: $0.gate.kind.rawValue) }.width(50)
             TableColumn("When") { row in
                 Text(verbatim: row.gate.when.joined(separator: " ")).help(row.gate.when.joined(separator: "\n"))
@@ -97,7 +109,7 @@ struct GatesList: View {
         }
         .contextMenu(forSelectionType: Int.self) { _ in
         } primaryAction: { ids in
-            if let id = ids.first { editing = Editing(gate: rows[id].gate) }
+            if let id = ids.first { editing = Editing(index: id, gate: rows[id].gate) }
         }
         .frame(height: CGFloat(rows.count) * 24 + 28)
     }
@@ -105,24 +117,30 @@ struct GatesList: View {
     private func bar(_ rows: [Row]) -> some View {
         let index = selection.flatMap { rows.indices.contains($0) ? $0 : nil }
         return HStack(spacing: 2) {
-            Button("Add Gate", systemImage: "plus") { editing = Editing(gate: nil) }
+            Button("Add Gate", systemImage: "plus") { editing = Editing(index: nil, gate: nil) }
+                .disabled(!gates.canAdd)
             Button("Remove Gate", systemImage: "minus") { edit(index) { $0.remove(at: $1) } }
                 .disabled(index == nil)
             Button("Duplicate Gate", systemImage: "plus.square.on.square") {
                 edit(index, select: 1) { $0.duplicate(at: $1) }
             }
-            .disabled(index == nil)
+            .disabled(index == nil || !gates.canAdd)
             Button("Move Up", systemImage: "arrow.up") { edit(index, select: -1) { $0.move($1, by: -1) } }
                 .disabled(index.map { !gates.canMove($0, by: -1) } ?? true)
             Button("Move Down", systemImage: "arrow.down") { edit(index, select: 1) { $0.move($1, by: 1) } }
                 .disabled(index.map { !gates.canMove($0, by: 1) } ?? true)
             Spacer()
-            Button("Edit…") { index.map { editing = Editing(gate: rows[$0].gate) } }
+            Button("Edit…") { index.map { editing = Editing(index: $0, gate: rows[$0].gate) } }
                 .disabled(index == nil)
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .disabled(isInherited)
+    }
+
+    private func problem(_ problem: FieldErrors.GateProblem, _ rows: [Row]) -> String {
+        let gate = problem.index.flatMap { rows.indices.contains($0) ? rows[$0].gate.name : nil } ?? "Gates"
+        return "\(gate)\(problem.field.isEmpty ? "" : " \(problem.field)"): \(problem.message)"
     }
 
     private func edit(_ index: Int?, select offset: Int? = nil, _ change: (inout GateList, Int) -> Void) {
