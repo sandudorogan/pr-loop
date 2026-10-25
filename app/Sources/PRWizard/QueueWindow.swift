@@ -52,6 +52,9 @@ struct QueueWindow: View {
         )
         .environment(peek)
         .frame(minWidth: minWidth, minHeight: 400)
+        .onChange(of: selection) { _, keys in
+            if !keys.isEmpty { showsInspector = true }
+        }
     }
 
     /// SwiftUI drops a minimum on the detail column (it runs under the sidebar), so the window
