@@ -248,10 +248,13 @@ def graphql(*flags):
 
 def fetched(*flags, note=lambda _: None):
     """(PRs, points spent, points left): my own PRs, review requests and PRs assigned to me (drafts too), plus PRs
-    I reviewed before, since a posted review drops the request, in any repo. `flags` go to the `gh api` calls."""
+    I reviewed before, since a posted review drops the request, in any repo. A colleague's PR assigned to me counts
+    as a review request until my approval stands, since an assignment, unlike a request, outlives my review.
+    `flags` go to the `gh api` calls."""
     searches, cost, left = projects.fetch(graphql(*flags), FRAGMENT, note)
     hits = {alias: [tagged(p, False) for p in nodes] for alias, nodes in searches.items()}
-    requested = {pr_key(p) for p in hits["requested"]}
+    assigned = [p for p in hits["assigned"] if not p["viewerDidAuthor"] and not approved_by_me(p)]
+    requested = {pr_key(p) for p in hits["requested"] + assigned}
     prs = {pr_key(p): p for alias in ("reviewed", "assigned", "requested", "mine") for p in hits[alias]}
     return [dict(p, requested=k in requested) for k, p in sorted(prs.items())], cost, left
 
@@ -260,10 +263,13 @@ def queue(*flags):
     return fetched(*flags)[0]
 
 
+def approved_by_me(pr):
+    return any(r["viewerDidAuthor"] and r["state"] == "APPROVED" for r in pr["latestOpinionatedReviews"]["nodes"])
+
+
 def approved(pr):
     """My approval stands and nobody re-requested my review since."""
-    return not pr["requested"] and any(
-        r["viewerDidAuthor"] and r["state"] == "APPROVED" for r in pr["latestOpinionatedReviews"]["nodes"])
+    return not pr["requested"] and approved_by_me(pr)
 
 
 def labeled(pr, label):

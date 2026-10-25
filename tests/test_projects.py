@@ -52,14 +52,28 @@ class Fetch(unittest.TestCase):
         self.assertEqual([c.get("after") for c in gql.calls], [None, "c1", "c2"])
         self.assertEqual(notes, ["search page 2 for mine (120 PRs)", "search page 3 for mine (120 PRs)"])
 
-    def test_assigned_prs_join_the_queue_and_only_requests_count_as_requested(self):
-        node = lambda repo, n: {k: v for k, v in pr(n, repo, mine=False).items() if k not in ("repo", "requested")}
-        gql = Graphql({"assigned": result([node(SITE, 4)]), "requested": result([node(MONOREPO, 5)]),
-                       "reviewed": result([node(MONOREPO, 5)])})
+    def fetched(self, **found):
+        gql = Graphql({alias: result(nodes) for alias, nodes in found.items()})
         with patch.object(rq, "graphql", return_value=gql):
-            prs, cost, _ = rq.fetched()
-        self.assertEqual([(p["repo"], p["number"], p["requested"]) for p in prs], [(SITE, 4, False), (MONOREPO, 5, True)])
+            return rq.fetched()
+
+    def test_assigned_prs_join_the_queue_and_count_as_review_requests(self):
+        node = lambda repo, n, **kw: {k: v for k, v in pr(n, repo, mine=False, **kw).items() if k not in ("repo", "requested")}
+        prs, cost, _ = self.fetched(assigned=[node(SITE, 4)], requested=[node(MONOREPO, 5)], reviewed=[node(MONOREPO, 5)])
+        self.assertEqual([(p["repo"], p["number"], p["requested"]) for p in prs], [(SITE, 4, True), (MONOREPO, 5, True)])
         self.assertEqual(cost, 10)
+
+    def test_an_assignment_is_no_request_on_my_own_pr_or_after_my_approval(self):
+        node = lambda n, mine, approvals=(): {k: v for k, v in pr(n, mine=mine, approvals=approvals).items()
+                                              if k not in ("repo", "requested")}
+        prs, _, _ = self.fetched(assigned=[node(1, True), node(2, False, [False]), node(3, False, [True])])
+        self.assertEqual({p["number"]: p["requested"] for p in prs}, {1: False, 2: True, 3: False})
+
+    def test_an_assigned_colleague_pr_with_no_review_is_queued_at_its_current_head(self):
+        node = {k: v for k, v in pr(6, mine=False).items() if k not in ("repo", "requested")}
+        (assigned,), _, _ = self.fetched(assigned=[node])
+        self.assertIsNone(rq.decide(assigned, {}, {"a.py": "h"}, False))
+        self.assertEqual(rq.row(assigned, {}, {}, [])[:2], (1, "queued"))
 
 
 def git(*args):
