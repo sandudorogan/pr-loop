@@ -46,6 +46,53 @@ import Testing
         #expect(await transport.last == HTTPRequest(.get, "/v1/events", query: query(["wait": "0"])))
     }
 
+    @Test("config reads GET /v1/config")
+    func config() async throws {
+        let transport = try FakeTransport(fixture: "config.json")
+        #expect(try await DaemonClient(transport: transport).config().rev == "5c663cb8963c")
+        #expect(await transport.last == HTTPRequest(.get, "/v1/config"))
+    }
+
+    @Test("patchConfig sends the merge patch with its base rev")
+    func patchConfig() async throws {
+        let transport = try FakeTransport(fixture: "config.json")
+        let patch: JSONValue = .object(["fix": .object(["workers": .number(1)])])
+        _ = try await DaemonClient(transport: transport).patchConfig(patch, baseRev: "3f9a0c1d2e4b")
+        #expect(await transport.last?.method == .patch)
+        #expect(await transport.last?.path == "/v1/config")
+        #expect(try await transport.lastBody == .object(["base_rev": .string("3f9a0c1d2e4b"), "patch": patch]))
+    }
+
+    @Test("a stale base rev is a 412 stale_config")
+    func staleConfig() async throws {
+        let body = #"{"error": {"code": "stale_config", "message": "the config changed since rev 3f9a0c1d2e4b"}}"#
+        let transport = FakeTransport(status: 412, body: Data(body.utf8))
+        await #expect(
+            throws: APIError.http(
+                status: 412, code: "stale_config", message: "the config changed since rev 3f9a0c1d2e4b", details: [])
+        ) { try await DaemonClient(transport: transport).patchConfig(.object([:]), baseRev: "3f9a0c1d2e4b") }
+    }
+
+    @Test("an invalid patch is a 422 with every problem")
+    func invalidPatch() async throws {
+        let transport = try FakeTransport(status: 422, fixture: "error-invalid-config.json")
+        let error = await #expect(throws: APIError.self) {
+            try await DaemonClient(transport: transport).patchConfig(.object([:]), baseRev: "3f9a0c1d2e4b")
+        }
+        guard case .http(422, "invalid_config", _, let details) = error else {
+            Issue.record("\(String(describing: error))")
+            return
+        }
+        #expect(details.count == 2)
+    }
+
+    @Test("prompt reads GET /v1/prompts/{name}")
+    func prompt() async throws {
+        let transport = try FakeTransport(fixture: "prompt.json")
+        #expect(try await DaemonClient(transport: transport).prompt(named: "merge.md").name == "merge.md")
+        #expect(await transport.last == HTTPRequest(.get, "/v1/prompts/merge.md"))
+    }
+
     @Test("history sends limit and the optional repo")
     func history() async throws {
         let transport = try FakeTransport(fixture: "history.json")

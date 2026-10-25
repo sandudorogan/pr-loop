@@ -25,6 +25,19 @@ public struct DaemonClient: DaemonAPI {
             HTTPRequest(.get, "/v1/events", query: longPoll(since: cursor, wait: wait)), timeout: wait + .seconds(10))
     }
 
+    public func config() async throws -> ConfigEnvelope {
+        try await send(HTTPRequest(.get, "/v1/config"))
+    }
+
+    public func patchConfig(_ patch: JSONValue, baseRev: String) async throws -> ConfigEnvelope {
+        let body: JSONValue = .object(["base_rev": .string(baseRev), "patch": patch])
+        return try await send(HTTPRequest(.patch, "/v1/config", body: JSONEncoder().encode(body)))
+    }
+
+    public func prompt(named name: String) async throws -> Prompt {
+        try await send(HTTPRequest(.get, "/v1/prompts/\(name)"))
+    }
+
     public func history(repo: String?, limit: Int) async throws -> [HistoryEntry] {
         let query =
             [URLQueryItem(name: "limit", value: String(limit))]
