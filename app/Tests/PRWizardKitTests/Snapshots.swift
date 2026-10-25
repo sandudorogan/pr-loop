@@ -28,10 +28,13 @@ enum Snapshots {
         try Fixture.decode(DaemonInfo.self, from: "info.json")
     }
 
-    static func queue(rev: String = "b71e09c4d2a35f18", lanes: JSONValue? = nil) throws -> QueueSnapshot {
+    static func queue(
+        rev: String = "b71e09c4d2a35f18", lanes: JSONValue? = nil, items: (([JSONValue]) -> [JSONValue])? = nil
+    ) throws -> QueueSnapshot {
         var queue = try JSONDecoder().decode([String: JSONValue].self, from: Fixture.data("queue.json"))
         queue["rev"] = .string(rev)
         queue["lanes"] = lanes ?? queue["lanes"]
+        if let items, case .array(let list) = queue["items"] { queue["items"] = .array(items(list)) }
         return try JSONDecoder.daemon.decode(QueueSnapshot.self, from: JSONEncoder().encode(queue))
     }
 

@@ -1,28 +1,24 @@
-import PRWizardKit
 import SwiftUI
 
 @main
 struct PRWizardApp: App {
-    private static let socket =
-        UserDefaults.standard.string(forKey: "socket") ?? DaemonLocation.socket.path(percentEncoded: false)
-
-    @State private var store: QueueStore
-    @State private var history: HistoryStore
-
-    init() {
-        let daemon = DaemonClient(transport: UnixSocketTransport(path: Self.socket))
-        _store = State(initialValue: QueueStore(daemon: daemon))
-        _history = State(initialValue: HistoryStore(daemon: daemon))
-    }
+    @NSApplicationDelegateAdaptor private var delegate: AppDelegate
+    @AppStorage(AppStorageKey.showsMenuBarExtra) private var showsMenuBarExtra = true
 
     var body: some Scene {
         Window("PR Wizard", id: "queue") {
-            QueueWindow(socket: Self.socket)
-                .environment(store)
-                .environment(history)
-                .task { store.start() }
+            QueueWindow(socket: delegate.socket)
+                .environment(delegate.store)
+                .environment(delegate.history)
         }
         .defaultSize(width: 1180, height: 640)
-        .commands { QueueCommands(store: store) }
+        .commands { QueueCommands(store: delegate.store) }
+        Settings {
+            SettingsView().environment(delegate.store)
+        }
+        MenuBarExtra("PR Wizard", systemImage: "wand.and.stars", isInserted: $showsMenuBarExtra) {
+            MenuBarContent().environment(delegate.store)
+        }
+        .menuBarExtraStyle(.menu)
     }
 }
