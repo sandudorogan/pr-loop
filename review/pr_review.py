@@ -36,14 +36,17 @@ import argparse, fcntl, json, os, re, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(DIR))
-from pr_wizard import db, names
+from pr_wizard import config, db, names
 
 SCHEMA = os.path.join(DIR, "review-schema.json")
 PROMPTS = os.path.join(DIR, "prompts")
 
 REPO = names.env_repo()
 REPO_ROOT = names.env_root(REPO)
-TIMEOUT = int(os.environ.get("IPR_REVIEW_TIMEOUT", "2700"))
+LOADED = config.load()
+LOADED.error and print(f"config: {LOADED.error}, running on the defaults", file=sys.stderr)
+CFG = config.effective(LOADED.config, REPO)
+TIMEOUT = CFG["review"]["timeout_s"]
 
 INLINE_SEVERITIES = {"critical", "high", "medium"}
 LATE_SEVERITIES = {"critical", "high"}
@@ -56,13 +59,7 @@ MARKER_PREFIX = "<!-- agent-review:"
 MARKER_RE = re.compile(
     r"<!--\s*agent-review:\s*reviewer=(\S+)\s+round=(\d+)\s+sha=(\S+)\s*-->")
 
-REVIEWERS = {
-    "opus": {"label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "claude": ("opus", "high"),
-             "fix_round": ("opus", "medium")},
-    "codex": {"label": "Codex", "prompt": "codex.md", "engine": "codex", "claude": ("opus", None)},
-    "quality": {"label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md", "engine": "claude",
-                "claude": ("haiku", "xhigh")},
-}
+REVIEWERS = {r["id"]: r for r in CFG["review"]["reviewers"]}
 BRIEFS = names.BRIEFS
 ENGINE_LABELS = {"claude": "Claude", "codex": "Codex"}
 LIMIT = re.compile(r"(usage|spend|session|rate) limit|hit your \S+ limit|quota exceeded", re.I)
@@ -173,7 +170,7 @@ def scope(pr):
         "clean_at_head": sorted(clean_at_head),
         # Every reviewer has looked at this head and none of them left anything to fix.
         # Nothing is going to happen on this PR without a human or a new push — stop the cycle.
-        "settled": set(REVIEWERS) <= clean_at_head,
+        "settled": {i for i, r in REVIEWERS.items() if r.get("enabled", True)} <= clean_at_head,
         "history": prior,
     }
 
@@ -273,13 +270,19 @@ def claude_p(worktree, prompt, model, effort=None):
     return out.stdout
 
 
-def codex_exec(worktree, prompt):
+def codex_flags(model, effort):
+    """`-c` overrides for the Codex settings the config sets; none leaves Codex on its own config."""
+    return [*(["-c", f"model={json.dumps(model)}"] if model else []),
+            *(["-c", f"model_reasoning_effort={json.dumps(effort)}"] if effort else [])]
+
+
+def codex_exec(worktree, prompt, model=None, effort=None):
     with tempfile.NamedTemporaryFile("r", suffix=".json", delete=False) as fh:
         last = fh.name
     try:
         out = subprocess.run(
             ["codex", "exec", "-C", worktree, "-s", "read-only",
-             "--output-schema", SCHEMA, "--output-last-message", last, prompt],
+             "--output-schema", SCHEMA, "--output-last-message", last, *codex_flags(model, effort), prompt],
             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=TIMEOUT)
         if out.returncode != 0:
             at_limit(out)
@@ -299,26 +302,32 @@ def at_limit(out):
         raise AtLimit(text[max(0, match.start() - 80):match.end() + 120].strip())
 
 
-ENGINES = {
-    "claude": lambda worktree, prompt, model, effort: claude_p(worktree, prompt, model, effort),
-    "codex": lambda worktree, prompt, *_: codex_exec(worktree, prompt),
-}
+ENGINES = {"claude": claude_p, "codex": codex_exec}
 OTHER = {"claude": "codex", "codex": "claude"}
+
+
+def engine_args(spec, engine, incremental):
+    """(model, effort) the reviewer runs `engine` with. A claude round that diffs only the new commits uses
+    `claude.incremental` when the reviewer sets one."""
+    block = spec.get(engine) or {}
+    if engine == "claude" and incremental and block.get("incremental"):
+        block = block["incremental"]
+    return block.get("model"), block.get("effort")
 
 
 def run_reviewer(reviewer, worktree, sc):
     """(engine, findings) from the reviewer's own engine, or from the other one when its own
-    is at its usage limit. A plain prompt, not `/review`: in `-p` the native command returns
-    "(none)" without reviewing."""
+    is at its usage limit and the reviewer allows the fallback. A plain prompt, not `/review`: in `-p` the
+    native command returns "(none)" without reviewing."""
     spec = REVIEWERS[reviewer]
     prompt = render(spec["prompt"], sc)
-    claude = spec.get("fix_round", spec["claude"]) if sc["base_sha"] else spec["claude"]
-    for engine in (spec["engine"], OTHER[spec["engine"]]):
+    engines = (spec["engine"], OTHER[spec["engine"]]) if spec.get("fallback", True) else (spec["engine"],)
+    for engine in engines:
         try:
-            return engine, extract_json(ENGINES[engine](worktree, prompt, *claude))
+            return engine, extract_json(ENGINES[engine](worktree, prompt, *engine_args(spec, engine, sc["base_sha"])))
         except AtLimit as e:
             print(f"{engine} at its usage limit: {e}", file=sys.stderr)
-    die("claude and codex are both at their usage limit")
+    die("claude and codex are both at their usage limit" if len(engines) > 1 else f"{engines[0]} is at its usage limit")
 
 
 # ---------------------------------------------------------------- worktree

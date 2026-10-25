@@ -31,14 +31,15 @@ from contextlib import contextmanager
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [DIR, os.path.dirname(DIR)]
-from pr_review import LIMIT, REPO, REPO_ROOT, brief
+from pr_review import CFG, LIMIT, REPO, REPO_ROOT, brief, codex_flags
 from pr_wizard import db, names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
-PROMPT = os.path.join(DIR, "prompts", "fix.md")
-MERGE_PROMPT = os.path.join(DIR, "prompts", "merge.md")
-TIMEOUT = 2700
-TEST_RETRIES = 2
+FIX = CFG["fix"]
+PROMPT = os.path.join(DIR, "prompts", FIX["prompt"])
+MERGE_PROMPT = os.path.join(DIR, "prompts", FIX["merge_prompt"])
+TIMEOUT = FIX["turn_timeout_s"]
+TEST_RETRIES = FIX["test_retries"]
 UI_TIMEOUT = 1800
 KARMA_SLOTS = 2
 AGENT_MARKER = "<!-- agent-review:"
@@ -46,7 +47,7 @@ FYI_MARKER = "<!-- agent-review-fyi -->"
 NODE = ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null"
 CLJ = (".clj", ".cljs", ".cljc", ".edn")
 CI_LOG_CHARS = 20000
-CI_TRIES = 3
+CI_TRIES = FIX["ci_tries"]
 LOG_NOISE = re.compile(r"^﻿?\d{4}-\d\d-\d\dT\S+Z |\x1b\[[0-9;]*m", re.M)
 ATTRIBUTION = re.compile(r"^(co-authored-by:|.*generated with \[?claude)", re.I | re.M)
 
@@ -133,9 +134,9 @@ def feedback(pr, head, state):
 
 
 def checks(head):
-    """The latest Actions job per name on the head; a rerun replaces its job."""
+    """The latest job per name on the head from the `fix.ci_apps` apps; a rerun replaces its job."""
     runs = gh(f"repos/{REPO}/commits/{head}/check-runs?per_page=100", "--paginate", "--slurp")
-    return [c for page in runs for c in page["check_runs"] if c["app"]["slug"] == "github-actions"]
+    return [c for page in runs for c in page["check_runs"] if c["app"]["slug"] in FIX["ci_apps"]]
 
 
 def failed(c):
@@ -242,7 +243,8 @@ def codex(wt, prompt, session, scratch):
     common = os.path.abspath(os.path.join(wt, sh(["git", "rev-parse", "--git-common-dir"], cwd=wt).strip()))
     last = os.path.join(scratch, "last.json")
     config = ["-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"',
-              "-c", f"sandbox_workspace_write.writable_roots={json.dumps([wt, common, scratch])}"]
+              "-c", f"sandbox_workspace_write.writable_roots={json.dumps([wt, common, scratch])}",
+              *codex_flags(FIX["model"], FIX["effort"])]
     io = ["--json", "--output-schema", SCHEMA, "-o", last]
     args = (["codex", "exec", "resume", *config, *io, session, prompt] if session
             else ["codex", "exec", "-C", wt, *config, *io, prompt])
