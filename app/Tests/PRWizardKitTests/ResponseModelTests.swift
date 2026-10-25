@@ -30,6 +30,12 @@ import Testing
         #expect(result.results.map(\.reason) == [nil, "active"])
     }
 
+    @Test("action fixtures decode")
+    func actionsDecode() throws {
+        #expect(try Fixture.decode(Accepted.self, from: "accepted.json").key == "iprally/iprally#17190")
+        #expect(try Fixture.decode(PauseState.self, from: "paused.json").isPaused)
+    }
+
     @Test("error bodies decode with and without details")
     func errorsDecode() throws {
         let invalid = try Fixture.decode(APIErrorBody.self, from: "error-invalid-config.json")
