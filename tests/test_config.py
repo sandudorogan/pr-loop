@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+import prs  # noqa: F401
 from pr_wizard import config as c
 
 ROOT = Path(__file__).resolve().parents[1]

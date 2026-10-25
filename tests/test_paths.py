@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 
+import prs  # noqa: F401
 from pr_wizard import db, names
 
 ROOT = Path(__file__).resolve().parents[1]

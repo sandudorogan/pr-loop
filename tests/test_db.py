@@ -9,6 +9,7 @@ import unittest
 from contextlib import closing
 from unittest import mock
 
+import prs  # noqa: F401
 from pr_wizard import db
 
 R, G = "iprally/iprally", "iprally/gitops"

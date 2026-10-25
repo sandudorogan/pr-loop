@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import prs  # noqa: F401
 from pr_wizard import api, config, fake
 
 IPRALLY, GITOPS, SITE = "iprally/iprally", "iprally/gitops", "clojure/clojurescript-site"

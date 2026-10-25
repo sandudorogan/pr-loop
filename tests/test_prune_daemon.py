@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, call, patch
 
+import prs  # noqa: F401
 from pr_wizard import cli, queue as rq
 
 

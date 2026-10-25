@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import prs  # noqa: F401
 from pr_wizard import db, names, queue as rq
 
 ROOT = Path(__file__).resolve().parents[1]
