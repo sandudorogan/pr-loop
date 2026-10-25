@@ -163,6 +163,7 @@ review-queue --bg                        # SIGUSR1 refresh, or start the daemon
 review-queue --prune -n                  # which worktrees the daemon would prune (every repo)
 tail -f ~/Library/Logs/review-queue.log
 curl -s --unix-socket ~/.local/state/pr-wizard/api.sock http://x/v1/queue   # GET info, queue, config, prompts/<name>
+curl -s --unix-socket ~/.local/state/pr-wizard/api.sock -X POST http://x/v1/pause   # also resume, refresh, next, prs/<o>/<n>/<N>/{review,fix}
 ```
 
 Re-arm a parked fix pass (fix status stuck after `FIX_ERRORS` = 3):
@@ -171,7 +172,7 @@ Re-arm a parked fix pass (fix status stuck after `FIX_ERRORS` = 3):
 sqlite3 ~/.local/state/pr-wizard/state.db "UPDATE fixes SET key = NULL, errors = 0 WHERE repo = 'iprally/iprally' AND number = 16400"
 ```
 
-Then `review-queue --bg`.
+Then `review-queue --bg`. Or `POST /v1/prs/<owner>/<name>/<N>/fix`, which does both.
 
 Clear a false clean: run the reviewer with `--force`, or delete its `clean_reviews` row for that `(repo, number, sha)`.
 

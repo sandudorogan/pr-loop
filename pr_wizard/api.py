@@ -1,6 +1,7 @@
 """The control API of api.md: HTTP/1.1 + JSON on a Unix socket, one request per connection.
 
 A runtime serves the bodies: `info()`, `snapshot()`, `config()`, `events(since)`, and `changes`, which every change moves.
+It acts on `save_config(doc)`, `refetch()`, `bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)` and `pause(on)`.
 
 Usage:
   python3 -m pr_wizard.api --fake [--socket PATH]   serve the fixtures of tests/fixtures/api/v1
@@ -13,6 +14,9 @@ from urllib.parse import parse_qs, urlsplit
 from pr_wizard import config, db, names
 
 MAX_WAIT = 60
+MAX_BODY = 1 << 20
+MAX_BUMPS = 20
+WRITE = threading.Lock()
 PLACEHOLDERS = ("PR", "REPO", "HEAD", "BASE", "DIFF_RANGE", "ROUND_NOTE", "BRIEF", "SCHEMA", "FEEDBACK", "FILES",
                 "CONVENTIONS", "GATES")
 PLACEHOLDER = re.compile(r"\{(" + "|".join(PLACEHOLDERS) + r")\}")
@@ -44,9 +48,9 @@ def watch(changes, stopped, every=1):
 
 
 class Problem(Exception):
-    def __init__(self, status, code, message, headers=()):
+    def __init__(self, status, code, message, headers=(), details=None):
         super().__init__(message)
-        self.status, self.body, self.headers = status, error(code, message), dict(headers)
+        self.status, self.body, self.headers = status, error(code, message, details), dict(headers)
 
 
 def error(code, message, details=None):
@@ -92,12 +96,73 @@ def prompt(rt, query, name):
     return {"name": name, "path": path, "placeholders": list(dict.fromkeys(PLACEHOLDER.findall(text))), "text": text}
 
 
+def bad(message):
+    return Problem(400, "bad_request", message)
+
+
+def configure(rt, body, key, merged):
+    """PUT and PATCH: `merged(current, body[key])` over the defaults, checked against `base_rev`, validated, saved."""
+    if not isinstance(body, dict) or not isinstance(body.get(key), dict):
+        raise bad(f"the body must be a JSON object with an object {key}")
+    if not isinstance(base := body.get("base_rev"), (str, type(None))):
+        raise bad("base_rev must be a string")
+    with WRITE:
+        current = rt.config()
+        if base is not None and base != current["rev"]:
+            raise Problem(412, "stale_config", f"the config is at {current['rev']} now, not {base}")
+        doc = config.merge(config.DEFAULTS, merged(current["config"], body[key]))
+        if problems := config.validate(doc):
+            raise Problem(422, "invalid_config", f"{len(problems)} problem{'s' * (len(problems) > 1)} in the config",
+                          details=problems)
+        return rt.save_config(doc)
+
+
+def put_config(rt, query, body):
+    return configure(rt, body, "config", lambda current, doc: doc)
+
+
+def patch_config(rt, query, body):
+    return configure(rt, body, "patch", config.merge_patch)
+
+
+def pr_ref(item):
+    return isinstance(item, dict) and isinstance(item.get("repo"), str) and type(item.get("number")) is int
+
+
+def bump(rt, query, body):
+    if not isinstance(body, dict) or not isinstance(prs := body.get("prs"), list) \
+            or not 1 <= len(prs) <= MAX_BUMPS or not all(map(pr_ref, prs)):
+        raise bad(f"prs must be a list of 1-{MAX_BUMPS} {{repo, number}} objects")
+    if not isinstance(only := body.get("only_queued", True), bool):
+        raise bad("only_queued must be true or false")
+    return rt.bump([(p["repo"], p["number"]) for p in prs], only)
+
+
+def refresh(rt, query, body):
+    rt.refetch()
+    return 202, {"accepted": True}
+
+
+def act(lane):
+    def on(rt, query, body, owner, name, n):
+        repo, n = f"{owner}/{name}", int(n)
+        getattr(rt, lane)(repo, n)
+        return 202, {"key": f"{repo}#{n}", "accepted": True}
+    return on
+
+
 ROUTES = {
-    "/v1/info": {"GET": lambda rt, query: rt.info()},
-    "/v1/queue": {"GET": queue},
-    "/v1/events": {"GET": events},
-    "/v1/config": {"GET": lambda rt, query: rt.config()},
-    "/v1/prompts/(?P<name>[^/]+)": {"GET": prompt},
+    "/v1/info": {"GET": lambda rt, query, body: rt.info()},
+    "/v1/queue": {"GET": lambda rt, query, body: queue(rt, query)},
+    "/v1/events": {"GET": lambda rt, query, body: events(rt, query)},
+    "/v1/config": {"GET": lambda rt, query, body: rt.config(), "PUT": put_config, "PATCH": patch_config},
+    "/v1/prompts/(?P<name>[^/]+)": {"GET": lambda rt, query, body, name: prompt(rt, query, name)},
+    "/v1/refresh": {"POST": refresh},
+    "/v1/next": {"POST": bump},
+    r"/v1/prs/(?P<owner>[^/]+)/(?P<name>[^/]+)/(?P<n>\d+)/review": {"POST": act("review")},
+    r"/v1/prs/(?P<owner>[^/]+)/(?P<name>[^/]+)/(?P<n>\d+)/fix": {"POST": act("fix")},
+    "/v1/pause": {"POST": lambda rt, query, body: {"paused": rt.pause(True)}},
+    "/v1/resume": {"POST": lambda rt, query, body: {"paused": rt.pause(False)}},
 }
 
 
@@ -114,11 +179,24 @@ def route(method, path):
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def body(self):
+        size = self.headers.get("Content-Length", "0")
+        if not size.isdigit():
+            raise bad("Content-Length must be a number")
+        if int(size) > MAX_BODY:
+            raise Problem(413, "payload_too_large", f"the body is over {MAX_BODY} bytes")
+        data = self.rfile.read(int(size))
+        try:
+            return json.loads(data) if data else None
+        except ValueError as e:
+            raise bad(f"malformed JSON: {e}")
+
     def dispatch(self):
         url, headers = urlsplit(self.path), {}
         try:
             handler, args = route(self.command, url.path)
-            status, body = 200, handler(self.server.runtime, parse_qs(url.query), **args)
+            out = handler(self.server.runtime, parse_qs(url.query), self.body(), **args)
+            status, body = out if isinstance(out, tuple) else (200, out)
         except Problem as p:
             status, body, headers = p.status, p.body, p.headers
         except Exception:

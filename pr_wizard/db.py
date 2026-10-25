@@ -234,6 +234,12 @@ def put_fix(repo, n, entry):
              errors=e["errors"], gate=_dump(e["gate"]), at=e["at"])
 
 
+def rearm_fix(repo, n):
+    """Clears the key and the error count, so the next refresh queues a fix pass."""
+    with tx() as c:
+        c.execute("UPDATE fixes SET key = NULL, errors = 0 WHERE repo = ? AND number = ?", (repo, int(n)))
+
+
 FIX_STATE_JSON = ("handled_reviews", "handled_jobs", "deferred", "ci_tries", "reruns", "red")
 
 
@@ -293,6 +299,11 @@ def bump(repo, *numbers):
         for n in reversed(numbers):
             c.execute("INSERT INTO next (pos, repo, number) VALUES ((SELECT coalesce(min(pos), 1) - 1 FROM next), ?, ?)",
                       (repo, int(n)))
+
+
+def next_keys():
+    """Every bumped PR as "repo#number", first in line first."""
+    return [f"{r['repo']}#{r['number']}" for r in _all("SELECT repo, number FROM next ORDER BY pos")]
 
 
 def drop_next(repo, n):

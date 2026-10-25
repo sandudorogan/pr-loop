@@ -135,10 +135,15 @@ def reviewers(repo):
     return [r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("enabled", True)]
 
 
+def configured():
+    """{repo: override} of REPOS and the config's projects: every repo the daemon knows."""
+    return {**dict.fromkeys(REPOS), **cfg()["projects"]}
+
+
 def projects():
     """{repo: root} of REPOS and the config's projects. A config project with no root of its own is skipped."""
     roots = {repo: (override or {}).get("root") or REPOS.get(repo, {}).get("root")
-             for repo, override in {**dict.fromkeys(REPOS), **cfg()["projects"]}.items()}
+             for repo, override in configured().items()}
     return {repo: os.path.expanduser(where) for repo, where in roots.items() if where}
 
 
@@ -208,6 +213,10 @@ def sh(*args, repo=MONOREPO):
 
 def load(repo, kind=STATE):
     return {str(n): e for n, e in (db.reviews if kind == STATE else db.fixes)(repo).items()}
+
+
+def paused():
+    return db.meta_get("paused") == "1"
 
 
 def bumped(repo):
@@ -573,6 +582,13 @@ class Pending:
 
     def __init__(self, prs=(), workers=0):
         self.prs, self.busy, self.cond, self.workers, self.live = list(prs), set(), threading.Condition(), workers, 0
+        self.paused = False
+
+    def pause(self, on):
+        """A paused pool hands out no PR. Running passes finish."""
+        with self.cond:
+            self.paused = on
+            self.cond.notify_all()
 
     def resize(self, workers, spawn):
         """Starts the missing workers through `spawn` at once and returns them. A worker over the size retires
@@ -590,7 +606,7 @@ class Pending:
 
     def take(self, wait):
         with self.cond:
-            while not self.prs or self.live > self.workers:
+            while not self.prs or self.live > self.workers or self.paused:
                 if self.live > self.workers or not wait:
                     self.live -= 1
                     return None
@@ -651,6 +667,14 @@ def tick(only, dry_run):
     say(f"tick done in {time.monotonic() - started:.0f} s")
 
 
+def review_now(repo, n):
+    """`--pr n` in a thread of the daemon, beside its pools."""
+    try:
+        tick((repo, n), False)
+    except Exception as e:
+        log(repo, n, f"review now failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
+
+
 def lanes(repo):
     on = effective(repo)
     return "+".join(lane for lane in ("review", "fix") if on[lane]["enabled"]) or "off"
@@ -676,6 +700,7 @@ class Runtime:
     def __init__(self):
         self.prs, self.fetched_at, self.refresh = [], None, {"last_at": None, "last_error": None}
         self.started, self.started_at, self.changes = time.time(), db.now(), api.Changes()
+        self.refresh_now, self.pools = threading.Event(), ()
         self.commit = subprocess.run(["git", "-C", names.ROOT, "rev-parse", "--short", "HEAD"],
                                      capture_output=True, text=True).stdout.strip() or None
 
@@ -689,6 +714,75 @@ class Runtime:
         review.resize(knobs["review"]["workers"], lambda: worker(review, True, reviewer(None, False)))
         fixes.resize(knobs["fix"]["workers"], lambda: worker(fixes, True, fix))
 
+    def attach(self, review, fixes):
+        """The daemon's pools, which config writes resize and pause stops. They start paused when the db says so."""
+        self.pools = review, fixes
+        for pool in self.pools:
+            pool.pause(paused())
+        if paused():
+            say("paused: workers take no new PR until POST /v1/resume")
+
+    def refetch(self):
+        self.refresh_now.set()
+
+    def save_config(self, doc):
+        """Saves through the symlink, then applies at once: the pools resize and the queue refetches."""
+        config.save(doc)
+        SETTINGS.stamp = None
+        if self.pools:
+            self.resize(*self.pools)
+        self.refetch()
+        self.changes.touch()
+        say(f"config saved: rev {config.rev(doc)}")
+        return self.config()
+
+    def bump(self, prs, only_queued):
+        """api.md §3.9: the PRs that may go first move to the front in one transaction, then the queue refetches."""
+        fetched, runs = {pr_key(p): p for p in self.prs}, db.live_runs()
+        why = [unbumpable(repo, n, fetched.get((repo, n)), runs) if only_queued or repo not in configured()
+               else None for repo, n in prs]
+        go = [pr for pr, reason in zip(prs, why) if reason is None]
+        if go:
+            with db.tx():
+                for repo, n in reversed(go):
+                    db.bump(repo, n)
+            self.refetch()
+        return {"next": db.next_keys(), "results": [{"key": f"{repo}#{n}", "bumped": reason is None, "reason": reason}
+                                                    for (repo, n), reason in zip(prs, why)]}
+
+    def review(self, repo, n):
+        """api.md §3.10: `--pr n` past every gate and label, but not past the config."""
+        known(repo)
+        if repo not in projects():
+            raise api.Problem(409, "no_checkout", f"{repo} has no local checkout, set projects[{repo}].root")
+        if not effective(repo)["review"]["enabled"]:
+            raise api.Problem(409, "review_lane_off", f"the review lane of {repo} is off")
+        idle(repo, n)
+        threading.Thread(target=review_now, args=(repo, n), daemon=True).start()
+
+    def fix(self, repo, n):
+        """api.md §3.11: re-arms the PR's fix pass, so the next refresh queues one."""
+        known(repo)
+        pr = next((p for p in self.prs if pr_key(p) == (repo, n)), None)
+        if not pr:
+            raise api.Problem(404, "not_in_queue", f"{repo}#{n} is not in the last queue fetch")
+        if not pr["viewerDidAuthor"]:
+            raise api.Problem(409, "not_mine", f"{repo}#{n} is not my PR")
+        if labeled(pr, NO_FIX):
+            raise api.Problem(409, "no_auto_fix", f"{repo}#{n} is labeled {NO_FIX}")
+        if unfixed(pr):
+            raise api.Problem(409, "fix_lane_off", f"the fix lane of {repo} is off")
+        idle(repo, n)
+        db.rearm_fix(repo, n)
+        self.refetch()
+
+    def pause(self, on):
+        db.meta_set("paused", int(on))
+        for pool in self.pools:
+            pool.pause(on)
+        say("paused: workers take no new PR" if on else "resumed")
+        return on
+
     def refreshed(self, prs=None, error=None):
         at = db.now()
         if error is None:
@@ -701,7 +795,7 @@ class Runtime:
 
     def snapshot(self):
         return snapshot.build(self.prs, snapshot.read(), {"generated_at": db.now(), "fetched_at": self.fetched_at,
-                                                          "paused": False, "refresh": self.refresh})
+                                                          "paused": paused(), "refresh": self.refresh})
 
     def info(self):
         snap, loaded = self.snapshot(), self.cfg
@@ -719,6 +813,29 @@ class Runtime:
                 "effective": {p["repo"]: {"root": p["checkout"] and p["checkout"]["path"],
                                           **config.effective(loaded.config, p["repo"])} for p in projects},
                 "choices": config.choices()}
+
+
+def known(repo):
+    if repo not in configured():
+        raise api.Problem(404, "unknown_repo", f"{repo} is not a known project")
+
+
+def idle(repo, n):
+    if n in db.live_runs(repo):
+        raise api.Problem(409, "busy", f"a live run already holds {repo}#{n}")
+
+
+def unbumpable(repo, n, pr, runs):
+    """Why `--next` leaves the PR where it is, or None to bump it. A bump is a review request."""
+    if repo not in configured():
+        return "unknown-repo"
+    if not pr or approved(pr):
+        return "not-in-queue"
+    if unreviewed(pr):
+        return "review-lane-off"
+    if (repo, n) in runs:
+        return "active"
+    return None if row(pr, db.review(repo, n), {}, [n], db.fix(repo, n))[0] == 1 else "nothing-new"
 
 
 def serve(rt):
@@ -749,8 +866,9 @@ def daemon():
     db.sweep_runs()
     rt = Runtime()
     serve(rt)
-    pending, fixes, refresh_now, held = Pending(), Pending(), threading.Event(), {}
-    signal.signal(signal.SIGUSR1, lambda *_: refresh_now.set())
+    pending, fixes, held = Pending(), Pending(), {}
+    rt.attach(pending, fixes)
+    signal.signal(signal.SIGUSR1, lambda *_: rt.refetch())
 
     def refresh():
         idle = False
@@ -773,13 +891,13 @@ def daemon():
                 say(f"queue refresh failed: {error}")
                 rt.refreshed(error=error)
             idle = False
-            while not refresh_now.wait(every["idle_s"]):
+            while not rt.refresh_now.wait(every["idle_s"]):
                 if time.monotonic() - started >= every["interval_s"]:
                     break
                 if pending.idle():
                     idle = True
                     break
-            refresh_now.clear()
+            rt.refresh_now.clear()
 
     knobs = cfg()
     say(f"daemon started: {', '.join(f'{repo} {lanes(repo)}' for repo in projects())}")
@@ -895,7 +1013,7 @@ def bump(repo, n):
 
 def show(prs=None):
     prs, at = prs or queue("--cache", LIST_CACHE), db.now()
-    runtime = {"generated_at": at, "fetched_at": at, "paused": False, "refresh": {"last_at": at, "last_error": None}}
+    runtime = {"generated_at": at, "fetched_at": at, "paused": paused(), "refresh": {"last_at": at, "last_error": None}}
     print(snapshot.render(snapshot.build(prs, snapshot.read(), runtime), sys.stdout.isatty()), end="")
 
 

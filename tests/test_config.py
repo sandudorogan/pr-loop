@@ -82,7 +82,7 @@ class Load(Tmp):
 
     def test_error_names_the_first_problem(self):
         self.write('{"review": {"workers": 0}}')
-        self.assertEqual(c.load(self.path).error, "review.workers: must be an integer 1-8")
+        self.assertEqual(c.load(self.path).error, "review.workers: must be an integer from 1 to 8")
 
     def test_unreadable_path_gives_defaults_and_an_error(self):
         got = c.load(str(self.dir))
@@ -151,9 +151,9 @@ class Validate(unittest.TestCase):
             "fix.gates[0].extra": bad_gate(extra=1),
             "refresh.interval_s": {"refresh": {"interval_s": 59}},
             "refresh.idle_s": {"refresh": {"idle_s": 301}},
-            "projects.bad": {"projects": {"bad": {}}},
-            "projects.a/b.detect": {"projects": {"a/b": {"detect": {}}}},
-            "projects.a/b.root": {"projects": {"a/b": {"root": ""}}},
+            'projects["bad"]': {"projects": {"bad": {}}},
+            'projects["a/b"].detect': {"projects": {"a/b": {"detect": {}}}},
+            'projects["a/b"].root': {"projects": {"a/b": {"root": ""}}},
             "unknown": {"unknown": 1},
         }
         for expected, change in cases.items():
@@ -182,7 +182,7 @@ class Validate(unittest.TestCase):
 
     def test_a_project_can_run_out_of_reviewers(self):
         off = [{**r, "enabled": False} for r in c.DEFAULTS["review"]["reviewers"]]
-        self.assertIn("projects.a/b.review.reviewers", self.paths(doc(projects={"a/b": {"review": {"reviewers": off}}})))
+        self.assertIn('projects["a/b"].review.reviewers', self.paths(doc(projects={"a/b": {"review": {"reviewers": off}}})))
 
     def test_claude_model_is_needed_for_a_claude_run_or_a_fallback(self):
         nothing = {"model": None, "effort": None, "incremental": None}

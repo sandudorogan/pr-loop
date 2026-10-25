@@ -147,7 +147,7 @@ def string(v):
 
 
 def integer(lo, hi):
-    return Leaf(lambda v: type(v) is int and lo <= v <= hi, f"an integer {lo}-{hi}")
+    return Leaf(lambda v: type(v) is int and lo <= v <= hi, f"an integer from {lo} to {hi}")
 
 
 def one_of(options, null=False):
@@ -221,6 +221,10 @@ def problem(path, message):
     return {"path": path, "message": message}
 
 
+def keyed(path, key):
+    return f"{path}[{json.dumps(key)}]"
+
+
 def walk(value, spec, path, out):
     if isinstance(spec, Opt):
         return value is None or walk(value, spec.spec, path, out)
@@ -235,8 +239,8 @@ def walk(value, spec, path, out):
         if not isinstance(value, dict) or len(value) > spec.hi:
             return out.append(problem(path, f"must be an object of at most {spec.hi} entries"))
         for key, item in value.items():
-            spec.key.fullmatch(key) or out.append(problem(where(key), "must be keyed owner/name"))
-            walk(item, spec.value, where(key), out)
+            spec.key.fullmatch(key) or out.append(problem(keyed(path, key), "must be keyed owner/name"))
+            walk(item, spec.value, keyed(path, key), out)
     elif not isinstance(value, dict):
         out.append(problem(path, "must be an object"))
     else:
@@ -272,7 +276,7 @@ def validate(doc, level="config", base=None):
         return out
     top = {k: doc[k] for k in ("review", "fix")}
     effective_rules(top, "", out)
-    [effective_rules(merge(top, p), f"projects.{name}.", out) for name, p in doc["projects"].items()]
+    [effective_rules(merge(top, p), f"{keyed('projects', name)}.", out) for name, p in doc["projects"].items()]
     if doc["refresh"]["idle_s"] > doc["refresh"]["interval_s"]:
         out.append(problem("refresh.idle_s", "must not exceed refresh.interval_s"))
     return out
