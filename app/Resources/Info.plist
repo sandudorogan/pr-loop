@@ -8,6 +8,8 @@
 	<string>PR Wizard</string>
 	<key>CFBundleExecutable</key>
 	<string>PRWizard</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>local.pr-wizard.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>

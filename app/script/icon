@@ -1,0 +1,39 @@
+#!/bin/zsh -e
+cd "${0:A:h}/.."
+iconset=$(mktemp -d)/AppIcon.iconset
+mkdir -p "$iconset"
+swift - "$iconset" <<'SWIFT'
+import AppKit
+
+let iconset = URL(filePath: CommandLine.arguments[1])
+
+func render(pixels: Int) -> Data {
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let side = CGFloat(pixels)
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    let tile = NSRect(x: 0, y: 0, width: side, height: side).insetBy(dx: side * 0.098, dy: side * 0.098)
+    let squircle = NSBezierPath(roundedRect: tile, xRadius: tile.width * 0.225, yRadius: tile.width * 0.225)
+    NSGradient(starting: NSColor.systemIndigo, ending: NSColor.systemPurple)?.draw(in: squircle, angle: 90)
+    let config = NSImage.SymbolConfiguration(pointSize: tile.width * 0.5, weight: .medium)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+    let wand = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)!
+        .withSymbolConfiguration(config)!
+    let fit = min(tile.width * 0.62 / wand.size.width, tile.height * 0.62 / wand.size.height)
+    let size = NSSize(width: wand.size.width * fit, height: wand.size.height * fit)
+    wand.draw(in: NSRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
+    NSGraphicsContext.current = nil
+    return rep.representation(using: .png, properties: [:])!
+}
+
+for points in [16, 32, 128, 256, 512] {
+    for scale in [1, 2] {
+        let name = scale == 1 ? "icon_\(points)x\(points).png" : "icon_\(points)x\(points)@2x.png"
+        try render(pixels: points * scale).write(to: iconset.appending(path: name))
+    }
+}
+SWIFT
+iconutil --convert icns --output Resources/AppIcon.icns "$iconset"
+rm -rf "${iconset:h}"
+echo "$PWD/Resources/AppIcon.icns"

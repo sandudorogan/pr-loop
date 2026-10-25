@@ -10,6 +10,7 @@ struct GeneralPane: View {
         Form {
             Section("App") {
                 Toggle("Show in menu bar", isOn: $showsMenuBarExtra)
+                LoginItemToggle()
             }
             Section("Daemon") {
                 daemon
