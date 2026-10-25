@@ -218,6 +218,29 @@ class Actions(Writes):
         self.assertTrue(self.refetched())
 
 
+class PausePR(Writes):
+    def queued(self, lane):
+        return {p["number"] for pool, _ in self.pools.of(lane) for p in pool.prs}
+
+    def act(self, n, path):
+        return self.call("POST", f"/v1/prs/{MONOREPO}/{n}/{path}")
+
+    def test_a_paused_pr_leaves_both_lanes_until_resumed(self):
+        self.rt.feed()
+        self.assertIn(10, self.queued("review"))
+        self.assertEqual(self.act(10, "pause"), (200, {"key": f"{MONOREPO}#10", "paused": True}))
+        self.assertNotIn(10, self.queued("review"))
+        item = next(i for i in self.call("GET", "/v1/queue")[1]["items"] if i["key"] == f"{MONOREPO}#10")
+        self.assertEqual((item["group"], item["status"], item["paused"]), ("paused", "paused", True))
+        self.assertEqual(self.call("POST", "/v1/next", {"prs": [{"repo": MONOREPO, "number": 10}]})[1]["results"][0]["reason"],
+                         "paused")
+        self.assertEqual(self.act(10, "resume"), (200, {"key": f"{MONOREPO}#10", "paused": False}))
+        self.assertIn(10, self.queued("review"))
+
+    def test_a_pr_outside_the_fetch_is_404(self):
+        self.assertEqual(self.act(11, "pause")[1]["error"]["code"], "not_in_queue")
+
+
 class Pause(Writes):
     def paused(self, lanes):
         return [p.paused for p in lanes.pools.values()]

@@ -63,10 +63,10 @@ def lookup(graphql, pairs):
 
 def settle(graphql, prs, say):
     """Marks the open entries whose PR left the fetch `merged` or `closed`, and drops those PRs' overrides (api.md
-    §4.10), also of PRs with no entry. A PR the lookup finds open stays out of the next lookups for RECHECK seconds."""
+    §4.10) and pauses, also of PRs with no entry. A PR the lookup finds open stays out of the next lookups for RECHECK seconds."""
     inside, now = {(p["repo"], p["number"]) for p in prs}, time.monotonic()
     entries = [(r["repo"], r["number"]) for r in db.history(db.HISTORY_KEEP) if r["state"] == "open"]
-    gone = [k for k in dict.fromkeys(entries + list(db.pr_overrides()))
+    gone = [k for k in dict.fromkeys(entries + list(db.pr_overrides()) + list(db.paused_prs()))
             if k not in inside and now - LOOKED.get(k, -RECHECK) >= RECHECK]
     LOOKED.update(dict.fromkeys(gone, now))
     if not gone:
@@ -77,6 +77,7 @@ def settle(graphql, prs, say):
             if node["state"] != "OPEN":
                 (repo, n) in entries and db.upsert_history(repo, n, state=node["state"].lower(), closed_at=db.now())
                 db.drop_pr_override(repo, n)
+                db.pause_pr(repo, n, False)
     say(f"history: {len(gone)} PR(s) left the queue, {sum(n['state'] != 'OPEN' for n in found.values())} merged or closed, "
         f"lookup cost {cost} points")
 

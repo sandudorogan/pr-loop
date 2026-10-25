@@ -72,6 +72,11 @@ public struct DaemonClient: DaemonAPI {
         return state.isPaused
     }
 
+    public func setPaused(_ pr: PRRef, _ paused: Bool) async throws -> Bool {
+        let state: PauseState = try await send(HTTPRequest(.post, "\(path(of: pr))/\(paused ? "pause" : "resume")"))
+        return state.isPaused
+    }
+
     public func prConfig(_ pr: PRRef) async throws -> PRConfig {
         try await send(HTTPRequest(.get, "\(path(of: pr))/config"), ordered: true)
     }

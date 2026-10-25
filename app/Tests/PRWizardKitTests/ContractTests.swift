@@ -117,6 +117,13 @@ struct ContractTests {
         #expect(try await daemon.setPaused(false) == false)
     }
 
+    @Test("pausing a PR moves it to paused and back")
+    func pausePR() async throws {
+        #expect(try await daemon.setPaused(seeded, true))
+        #expect(try await daemon.queue(since: nil, wait: .zero).items.first { $0.ref == seeded }?.group == .paused)
+        #expect(try await daemon.setPaused(seeded, false) == false)
+    }
+
     @Test("a PR override patches and deletes")
     func prConfig() async throws {
         let loaded = try await daemon.prConfig(seeded)

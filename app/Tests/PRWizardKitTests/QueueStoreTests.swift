@@ -113,8 +113,12 @@ private actor Launches: DaemonLauncher {
         await store.moveToFront([gitops, pr])
         await store.refresh()
         await store.setPaused(true)
+        await store.setPaused([gitops, pr], true)
         #expect(
-            await daemon.calls == [.review(pr), .fix(gitops), .moveToFront([gitops, pr]), .refresh, .setPaused(true)])
+            await daemon.calls == [
+                .review(pr), .fix(gitops), .moveToFront([gitops, pr]), .refresh, .setPaused(true),
+                .setPRPaused(gitops, true), .setPRPaused(pr, true),
+            ])
         #expect(store.lastActionError == nil)
     }
 

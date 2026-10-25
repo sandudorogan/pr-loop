@@ -5,4 +5,5 @@ public enum PendingAction: Hashable, Sendable {
     case moveToFront(PRRef)
     case review(PRRef)
     case fix(PRRef)
+    case pause(PRRef)
 }

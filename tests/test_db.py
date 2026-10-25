@@ -47,15 +47,24 @@ class Connection(DbCase):
         self.assertEqual(c.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         self.assertEqual(c.execute("PRAGMA busy_timeout").fetchone()[0], 10_000)
         self.assertEqual(c.execute("PRAGMA synchronous").fetchone()[0], 1)
-        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 2)
         self.assertEqual(len(db.meta_get("events_epoch")), 6)
+
+    def test_upgrade_from_version_one_adds_paused_prs(self):
+        os.makedirs(os.path.dirname(self.path))
+        self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        self.sql("PRAGMA user_version = 1")
+        db.pause_pr(R, 1, True)
+        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(2,)]))
+        db.pause_pr(R, 1, False)
+        self.assertEqual(db.paused_prs(), {})
 
     def test_upgrade_from_version_zero_keeps_data(self):
         os.makedirs(os.path.dirname(self.path))
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("INSERT INTO meta VALUES ('imported_at', 'x')")
         self.assertEqual(db.meta_get("imported_at"), "x")
-        self.assertEqual(self.sql("PRAGMA user_version"), [(1,)])
+        self.assertEqual(self.sql("PRAGMA user_version"), [(2,)])
         self.assertEqual(db.review(R, 1), {})
         db.close()
         self.assertEqual(db.meta_get("imported_at"), "x")

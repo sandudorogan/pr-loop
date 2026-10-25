@@ -141,6 +141,12 @@ def active(prs):
     return [p["repo"] for p in listed(prs) if p["status"] == "active"]
 
 
+def workable(prs):
+    """The PRs the lanes may take: a local checkout, not paused."""
+    served, held = checkouts(), db.paused_prs()
+    return [pr for pr in prs if pr["repo"] in served and pr_key(pr) not in held]
+
+
 def root(repo):
     return checkouts()[repo]
 
@@ -673,7 +679,7 @@ def reviewer(only, dry_run):
 def tick(only, dry_run):
     """`only` is (repo, number): review that PR now."""
     started = time.monotonic()
-    pending = Pending(pr_of(*only) if only else [pr for pr in queue() if pr["repo"] in checkouts()],
+    pending = Pending(pr_of(*only) if only else workable(queue()),
                       cfg()["review"]["workers"])
     say(f"tick started{' (dry run)' if dry_run else ''}: {len(pending.prs)} PR(s) in queue")
     if only and not pending.prs:
@@ -719,6 +725,13 @@ class Runtime:
         if NOTED.get("pools") != (line := "pools: " + ", ".join(f"{k} ×{n}" for k, n in self.pools.sizes().items())):
             NOTED["pools"] = line
             say(line)
+
+    def feed(self):
+        """Refills both lanes from the last fetch."""
+        worked, served = workable(self.prs), checkouts()
+        state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
+        self.pools.refill("review", worked)
+        self.pools.refill("fix", [pr for pr in worked if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
 
     def attach(self, pools):
         """The daemon's pools, which config writes rebuild and pause stops. They start paused when the db says so."""
@@ -804,6 +817,15 @@ class Runtime:
         say("paused: workers take no new PR" if on else "resumed")
         return on
 
+    def pause_pr(self, repo, n, on):
+        """api.md §3.17: a paused PR takes no new pass in either lane. A running pass finishes."""
+        self.fetched(repo, n)
+        db.pause_pr(repo, n, on)
+        log(repo, n, "paused" if on else "resumed")
+        self.feed()
+        self.changes.touch()
+        return on
+
     def refreshed(self, prs=None, error=None):
         at = db.now()
         if error is None:
@@ -865,6 +887,8 @@ def unbumpable(repo, n, pr, runs, repos):
         return "review-lane-off"
     if (repo, n) in runs:
         return "active"
+    if (repo, n) in db.paused_prs():
+        return "paused"
     return None if row(pr, db.review(repo, n), {}, [n], db.fix(repo, n))[0] == 1 else "nothing-new"
 
 
@@ -913,14 +937,10 @@ def daemon():
             try:
                 prs, cost, left = fetched(note=say)
                 found({pr["repo"] for pr in prs})
-                served = checkouts()
-                worked = [pr for pr in prs if pr["repo"] in served]
                 rt.refreshed(prs)
                 track(prs)
                 rt.apply()
-                rt.pools.refill("review", worked)
-                state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
-                rt.pools.refill("fix", [pr for pr in worked if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
+                rt.feed()
                 if NOTED.get("projects") != (line := f"projects: {summary(listed(prs))}"):
                     NOTED["projects"] = line
                     say(line)

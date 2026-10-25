@@ -17,6 +17,7 @@ public struct StatusStyle: Hashable, Sendable {
             case "quality-only": ("checkmark.seal.fill", .good, "Notes only")
             case "posted": ("text.bubble", .info, "Findings posted")
             case "held": ("pause.circle", .neutral, "Held")
+            case "paused": ("pause.circle.fill", .neutral, "Paused")
             case "needs-human": ("person.fill.questionmark", .attention, "Needs you")
             case "too-big": ("person.fill.questionmark", .attention, "Too big")
             case "failed": ("xmark.octagon", .bad, "Failed")

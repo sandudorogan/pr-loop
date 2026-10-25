@@ -2,7 +2,7 @@
 
 A runtime serves the bodies: `info()`, `snapshot()`, `config()`, `events(since)`, and `changes`, which every change moves.
 `history(repo, limit)`, `pr_labels(repo, n)`, `pr_override(repo, n)`. It acts on `save_config(doc)`, `refetch()`,
-`bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)`, `put_pr_override(repo, n, doc)` and `pause(on)`.
+`bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)`, `put_pr_override(repo, n, doc)`, `pause_pr(repo, n, on)` and `pause(on)`.
 
 Usage:
   python3 -m pr_wizard.api --fake [--socket PATH] [--fake-speed S] [--fake-empty]
@@ -202,6 +202,13 @@ def refresh(rt, query, body):
     return 202, {"accepted": True}
 
 
+def hold(on):
+    def at(rt, query, body, owner, name, n):
+        repo, n = f"{owner}/{name}", int(n)
+        return {"key": f"{repo}#{n}", "paused": rt.pause_pr(repo, n, on)}
+    return at
+
+
 def act(lane):
     def on(rt, query, body, owner, name, n):
         repo, n = f"{owner}/{name}", int(n)
@@ -223,6 +230,8 @@ ROUTES = {
     f"{PR}/review": {"POST": act("review")},
     f"{PR}/fix": {"POST": act("fix")},
     f"{PR}/config": {"GET": pr_config, "PATCH": patch_pr_config, "DELETE": drop_pr_config},
+    f"{PR}/pause": {"POST": hold(True)},
+    f"{PR}/resume": {"POST": hold(False)},
     "/v1/pause": {"POST": lambda rt, query, body: {"paused": rt.pause(True)}},
     "/v1/resume": {"POST": lambda rt, query, body: {"paused": rt.pause(False)}},
 }

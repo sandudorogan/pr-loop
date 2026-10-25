@@ -4,6 +4,7 @@ public struct QueueSection: Hashable, Identifiable, Sendable {
         case upNext = "Up Next"
         case ready = "Ready"
         case waiting = "Waiting"
+        case paused = "Paused"
 
         init(_ group: Group) {
             self =
@@ -12,6 +13,7 @@ public struct QueueSection: Hashable, Identifiable, Sendable {
                 case .queued: .upNext
                 case .ready: .ready
                 case .idle, .unknown: .waiting
+                case .paused: .paused
                 }
         }
     }

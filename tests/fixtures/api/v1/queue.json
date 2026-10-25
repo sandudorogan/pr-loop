@@ -27,7 +27,7 @@
      "checkout": null, "prs": 1, "error": null, "conventions": null, "gates": []}
   ],
   "refresh": {"last_at": "2026-10-25T12:00:41+03:00", "last_error": null},
-  "counts": {"active": 1, "queued": 1, "ready": 1, "idle": 1},
+  "counts": {"active": 1, "queued": 1, "ready": 1, "idle": 1, "paused": 0},
   "items": [
     {
       "key": "iprally/iprally#17190",
@@ -48,7 +48,7 @@
       "requested": false,
       "bumped": false,
       "group": "active",
-      "rank": null,
+      "rank": null, "paused": false,
       "status": "reviewing",
       "detail": "since 12:01:02",
       "active": {"lane": "review", "since": "2026-10-25T12:01:02+03:00", "reviewers": [
@@ -96,7 +96,7 @@
       "author": "colleague", "mine": false, "draft": false, "labels": [],
       "head": "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6", "base": "main", "additions": 35, "deletions": 4,
       "pushed_at": "2026-10-25T11:20:00+03:00", "updated_at": "2026-10-25T11:31:09+03:00",
-      "requested": true, "bumped": true, "group": "queued", "rank": 1, "status": "queued",
+      "requested": true, "bumped": true, "group": "queued", "rank": 1, "paused": false, "status": "queued",
       "detail": "pushed Sun 11:20", "active": null, "review": null, "findings": null, "fix": null, "fix_queued": false,
       "override": ["review.reviewers"]
     },
@@ -106,7 +106,7 @@
       "author": "colleague", "mine": false, "draft": false, "labels": [],
       "head": "9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5", "base": "main", "additions": 120, "deletions": 98,
       "pushed_at": "2026-10-24T16:02:11+03:00", "updated_at": "2026-10-24T17:44:30+03:00",
-      "requested": true, "bumped": false, "group": "ready", "rank": null, "status": "ready",
+      "requested": true, "bumped": false, "group": "ready", "rank": null, "paused": false, "status": "ready",
       "detail": "quality notes only", "active": null,
       "review": {"sha": "9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5", "current": true, "status": "posted",
                  "verdict": "quality-only", "note": "quality", "rounds": 1, "hold": false,
@@ -145,7 +145,7 @@
       "author": "sandudorogan", "mine": true, "draft": false, "labels": [],
       "head": "77aa0c1e2f3d4b5a69788796a5b4c3d2e1f00f1e", "base": "main", "additions": 2, "deletions": 2,
       "pushed_at": "2026-10-25T10:02:00+03:00", "updated_at": "2026-10-25T10:30:00+03:00",
-      "requested": false, "bumped": false, "group": "idle", "rank": null, "status": "skipped",
+      "requested": false, "bumped": false, "group": "idle", "rank": null, "paused": false, "status": "skipped",
       "detail": "review lane off", "active": null, "review": null, "findings": null,
       "fix": {"sha": "77aa0c1e2f3d4b5a69788796a5b4c3d2e1f00f1e", "current": true, "status": "nothing-to-fix",
               "note": "nothing-to-fix", "errors": 0, "parked": false, "at": "2026-10-25T10:31:12+03:00"},

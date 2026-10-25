@@ -40,6 +40,20 @@ import Testing
         #expect(QueueFilter(repo: "iprally/gitops").sections(items).map(\.kind) == [.waiting])
     }
 
+    @Test("a paused PR goes to the last section")
+    func paused() throws {
+        let items = try Snapshots.queue().items + [Snapshots.item(1, ["group": "paused", "paused": true])]
+        #expect(QueueFilter().sections(items).map(\.title) == ["In Work", "Up Next", "Ready", "Waiting", "Paused"])
+    }
+
+    @Test("the selection resumes only when every PR is paused")
+    func resumes() throws {
+        let paused = try Snapshots.item(1, ["paused": true])
+        #expect([paused].resumes)
+        #expect(try ![paused, Snapshots.item(0)].resumes)
+        #expect(![QueueItem]().resumes)
+    }
+
     @Test("an unknown group waits")
     func unknownGroup() throws {
         let item = try Snapshots.item(0, ["group": .string("parked")])

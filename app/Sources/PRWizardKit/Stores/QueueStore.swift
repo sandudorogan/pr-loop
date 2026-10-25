@@ -82,6 +82,12 @@ import Observation
         await perform([.setPaused(paused)], on: nil) { _ = try await daemon.setPaused(paused) }
     }
 
+    public func setPaused(_ prs: [PRRef], _ paused: Bool) async {
+        await perform(prs.map(PendingAction.pause), on: prs.first) {
+            for pr in prs { _ = try await daemon.setPaused(pr, paused) }
+        }
+    }
+
     private func apply(_ event: FeedEvent<QueueFeed.Update>) {
         switch event {
         case .value(let update):

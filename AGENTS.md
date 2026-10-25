@@ -143,6 +143,7 @@ One code path owns each table:
 | `events` | daemon | `ready_for_approval` / `ready_withdrawn` for `GET /v1/events`, last 1000 |
 | `history` | both lanes | one row per PR worked on, for `GET /v1/history`; 30 days, at most 500 rows |
 | `pr_overrides` | API (`PATCH`/`DELETE …/config`) | `(repo, number)` → partial `review.*`/`fix.*` config |
+| `paused_prs` | API (`POST …/pause`, `…/resume`) | `(repo, number)` → `at`; neither lane takes the PR, its row is `paused` |
 | `fix_state` | pr_fix.py | Codex session, handled reviews/jobs, deferred threads, `ci_tries`, `reruns`, `red` |
 | `clean_reviews` | pr_review.py | `(repo, number, sha, reviewer)` heads a reviewer cleared; 30 days |
 | `meta` | daemon | `paused`, `events_epoch`, `imported_at`, `history_seeded` |
@@ -178,6 +179,7 @@ PUT    config                         PATCH  config                   (base_rev,
 POST   refresh · next · pause · resume
 POST   prs/<o>/<n>/<N>/review         review now, past every gate and label, not past review.enabled false
 POST   prs/<o>/<n>/<N>/fix            re-arm: fixes.key = NULL, errors = 0, then refresh
+POST   prs/<o>/<n>/<N>/pause · resume one PR: no new pass in either lane, a running pass finishes
 GET · PATCH · DELETE   prs/<o>/<n>/<N>/config      the PR override and its effective config
 ```
 

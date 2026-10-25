@@ -156,12 +156,21 @@ class Snapshot(unittest.TestCase):
         self.assertEqual([(i["key"], i["rank"]) for i in snap["items"][:5]],
                          [("iprally/iprally#10", None), ("iprally/gitops#21", None),
                           ("iprally/iprally#12", 1), ("iprally/iprally#11", 2), ("iprally/iprally#14", None)])
-        self.assertEqual(snap["counts"], {"active": 2, "queued": 2, "ready": 3, "idle": 6})
+        self.assertEqual(snap["counts"], {"active": 2, "queued": 2, "ready": 3, "idle": 6, "paused": 0})
         self.assertEqual(snap["lanes"]["pools"],
                          [{"id": "review", "lane": "review", "repo": None, "workers": 3, "busy": 1, "pending": 2},
                           {"id": "fix", "lane": "fix", "repo": None, "workers": 3, "busy": 1, "pending": 4}])
         self.assertEqual([(p["repo"], p["review"], p["fix"], p["prs"]) for p in snap["projects"]],
                          [(MONOREPO, True, True, 12), (GITOPS, False, True, 2)])
+
+    def test_a_paused_pr_goes_last_and_a_live_run_stays_active(self):
+        db.pause_pr(MONOREPO, 10, True)
+        db.pause_pr(MONOREPO, 11, True)
+        snap = self.snap()
+        items = {i["key"]: (i["group"], i["status"], i["paused"]) for i in snap["items"]}
+        self.assertEqual((items["iprally/iprally#10"], items["iprally/iprally#11"]),
+                         (("active", "reviewing", True), ("paused", "paused", True)))
+        self.assertEqual((snap["items"][-1]["key"], snap["counts"]["paused"]), ("iprally/iprally#11", 1))
 
     def test_findings_rank_the_worst_three_across_reviewers(self):
         f = self.items()["iprally/iprally#10"]["findings"]

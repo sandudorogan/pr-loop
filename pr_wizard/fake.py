@@ -11,7 +11,7 @@ from datetime import datetime
 from pr_wizard import api, config, db, names
 
 FIXTURES = os.path.join(names.ROOT, "tests", "fixtures", "api", "v1")
-GROUPS = ("active", "queued", "ready", "idle")
+GROUPS = ("active", "queued", "ready", "idle", "paused")
 KEEP_EVENTS, ZERO = 1000, dict.fromkeys(("critical", "high", "medium", "low"), 0)
 
 
@@ -25,6 +25,7 @@ class Runtime:
         self.log, self.hist, self.version = self.read("events")["events"], self.read("history")["entries"], 0
         self.epoch = epoch or "k" + secrets.token_hex(3)
         self.bumps = [i["key"] for i in self.snap["items"] if i["bumped"]]
+        self.unpaused = {}
         seeded = self.read("pr-config")
         self.overrides = {seeded["key"]: {k: seeded[k] for k in ("created_at", "updated_at")} | {"config": seeded["override"]}}
         if os.environ.get("PRW_FAKE_EMPTY") if empty is None else empty:
@@ -112,7 +113,8 @@ class Runtime:
         items, separate = self.snap["items"], self.cfg["lanes"]["separate"]
         busy = lambda lane, repo: sum(bool(i["active"]) and i["active"]["lane"] == lane and repo in (None, i["repo"]) for i in items)
         pending = lambda lane, repo: sum(repo in (None, i["repo"]) and (
-            i["group"] == "queued" if lane == "review" else i["fix_queued"] and not i["active"]) for i in items)
+            i["group"] == "queued" if lane == "review" else i["fix_queued"] and not i["active"] and not i["paused"])
+                                         for i in items)
 
         def pool(lane, repo, workers):
             return {"id": f"{lane}:{repo}" if repo else lane, "lane": lane, "repo": repo, "workers": workers,
@@ -178,6 +180,8 @@ class Runtime:
             return "not-in-queue"
         if item["active"]:
             return "active"
+        if item["paused"]:
+            return "paused"
         if not self.lane_on(item, "review"):
             return "review-lane-off"
         return None if item["group"] == "queued" or item["status"] in ("held", "new") else "nothing-new"
@@ -271,6 +275,20 @@ class Runtime:
     def pause(self, on):
         with self.lock:
             self.snap["paused"] = on
+            self.publish()
+        return on
+
+    def pause_pr(self, repo, n, on):
+        """The row moves to `paused` and back to where it was. A live run keeps it `active` until it ends."""
+        with self.lock:
+            item = self.target(repo, n)
+            if item is None:
+                raise api.Problem(404, "not_in_queue", f"{repo}#{n} is not in the last queue fetch")
+            if on and not item["paused"]:
+                self.unpaused[item["key"]] = {k: item[k] for k in ("group", "status", "detail")}
+                item.update(paused=True, group="paused", status="paused", detail=f"since {datetime.now():%a %H:%M}")
+            elif not on and item["paused"]:
+                item.update(self.unpaused.pop(item["key"]), paused=False)
             self.publish()
         return on
 

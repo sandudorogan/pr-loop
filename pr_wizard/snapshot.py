@@ -6,8 +6,8 @@ from datetime import datetime
 from pr_wizard import config, db, pools, projects, queue as q
 from pr_wizard.names import tag
 
-GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle"}
-MARKS = {"active": "▶", "ready": "✓"}
+GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle", 5: "paused"}
+MARKS = {"active": "▶", "ready": "✓", "paused": "⏸"}
 SEVERITIES = ("critical", "high", "medium", "low")
 EMPTY = {"counts": dict.fromkeys(SEVERITIES, 0), "at_floor": 0, "top": []}
 
@@ -20,7 +20,7 @@ def read(prs):
     for repo, rows in repos.items():
         rows["results"] = {int(n): db.reviewer_results(repo, n) for n in rows["reviews"]}
     return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "checkouts": q.found(),
-            "overrides": db.pr_overrides()}
+            "overrides": db.pr_overrides(), "paused": db.paused_prs()}
 
 
 def iso(at):
@@ -52,11 +52,14 @@ def findings(repo, seen, results, head, cfg, override=None):
             "reviewers": reviewers, "top": ranked[:3]}
 
 
-def entry(pr, rows, runs, cfg, first, override):
+def entry(pr, rows, runs, cfg, first, override, paused):
+    """`paused` is when the PR was paused, or None. A paused PR's live run stays `active` until it finishes."""
     repo, n, head = pr["repo"], pr["number"], pr["headRefOid"]
     seen, fixed = rows["reviews"].get(str(n), {}), rows["fixes"].get(str(n), {})
     now = {k: f"{r['lane']} {r['since'][11:19]}" for (r_repo, k), r in runs.items() if r_repo == repo}
     group, status, detail = q.row(pr, seen, now, first, fixed)
+    if paused and group:
+        group, status, detail = 5, "paused", f"since {datetime.fromisoformat(paused).astimezone():%a %H:%M}"
     run = runs.get((repo, n))
     return {
         "key": f"{repo}#{n}", "repo": repo, "number": n, "title": pr["title"], "url": q.url(repo, n),
@@ -65,6 +68,7 @@ def entry(pr, rows, runs, cfg, first, override):
         "additions": pr["additions"], "deletions": pr["deletions"],
         "pushed_at": iso(pr["commits"]["nodes"][0]["commit"]["committedDate"]), "updated_at": iso(pr["updatedAt"]),
         "requested": pr["requested"], "bumped": n in first, "group": GROUPS[group], "rank": None,
+        "paused": bool(paused),
         "status": status, "detail": detail,
         "active": run and {"lane": run["lane"], "since": run["since"],
                            "reviewers": run["reviewers"] if run["lane"] == "review" else None},
@@ -84,7 +88,7 @@ def pool(lane, repo, workers, items):
     mine = [i for i in items if repo in (None, i["repo"])]
     return {"id": pools.name(lane, repo), "lane": lane, "repo": repo, "workers": workers,
             "busy": sum(bool(i["active"]) and i["active"]["lane"] == lane for i in mine),
-            "pending": sum(i["group"] == "queued" if lane == "review" else i["fixable"] and not i["active"] for i in mine)}
+            "pending": sum(i["group"] == "queued" if lane == "review" else i["fixable"] and not i["active"] and not i["paused"] for i in mine)}
 
 
 def build(prs, state, runtime):
@@ -93,7 +97,8 @@ def build(prs, state, runtime):
     repos, runs, cfg, overrides = state["repos"], state["runs"], state["config"], state["overrides"]
     first = {repo: rows["next"] for repo, rows in repos.items()}
     active = {repo: [n for r, n in runs if r == repo] for repo in repos}
-    rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]], overrides.get(q.pr_key(pr))), pr) for pr in prs]
+    rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]], overrides.get(q.pr_key(pr)),
+                   state["paused"].get(q.pr_key(pr))), pr) for pr in prs]
     rows = sorted(((i, pr) for i, pr in rows if i["active"] or not q.approved(pr)),
                   key=lambda r: (list(GROUPS.values()).index(r[0]["group"]), q.priority(r[1], first),
                                  r[1]["number"] < max(active[r[1]["repo"]], default=0), r[1]["number"], r[1]["repo"]))

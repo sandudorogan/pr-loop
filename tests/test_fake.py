@@ -199,6 +199,14 @@ class Actions(Fake):
             self.assertEqual(self.call("POST", f"/v1/{path}"), (200, {"paused": paused}))
             self.assertEqual([self.call("GET", f"/v1/{p}")[1]["paused"] for p in ("queue", "info")], [paused] * 2)
 
+    def test_pause_pr_moves_the_row_to_paused_and_back(self):
+        key = f"{IPRALLY}#17201"
+        self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17201/pause"), (200, {"key": key, "paused": True}))
+        self.assertEqual((self.item(key)["group"], self.item(key)["paused"], self.keys()[-1]), ("paused", True, key))
+        self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17201/resume"), (200, {"key": key, "paused": False}))
+        self.assertEqual((self.item(key)["group"], self.item(key)["status"], self.item(key)["paused"]),
+                         ("queued", "queued", False))
+
     def test_review_of_a_colleague_pr_withdraws_then_reposts_the_ready_event(self):
         key = f"{IPRALLY}#17166"
         self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17166/review"), (202, {"key": key, "accepted": True}))

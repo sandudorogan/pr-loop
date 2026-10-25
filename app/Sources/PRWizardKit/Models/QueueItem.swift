@@ -20,6 +20,7 @@ public struct QueueItem: Codable, Hashable, Identifiable, Sendable {
     public let isBumped: Bool
     public let group: Group
     public let rank: Int?
+    public let isPaused: Bool
     public let status: String
     public let detail: String
     public let active: ActiveRun?
@@ -42,5 +43,6 @@ public struct QueueItem: Codable, Hashable, Identifiable, Sendable {
         case isRequested = "requested"
         case isBumped = "bumped"
         case isFixQueued = "fix_queued"
+        case isPaused = "paused"
     }
 }

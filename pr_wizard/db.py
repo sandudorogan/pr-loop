@@ -39,9 +39,11 @@ CREATE TABLE IF NOT EXISTS history (repo TEXT, number INT, title TEXT, url TEXT,
 CREATE INDEX IF NOT EXISTS history_at ON history (at);
 CREATE TABLE IF NOT EXISTS pr_overrides (repo TEXT, number INT, config TEXT, created_at TEXT, updated_at TEXT,
   PRIMARY KEY (repo, number));
+CREATE TABLE IF NOT EXISTS paused_prs (repo TEXT, number INT, at TEXT, PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS migration_log (seq INTEGER PRIMARY KEY, old_path TEXT, new_path TEXT, kind TEXT, at TEXT);
 """
-UPGRADES = [lambda c: [c.execute(s) for s in SCHEMA.split(";\n") if s.strip()]]
+# Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs.
+UPGRADES = [lambda c: [c.execute(s) for s in SCHEMA.split(";\n") if s.strip()]] * 2
 
 _local = threading.local()
 COMMITS = []
@@ -437,6 +439,19 @@ def put_pr_override(repo, n, config):
 def drop_pr_override(repo, n):
     with tx() as c:
         c.execute("DELETE FROM pr_overrides WHERE repo = ? AND number = ?", (repo, int(n)))
+
+
+def paused_prs():
+    """{(repo, number): at} of every paused PR."""
+    return {(r["repo"], r["number"]): r["at"] for r in _all("SELECT * FROM paused_prs")}
+
+
+def pause_pr(repo, n, on):
+    with tx() as c:
+        if on:
+            c.execute("INSERT OR IGNORE INTO paused_prs VALUES (?, ?, ?)", (repo, int(n), now()))
+        else:
+            c.execute("DELETE FROM paused_prs WHERE repo = ? AND number = ?", (repo, int(n)))
 
 
 def log_moves(moves, at=None):

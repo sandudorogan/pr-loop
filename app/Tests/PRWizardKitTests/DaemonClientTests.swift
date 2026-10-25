@@ -147,6 +147,13 @@ import Testing
             ])
     }
 
+    @Test("pausing a PR posts its own route", arguments: [true, false])
+    func pausePR(paused: Bool) async throws {
+        let transport = FakeTransport(body: Data(#"{"key": "iprally/gitops#412", "paused": \#(paused)}"#.utf8))
+        #expect(try await DaemonClient(transport: transport).setPaused(gitops, paused) == paused)
+        #expect(await transport.last == HTTPRequest(.post, "/v1/prs/iprally/gitops/412/\(paused ? "pause" : "resume")"))
+    }
+
     @Test("pause and resume post their routes and return the state", arguments: [true, false])
     func pause(paused: Bool) async throws {
         let transport = FakeTransport(body: Data(#"{"paused": \#(paused)}"#.utf8))
