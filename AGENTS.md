@@ -6,7 +6,10 @@ Do not rely on memory files for this repository. When you learn something durabl
 ## What it is
 
 A macOS launchd daemon that reviews and fixes GitHub PRs for one owner (`gh` user).
-One process serves every repo in `REPOS` (`pr_wizard/names.py`): `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
+One process serves every project: `REPOS` (`pr_wizard/names.py`) plus the keys of `projects` in `~/.config/pr-wizard/config.json`
+(a config project needs `projects[repo].root`, else the daemon logs it and skips it). The config sets each project's lanes,
+reviewers, gates, workers and refresh; the daemon re-reads it on every refresh and resizes the pools live, no restart.
+By default `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
 
 ```text
                  one GraphQL call every 5 min (60 s when a worker idles, now on SIGUSR1)
@@ -178,7 +181,7 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
   when the summary is short or reads like an error. On any `no-findings`, read `summary` first.
 - **Full disk.** Worktree build caches (`ui/.shadow-cljs`, `ui/target`, `node_modules`) fill the disk.
   Reviewers and builds then fail with misleading output. Run `df -h` first when anything fails oddly.
-- **tests-red cause.** `fix_note` shows only "Karma red in <ns>". The cause is in
+- **tests-red cause.** `fix_note` shows only "`<gate>` red in <items>". The cause is in
   `state.db` `fix_state.red` → `result.summary`.
 - **launchd priority.** `ProcessType` must stay `Standard`. `Background` pins every child to efficiency cores
   and shadow-cljs aborts with `aborted par-compile … still waiting for`.

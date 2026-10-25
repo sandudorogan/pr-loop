@@ -76,7 +76,7 @@ class Server(unittest.TestCase):
                          (200, "application/json; charset=utf-8", "close"))
         self.assertEqual(shape(info, fixture("info")), [])
         self.assertEqual((info["label"], info["paths"]["socket"], info["pid"]), (names.LABEL, names.SOCKET, os.getpid()))
-        self.assertEqual(info["refresh"], {"interval_s": rq.REFRESH, "idle_s": rq.IDLE_REFRESH,
+        self.assertEqual(info["refresh"], {"interval_s": 300, "idle_s": 60,
                                            **self.rt.refresh})
 
     def test_queue_serves_the_snapshot(self):

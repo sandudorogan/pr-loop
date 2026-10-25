@@ -10,8 +10,7 @@ PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
 PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
 
 MONOREPO = "iprally/iprally"
-REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally", "review": True},
-         "iprally/gitops": {"root": f"{HOME}/workdir/gitops", "review": False}}
+REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally"}, "iprally/gitops": {"root": f"{HOME}/workdir/gitops"}}
 LABEL = "local.review-queue"
 NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
 

@@ -25,7 +25,8 @@ A push from it is the next review round.
 Labels opt a PR out: no-auto-review skips the reviewers (the fix lane then acts on feedback alone),
 no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
-One process serves every repo in REPOS: iprally/iprally gets both lanes, iprally/gitops the fix lane alone.
+One process serves every project: REPOS and the config's projects. The config (~/.config/pr-wizard/config.json)
+sets each project's lanes, reviewers and gates; by default iprally/gitops gets the fix lane alone.
 --pr, --next and --wait act on --repo, else $IPR_REPO, else iprally/iprally.
 The daemon prunes the worktrees of every repo at start and every 30 min; --prune does one pass (--repo: that repo only).
 
@@ -42,28 +43,20 @@ from fnmatch import fnmatch
 
 from pr_wizard import __version__, api, config, db, names, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
-                              REPOS, STATE, env_repo, path, root, tag)
+                              REPOS, STATE, env_repo, path, tag)
 
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
 
-REVIEWERS = ("opus", "codex", "quality")
-WORKERS = 3
-FIX_WORKERS = 3
-FIX_TIMEOUT = 4 * 3600
-FIX_ERRORS = 3
-REFRESH = 300
 PRUNE_EVERY = 1800
-IDLE_REFRESH = 60
 LIST_CACHE = "30s"
 ATTEMPTS = 3
 BACKOFF = (60, 180)
-MAX_ADDED = 4000
-ROUNDS = 8
+ROUNDS = config.DEFAULTS["review"]["rounds"]
 WAIT_POLL = 30
 READY = ("clean", "quality-only")
 SETTLED = ("nothing-to-fix", "refuted-only", "no-changes")
 LIMITED = object()
-TRIVIAL = ("*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg")
+AT_LIMIT = re.compile(r"(?:\w+ and \w+ are )?both at their usage limit|\w+ is at its usage limit")
 FALSE_CLEAN = re.compile(
     r"overloaded|api error|rate.?limit|no review (report|content)|not provided|^\(none\)$", re.I)
 
@@ -102,6 +95,60 @@ query($owner: String!, $name: String!, $number: Int!) {
 
 GUARD, GIT = threading.Lock(), threading.Lock()
 NOTED = {}
+
+
+class Settings:
+    """The config file as last read. It is read again when the file it resolves to changes."""
+
+    def __init__(self):
+        self.stamp, self.loaded = None, None
+
+    def get(self):
+        path = config.default_path()
+        try:
+            st = os.stat(path)
+            stamp = path, os.path.realpath(path), st.st_mtime_ns, st.st_size
+        except OSError:
+            stamp = path, None
+        if stamp != self.stamp:
+            self.loaded, self.stamp = config.load(path), stamp
+        return self.loaded
+
+
+SETTINGS = Settings()
+
+
+def cfg():
+    return SETTINGS.get().config
+
+
+def effective(repo, labels=()):
+    return config.effective(cfg(), repo, labels=labels)
+
+
+def lanes_of(pr):
+    """The PR's effective config: its project's, with the labels applied."""
+    return effective(pr["repo"], [l["name"] for l in pr["labels"]["nodes"]])
+
+
+def reviewers(repo):
+    return [r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("enabled", True)]
+
+
+def projects():
+    """{repo: root} of REPOS and the config's projects. A config project with no root of its own is skipped."""
+    roots = {repo: (override or {}).get("root") or REPOS.get(repo, {}).get("root")
+             for repo, override in {**dict.fromkeys(REPOS), **cfg()["projects"]}.items()}
+    return {repo: os.path.expanduser(where) for repo, where in roots.items() if where}
+
+
+def unrooted():
+    for repo in cfg()["projects"].keys() - projects().keys():
+        log_once(repo, "-", f"skipped: no checkout, set projects[{repo}].root in the config")
+
+
+def root(repo):
+    return projects()[repo]
 
 
 def child(repo):
@@ -168,7 +215,7 @@ def bumped(repo):
 
 
 def bumps():
-    return {repo: bumped(repo) for repo in REPOS}
+    return {repo: bumped(repo) for repo in projects()}
 
 
 def save_bumped(repo, prs):
@@ -197,8 +244,8 @@ def pr_of(repo, n):
 
 def queue(*flags):
     """My own PRs and review requests (drafts too), plus PRs I reviewed before, since a posted
-    review drops the request, in every repo of REPOS. `flags` go to the `gh api` call."""
-    scope = " ".join(f"repo:{repo}" for repo in REPOS) + " is:pr is:open"
+    review drops the request, in every project. `flags` go to the `gh api` call."""
+    scope = " ".join(f"repo:{repo}" for repo in projects()) + " is:pr is:open"
     data = json.loads(sh("gh", "api", "graphql", *flags, "-f", f"query={QUEUE_QUERY}",
                          "-f", f"mine={scope} author:@me",
                          "-f", f"requested={scope} user-review-requested:@me",
@@ -220,8 +267,11 @@ def labeled(pr, label):
 
 
 def unreviewed(pr):
-    """The review prompts carry the monorepo's conventions: another repo gets the fix lane alone."""
-    return not REPOS[pr["repo"]]["review"] or labeled(pr, NO_REVIEW)
+    return not lanes_of(pr)["review"]["enabled"]
+
+
+def unfixed(pr):
+    return not lanes_of(pr)["fix"]["enabled"]
 
 
 def colleague_approved(pr):
@@ -253,11 +303,11 @@ def false_clean(res):
 
 
 def progress(repo, pr, reviewer, state, attempt):
-    """Sets one reviewer's step in the PR's `runs` row, in REVIEWERS order."""
+    """Sets one reviewer's step in the PR's `runs` row, in the project's reviewer order."""
     with db.tx():
         steps = {s["id"]: s for s in db.live_runs(repo)[pr]["reviewers"]}
         steps[reviewer] = {"id": reviewer, "state": state, "attempt": attempt, "since": db.now()}
-        db.run_update(repo, pr, [steps[r] for r in REVIEWERS if r in steps])
+        db.run_update(repo, pr, [steps[r] for r in reviewers(repo) if r in steps])
 
 
 def run_reviewer(repo, pr, reviewer):
@@ -281,8 +331,8 @@ def run_reviewer(repo, pr, reviewer):
             log(repo, pr, f"{reviewer} done{via} in {time.monotonic() - start:.0f} s: {outcome(res)}")
             progress(repo, pr, reviewer, "clean" if res.get("stop") else "posted", i + 1)
             return res
-        if "both at their usage limit" in out.stderr:
-            log(repo, pr, f"{reviewer} stopped: claude and codex are both at their usage limit")
+        if limit := AT_LIMIT.search(out.stderr):
+            log(repo, pr, f"{reviewer} stopped: {limit[0]}")
             progress(repo, pr, reviewer, "limited", i + 1)
             return LIMITED
         force = force or (["--force"] if res and false_clean(res) else [])
@@ -311,14 +361,15 @@ def reviewer_result(res):
 
 
 def review(repo, pr, sha):
-    with ThreadPoolExecutor(len(REVIEWERS)) as pool:
-        results = dict(zip(REVIEWERS, pool.map(lambda r: run_reviewer(repo, pr, r), REVIEWERS)))
+    ids = reviewers(repo)
+    with ThreadPoolExecutor(len(ids)) as pool:
+        results = dict(zip(ids, pool.map(lambda r: run_reviewer(repo, pr, r), ids)))
     for reviewer, res in results.items():
         if res and res is not LIMITED and (row := reviewer_result(res)):
             db.put_reviewer_result(repo, pr, sha, reviewer, row)
     limited = [r for r, res in results.items() if res is LIMITED]
     if limited:
-        return "limited", f"{', '.join(limited)} hit the usage limit of both engines"
+        return "limited", f"{', '.join(limited)} hit the usage limit"
     failed = [r for r, res in results.items() if res is None]
     if failed:
         return "failed", f"{', '.join(failed)} failed {ATTEMPTS}×"
@@ -346,13 +397,14 @@ def decide(pr, seen, files, only):
                if files.get(f) != seen.get("files", {}).get(f)}
     if seen and not changed:
         return "unchanged", "own diff unchanged (merge of base or rebase)"
-    if seen and all(any(fnmatch(f, g) for g in TRIVIAL) for f in changed):
+    gate = effective(pr["repo"])["review"]
+    if seen and all(any(fnmatch(f, g) for g in gate["trivial"]) for f in changed):
         return "trivial", f"only trivial files: {', '.join(sorted(changed))}"
     if seen.get("hold") and not pr["requested"]:
         return "held", f"clean before, review only on request: --next {pr['number']} or --pr {pr['number']}"
-    if seen.get("rounds", 0) >= ROUNDS:
-        return "needs-human", f"{ROUNDS} rounds in a row with findings, review it by hand or run --pr {pr['number']}"
-    if pr["additions"] > MAX_ADDED:
+    if seen.get("rounds", 0) >= gate["rounds"]:
+        return "needs-human", f"{gate['rounds']} rounds in a row with findings, review it by hand or run --pr {pr['number']}"
+    if pr["additions"] > gate["max_added"]:
         return "too-big", f"{pr['additions']} added lines, review it by hand"
 
 
@@ -418,7 +470,8 @@ def handle(pr, first, only, dry_run):
         status, note = review(repo, n, pr["headRefOid"])
         in_review(repo, n, False)
     log(repo, n, f"{status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
-    verdict = {"clean": "clean", "posted": "quality-only" if note == "quality" else "posted"}.get(
+    advisory = {r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("advisory")}
+    verdict = {"clean": "clean", "posted": "quality-only" if set(note.split(", ")) <= advisory else "posted"}.get(
         status, seen.get("verdict") if status in ("unchanged", "trivial", "limited") else None)
     if status == "clean":
         post_clean_notice(repo, n, pr["headRefOid"])
@@ -456,7 +509,7 @@ def fixable(pr, state, fixes):
     pass has seen."""
     seen = state.get(str(pr["number"]), {})
     reviewed = unreviewed(pr) or seen.get("sha") == pr["headRefOid"] and seen.get("status") != "limited"
-    return (pr["viewerDidAuthor"] and not labeled(pr, NO_FIX) and reviewed
+    return (pr["viewerDidAuthor"] and not unfixed(pr) and reviewed
             and fixes.get(str(pr["number"]), {}).get("key") != feedback_key(pr))
 
 
@@ -464,7 +517,7 @@ def fixing(pr, state, fixes):
     """The fix lane still owes this head a pass: the reviewers posted and no pass ran on it yet, or
     the last one errored or went red and will run again."""
     fixed = fixes.get(str(pr["number"]), {})
-    return (pr["viewerDidAuthor"] and not labeled(pr, NO_FIX)
+    return (pr["viewerDidAuthor"] and not unfixed(pr)
             and state.get(str(pr["number"]), {}).get("status") == "posted"
             and (fixed.get("sha") != pr["headRefOid"] or not fixed.get("key")))
 
@@ -477,13 +530,14 @@ def ready(pr, seen, fixed):
     return seen.get("verdict") in READY
 
 
-def fix_note(res, err):
+def fix_note(res, err, repo=MONOREPO):
     status = res.get("status", "error")
     if status == "pushed":
         merged = "merged the base, " if res.get("merged") else ""
         return f"pushed {res['pushed'][:12]}: {merged}{res['fixed']} fixed, {res['refuted']} refuted, {res['deferred']} deferred"
     if status == "tests-red":
-        return f"Karma red in {', '.join(res['failing'])} — {res['worktree']}"
+        gate = res.get("gate") or ", ".join(g["name"] for g in effective(repo)["fix"]["gates"] if g["kind"] == "test")
+        return f"{gate} red in {', '.join(res['failing'])} — {res['worktree']}"
     if status == "error":
         return (err.strip().splitlines() or ["pr_fix.py printed nothing"])[-1][-200:]
     return (res.get("summary") or status).strip()[:160]
@@ -492,22 +546,23 @@ def fix_note(res, err):
 def fix(pr, first):
     repo, n, head = pr["repo"], pr["number"], pr["headRefOid"]
     log(repo, n, f"fixing {head[:12]}: {pr['title']}")
+    knobs = effective(repo)["fix"]
     in_review(repo, n, True, "fix")
     try:
         out = subprocess.run([sys.executable, PR_FIX, "run", "--pr", str(n)], **child(repo), capture_output=True,
-                             text=True, timeout=FIX_TIMEOUT)
+                             text=True, timeout=knobs["pass_timeout_s"])
     finally:
         in_review(repo, n, False)
     try:
         res = json.loads(out.stdout)
     except ValueError:
         res = {}
-    status, note = res.get("status", "error"), fix_note(res, out.stderr)
+    status, note = res.get("status", "error"), fix_note(res, out.stderr, repo)
     log(repo, n, f"fix {status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     if status == "limited":
         return
     errors = load(repo, FIXES).get(str(n), {}).get("errors", 0) + 1 if status in ("error", "tests-red") else 0
-    record(repo, str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= FIX_ERRORS else None,
+    record(repo, str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= knobs["max_errors"] else None,
                           "status": status, "note": note, "errors": errors, "at": f"{datetime.now():%F %T}"}, FIXES)
     if status == "pushed":
         kick()
@@ -516,8 +571,17 @@ def fix(pr, first):
 class Pending:
     """The PRs from the latest queue fetch that no worker has taken yet, keyed by (repo, number)."""
 
-    def __init__(self, prs=(), workers=WORKERS):
-        self.prs, self.busy, self.cond, self.workers = list(prs), set(), threading.Condition(), workers
+    def __init__(self, prs=(), workers=0):
+        self.prs, self.busy, self.cond, self.workers, self.live = list(prs), set(), threading.Condition(), workers, 0
+
+    def resize(self, workers, spawn):
+        """Starts the missing workers through `spawn` at once and returns them. A worker over the size retires
+        when it next looks for work, so no pass is cut short."""
+        with self.cond:
+            self.workers, grow = workers, max(workers - self.live, 0)
+            self.live += grow
+            self.cond.notify_all()
+        return [spawn() for _ in range(grow)]
 
     def refill(self, prs):
         with self.cond:
@@ -526,8 +590,9 @@ class Pending:
 
     def take(self, wait):
         with self.cond:
-            while not self.prs:
-                if not wait:
+            while not self.prs or self.live > self.workers:
+                if self.live > self.workers or not wait:
+                    self.live -= 1
                     return None
                 self.cond.wait()
             first = bumps()
@@ -560,10 +625,15 @@ def work(pending, wait, job):
             pending.done(key)
 
 
+def worker(pending, wait, job):
+    thread = threading.Thread(target=work, args=(pending, wait, job), daemon=True)
+    thread.start()
+    return thread
+
+
 def run(pending, wait, job):
-    with ThreadPoolExecutor(pending.workers) as pool:
-        for _ in range(pending.workers):
-            pool.submit(work, pending, wait, job)
+    for thread in pending.resize(pending.workers, lambda: worker(pending, wait, job)):
+        thread.join()
 
 
 def reviewer(only, dry_run):
@@ -573,7 +643,7 @@ def reviewer(only, dry_run):
 def tick(only, dry_run):
     """`only` is (repo, number): review that PR now."""
     started = time.monotonic()
-    pending = Pending(pr_of(*only) if only else queue())
+    pending = Pending(pr_of(*only) if only else queue(), cfg()["review"]["workers"])
     say(f"tick started{' (dry run)' if dry_run else ''}: {len(pending.prs)} PR(s) in queue")
     if only and not pending.prs:
         log(*only, "not an open PR")
@@ -582,7 +652,8 @@ def tick(only, dry_run):
 
 
 def lanes(repo):
-    return "review+fix" if REPOS[repo]["review"] else "fix"
+    on = effective(repo)
+    return "+".join(lane for lane in ("review", "fix") if on[lane]["enabled"]) or "off"
 
 
 def serving(held):
@@ -596,7 +667,7 @@ def serving(held):
         except BlockingIOError:
             lock.close()
             log_once(repo, "-", f"skipped: an old {repo} daemon holds {path(repo, LOCK)}")
-    return {MONOREPO, *held}
+    return {repo for repo in projects() if repo == MONOREPO or repo in held or repo not in REPOS}
 
 
 class Runtime:
@@ -607,6 +678,16 @@ class Runtime:
         self.started, self.started_at, self.changes = time.time(), db.now(), api.Changes()
         self.commit = subprocess.run(["git", "-C", names.ROOT, "rev-parse", "--short", "HEAD"],
                                      capture_output=True, text=True).stdout.strip() or None
+
+    @property
+    def cfg(self):
+        return SETTINGS.get()
+
+    def resize(self, review, fixes):
+        """Sizes both pools to the config, live."""
+        knobs = self.cfg.config
+        review.resize(knobs["review"]["workers"], lambda: worker(review, True, reviewer(None, False)))
+        fixes.resize(knobs["fix"]["workers"], lambda: worker(fixes, True, fix))
 
     def refreshed(self, prs=None, error=None):
         at = db.now()
@@ -623,16 +704,16 @@ class Runtime:
                                                           "paused": False, "refresh": self.refresh})
 
     def info(self):
-        snap, loaded = self.snapshot(), config.load()
+        snap, loaded = self.snapshot(), self.cfg
         return {"name": "pr-wizard", "version": __version__, "commit": self.commit, "api": 1, "pid": os.getpid(),
                 "started_at": self.started_at, "uptime_s": int(time.time() - self.started), "label": LABEL,
                 "paused": snap["paused"], "projects": snap["projects"], "lanes": snap["lanes"],
-                "refresh": {"interval_s": REFRESH, "idle_s": IDLE_REFRESH, **snap["refresh"]},
+                "refresh": {**loaded.config["refresh"], **snap["refresh"]},
                 "config": {"path": loaded.path, "real_path": loaded.real_path, "rev": loaded.rev, "error": loaded.error},
                 "paths": {"socket": names.SOCKET, "state": names.WIZARD, "db": db.DB, "log": LOG}}
 
     def config(self):
-        loaded, projects = config.load(), self.snapshot()["projects"]
+        loaded, projects = self.cfg, self.snapshot()["projects"]
         return {"rev": loaded.rev, "path": loaded.path, "real_path": loaded.real_path, "source": loaded.source,
                 "error": loaded.error, "config": loaded.config, "defaults": config.DEFAULTS,
                 "effective": {p["repo"]: {"root": p["checkout"] and p["checkout"]["path"],
@@ -655,8 +736,9 @@ def serve(rt):
 
 
 def daemon():
-    """Workers review nonstop. The queue data behind them refreshes every REFRESH s, every IDLE_REFRESH s
-    while a worker has nothing to take, and at once on SIGUSR1."""
+    """Workers review nonstop. The queue data behind them refreshes every `refresh.interval_s`, every
+    `refresh.idle_s` while a worker has nothing to take, and at once on SIGUSR1. Each refresh sizes the pools
+    to the config."""
     lock = open(path(MONOREPO, LOCK), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -667,14 +749,16 @@ def daemon():
     db.sweep_runs()
     rt = Runtime()
     serve(rt)
-    pending, fixes, refresh_now, held = Pending(), Pending(workers=FIX_WORKERS), threading.Event(), {}
+    pending, fixes, refresh_now, held = Pending(), Pending(), threading.Event(), {}
     signal.signal(signal.SIGUSR1, lambda *_: refresh_now.set())
 
     def refresh():
         idle = False
         while True:
-            started = time.monotonic()
+            started, every = time.monotonic(), cfg()["refresh"]
             try:
+                rt.resize(pending, fixes)
+                unrooted()
                 served = serving(held)
                 prs = [pr for pr in queue() if pr["repo"] in served]
                 pending.refill(prs)
@@ -689,21 +773,21 @@ def daemon():
                 say(f"queue refresh failed: {error}")
                 rt.refreshed(error=error)
             idle = False
-            while not refresh_now.wait(IDLE_REFRESH):
-                if time.monotonic() - started >= REFRESH:
+            while not refresh_now.wait(every["idle_s"]):
+                if time.monotonic() - started >= every["interval_s"]:
                     break
                 if pending.idle():
                     idle = True
                     break
             refresh_now.clear()
 
-    say(f"daemon started: {', '.join(f'{repo} {lanes(repo)}' for repo in REPOS)}")
-    say(f"{WORKERS} review and {FIX_WORKERS} fix workers, queue refresh every "
-         f"{REFRESH // 60} min, every {IDLE_REFRESH} s while a review worker is idle")
-    threading.Thread(target=refresh, daemon=True).start()
-    threading.Thread(target=run, args=(fixes, True, fix), daemon=True).start()
+    knobs = cfg()
+    say(f"daemon started: {', '.join(f'{repo} {lanes(repo)}' for repo in projects())}")
+    say(f"{knobs['review']['workers']} review and {knobs['fix']['workers']} fix workers, queue refresh every "
+         f"{knobs['refresh']['interval_s'] // 60} min, every {knobs['refresh']['idle_s']} s while a review worker is idle")
+    unrooted()
     start_pruner()
-    run(pending, True, reviewer(None, False))
+    refresh()
 
 
 def kick():
@@ -784,7 +868,8 @@ def row(pr, seen, now, first, fixed={}):
                 else "quality notes only" if seen["verdict"] == "quality-only" else seen["at"]
         owed = seen["status"] == "posted" and pr["viewerDidAuthor"]
         detail = (f"fix {fixed['status']}" if fixed.get("sha") == pr["headRefOid"]
-                  else NO_FIX if owed and labeled(pr, NO_FIX) else "fix queued" if owed else seen["at"])
+                  else NO_FIX if owed and labeled(pr, NO_FIX) else "fix lane off" if owed and unfixed(pr)
+                  else "fix queued" if owed else seen["at"])
         return 4, seen.get("verdict") or seen["status"], detail
     if unreviewed(pr):
         return 4, "skipped", NO_REVIEW
@@ -918,7 +1003,7 @@ def prune_all(repos, dry_run):
 
 def prune_forever(sleep=time.sleep):
     while True:
-        prune_all(REPOS, False)
+        prune_all(projects(), False)
         sleep(PRUNE_EVERY)
 
 
@@ -950,7 +1035,7 @@ def main():
     ap.add_argument("--daemon", action="store_true", help="review nonstop, refreshing the queue every 5 min")
     ap.add_argument("--prune", action="store_true",
                     help="remove the worktrees of PRs that merged or that I approved, in every repo")
-    ap.add_argument("--repo", choices=REPOS, help="the repo of --pr, --next and --wait (default $IPR_REPO, "
+    ap.add_argument("--repo", choices=projects(), help="the repo of --pr, --next and --wait (default $IPR_REPO, "
                                                   f"else {MONOREPO}); --prune: only this repo")
     a = ap.parse_args()
     repo = a.repo or env_repo()
@@ -967,7 +1052,7 @@ def main():
     if a.daemon:
         return daemon()
     if a.prune:
-        sys.exit(prune_all([a.repo] if a.repo else REPOS, a.dry_run))
+        sys.exit(prune_all([a.repo] if a.repo else projects(), a.dry_run))
     if a.bg:
         wake()
         return print(f"queue refresh requested — tail -f {LOG}")

@@ -4,7 +4,7 @@ import hashlib, json
 from datetime import datetime
 
 from pr_wizard import config, db, queue as q
-from pr_wizard.names import REPOS, root, tag
+from pr_wizard.names import tag
 
 GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle"}
 MARKS = {"active": "▶", "ready": "✓"}
@@ -15,10 +15,10 @@ EMPTY = {"counts": dict.fromkeys(SEVERITIES, 0), "at_floor": 0, "top": []}
 def read():
     """The db rows behind a snapshot. `reviews` and `fixes` keep the str keys the gate functions take."""
     repos = {repo: {"reviews": q.load(repo), "fixes": q.load(repo, q.FIXES), "next": db.next_list(repo)}
-             for repo in REPOS}
+             for repo in q.projects()}
     for repo, rows in repos.items():
         rows["results"] = {int(n): db.reviewer_results(repo, n) for n in rows["reviews"]}
-    return {"repos": repos, "runs": db.live_runs(), "config": config.load().config}
+    return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "roots": q.projects()}
 
 
 def iso(at):
@@ -34,7 +34,7 @@ def findings(repo, seen, results, head, cfg):
     known = {r["id"]: r for r in config.effective(cfg, repo)["review"]["reviewers"]}
     derived = seen.get("status") if seen.get("sha") == sha and seen.get("status") in ("failed", "limited") else None
     reviewers = []
-    for rid in q.REVIEWERS:
+    for rid in known:
         if row := results.get(rid):
             reviewers.append({"id": rid, "label": known[rid]["label"], "result": row["result"],
                               "engine": row["engine"] or known[rid]["engine"], **(row["digest"] or EMPTY),
@@ -70,7 +70,7 @@ def entry(pr, rows, runs, cfg, first):
         if seen else None,
         "findings": findings(repo, seen, rows["results"].get(n), head, cfg),
         "fix": {k: v for k, v in fixed.items() if k not in ("key", "gate")}
-        | {"current": fixed["sha"] == head, "parked": fixed["errors"] >= q.FIX_ERRORS, "at": iso(fixed["at"])}
+        | {"current": fixed["sha"] == head, "parked": fixed["errors"] >= config.effective(cfg, repo)["fix"]["max_errors"], "at": iso(fixed["at"])}
         if fixed else None,
         "fix_queued": q.fixing(pr, rows["reviews"], rows["fixes"]), "override": [],
         "fixable": q.fixable(pr, rows["reviews"], rows["fixes"]),
@@ -80,7 +80,8 @@ def entry(pr, rows, runs, cfg, first):
 def build(prs, state, runtime):
     """Pure: the fetched PRs, `read()` rows and the runtime {generated_at, fetched_at, paused, refresh} as the §3.2
     snapshot."""
-    repos, runs, cfg = state["repos"], state["runs"], state["config"]
+    repos, runs, cfg, roots = state["repos"], state["runs"], state["config"], state["roots"]
+    on = {repo: config.effective(cfg, repo) for repo in roots}
     first = {repo: rows["next"] for repo, rows in repos.items()}
     active = {repo: [n for r, n in runs if r == repo] for repo in repos}
     rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]]), pr) for pr in prs]
@@ -95,14 +96,14 @@ def build(prs, state, runtime):
     snap = {
         "fetched_at": runtime["fetched_at"], "paused": runtime["paused"],
         "lanes": {"separate": False, "pools": [
-            {"id": "review", "lane": "review", "repo": None, "workers": q.WORKERS, "busy": busy("review"),
+            {"id": "review", "lane": "review", "repo": None, "workers": cfg["review"]["workers"], "busy": busy("review"),
              "pending": sum(i["group"] == "queued" for i in items)},
-            {"id": "fix", "lane": "fix", "repo": None, "workers": q.FIX_WORKERS, "busy": busy("fix"),
+            {"id": "fix", "lane": "fix", "repo": None, "workers": cfg["fix"]["workers"], "busy": busy("fix"),
              "pending": fixable}]},
-        "projects": [{"repo": repo, "status": "active", "available": True, "review": REPOS[repo]["review"],
-                      "fix": True, "checkout": {"path": root(repo), "source": "config"},
+        "projects": [{"repo": repo, "status": "active", "available": True, "review": on[repo]["review"]["enabled"],
+                      "fix": on[repo]["fix"]["enabled"], "checkout": {"path": path, "source": "config"},
                       "prs": sum(pr["repo"] == repo for pr in prs), "error": None, "conventions": None, "gates": []}
-                     for repo in REPOS],
+                     for repo, path in roots.items()],
         "refresh": runtime["refresh"],
         "counts": {g: sum(i["group"] == g for i in items) for g in GROUPS.values()},
         "items": items,

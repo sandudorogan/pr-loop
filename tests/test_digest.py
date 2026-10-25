@@ -7,6 +7,7 @@ from prs import MONOREPO, finding, pr_review as prr, rq
 from pr_wizard import config, db, snapshot
 
 A, B = "a" * 40, "b" * 40
+REVIEWERS = ("opus", "codex", "quality")
 
 
 def digest(findings, rnd=1):
@@ -85,14 +86,14 @@ class Stored(unittest.TestCase):
         db.put_reviewer_result(MONOREPO, 5, A, "opus", {"result": "posted", "engine": "claude", "round": 1,
                                                         "digest": d, "url": "u"})
         skipped = {"posted": False, "skipped": "already-reviewed", "stop": False}
-        self.run_review({r: skipped for r in rq.REVIEWERS})
+        self.run_review({r: skipped for r in REVIEWERS})
         row = db.reviewer_results(MONOREPO, 5)["opus"]
         self.assertEqual((row["result"], row["digest"], row["url"]), ("posted", d, "u"))
 
     def test_the_conventions_of_a_run_land_in_its_row_and_the_snapshot(self):
         files = ["AGENTS.md", "ui/AGENTS.md"]
         outputs = {r: {"stop": True, "reason": "no-findings", "engine": "claude", "round": 1, "digest": digest([]),
-                       "conventions": files} for r in rq.REVIEWERS}
+                       "conventions": files} for r in REVIEWERS}
         self.run_review(outputs)
         rows = db.reviewer_results(MONOREPO, 5)
         self.assertEqual([r["conventions"] for r in rows.values()], [files] * 3)
@@ -117,7 +118,7 @@ class Stored(unittest.TestCase):
     def test_a_new_head_replaces_the_older_rows(self):
         db.put_reviewer_result(MONOREPO, 5, B, "opus", {"result": "posted", "digest": digest([])})
         self.run_review({r: {"stop": True, "reason": "no-findings", "round": 1, "digest": digest([])}
-                         for r in rq.REVIEWERS})
+                         for r in REVIEWERS})
         self.assertEqual({r["sha"] for r in db.reviewer_results(MONOREPO, 5).values()}, {A})
 
     def test_failed_and_limited_runs_store_nothing(self):
