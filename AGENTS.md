@@ -6,14 +6,17 @@ Do not rely on memory files for this repository. When you learn something durabl
 ## What it is
 
 A macOS launchd daemon that reviews and fixes GitHub PRs for one owner (`gh` user).
-One process serves every project: `REPOS` (`pr_wizard/names.py`) plus the keys of `projects` in `~/.config/pr-wizard/config.json`
-(a config project needs `projects[repo].root`, else the daemon logs it and skips it). The config sets each project's lanes,
+One process serves every project it detects (`pr_wizard/projects.py`, api.md §4.7): the repos of every open PR I authored,
+that requests me, is assigned to me or that I reviewed, plus the keys of `projects` in `~/.config/pr-wizard/config.json`.
+A project is worked only with a checkout: a main checkout under `detect.roots/*/` whose git remote is the repo, or
+`projects[repo].root`. Without one it is listed `no-checkout` and its PRs are `skipped` rows. New projects take the
+defaults (both lanes on). The daemon logs `projects: …` whenever the list changes. The config sets each project's lanes,
 reviewers, gates, workers and refresh; the daemon re-reads it on every refresh and resizes the pools live, no restart.
 By default `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
 
 ```text
                  one GraphQL call every 5 min (60 s when a worker idles, now on SIGUSR1)
-                 mine (author:@me) + requested + reviewed-by:@me
+                 mine + requested + assigned + reviewed, no repo: filter
                                    │
                                    ▼
  pr_wizard/queue ── gates ── review lane (3 workers) ─── pr_review.py run × {opus, codex, quality}
@@ -28,7 +31,7 @@ By default `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only
                                                  push = new head → next review round
 ```
 
-- Review lane: my PRs, PRs that request my review, PRs I reviewed before. Monorepo only.
+- Review lane: my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before, in every active project.
 - Fix lane: my PRs only. Input = unresolved threads, review bodies on the head, failed Actions jobs, base conflict.
 - Every PR dict carries `repo`. Lanes, locks and state key on `(repo, number)`: PR numbers of two repos overlap.
 - Children run with `IPR_REPO` and `IPR_REPO_ROOT` set to the PR's repo, `cwd` = its root. The daemon ignores `IPR_REPO`.
@@ -189,7 +192,7 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
 - **launchd priority.** `ProcessType` must stay `Standard`. `Background` pins every child to efficiency cores
   and shadow-cljs aborts with `aborted par-compile … still waiting for`.
 - **GraphQL search budget.** `search` queries use a separate hourly bucket that `gh api rate_limit` does not show.
-  The queue query costs 8 points. A tight `watch review-queue -l` drains it; `-l` caches for 30 s for that reason.
+  The queue query costs 10 points (4 searches; logged as `search cost N points` on each refresh line). A tight `watch review-queue -l` drains it; `-l` caches for 30 s for that reason.
 - **Nested `claude -p`.** Drop `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` (a harness key outranks the login and 401s
   on stdout) and pass `stdin=DEVNULL`. `child_env()` does this.
 - **No slash commands headless.** `/review` in `claude -p` returns `(none)` without a review. Send a plain prompt.

@@ -117,8 +117,8 @@ def failed(e):
 def ref(ap, text, repo):
     if not (m := REF.fullmatch(text)):
         ap.error(f"{text}: a PR is N or owner/name#N")
-    if m["repo"] and m["repo"] not in q.projects():
-        ap.error(f"{m['repo']}: not a project of the daemon ({', '.join(q.projects())})")
+    if m["repo"] and m["repo"] not in q.checkouts():
+        ap.error(f"{m['repo']}: no local checkout of it under detect.roots or projects[repo].root")
     return m["repo"] or repo, int(m["n"])
 
 
@@ -142,7 +142,7 @@ def parser():
     ap.add_argument("--daemon", action="store_true", help="review nonstop, refreshing the queue every 5 min")
     ap.add_argument("--prune", action="store_true",
                     help="remove the worktrees of PRs that merged or that I approved, in every repo")
-    ap.add_argument("--repo", choices=q.projects(), help="the repo of --pr, --next and --wait (default "
+    ap.add_argument("--repo", help="the repo of --pr, --next and --wait (default "
                                                          f"$PR_WIZARD_REPO, $IPR_REPO, else {MONOREPO}); --prune: only this repo")
     return ap
 
@@ -150,6 +150,8 @@ def parser():
 def main():
     ap = parser()
     a = ap.parse_args()
+    if a.repo and a.repo not in q.checkouts():
+        ap.error(f"--repo {a.repo}: no local checkout of it under detect.roots or projects[repo].root")
     repo = a.repo or os.environ.get("PR_WIZARD_REPO") or names.env_repo()
     if a.cmd == "migrate":
         return print("\n".join(names.reverse()) if a.reverse else q.migrated(names.migrate(a.dry_run), a.dry_run))
@@ -178,7 +180,7 @@ def main():
     if a.daemon:
         return q.daemon()
     if a.prune:
-        sys.exit(q.prune_all([a.repo] if a.repo else q.projects(), a.dry_run))
+        sys.exit(q.prune_all([a.repo] if a.repo else q.active(q.queue("--cache", q.LIST_CACHE)), a.dry_run))
     q.tick(ref(ap, a.pr, repo) if a.pr else None, a.dry_run)
 
 

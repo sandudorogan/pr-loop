@@ -3,7 +3,7 @@ API JSON, `render()` prints it as the `-l` lines."""
 import hashlib, json
 from datetime import datetime
 
-from pr_wizard import config, db, queue as q
+from pr_wizard import config, db, projects, queue as q
 from pr_wizard.names import tag
 
 GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle"}
@@ -12,13 +12,14 @@ SEVERITIES = ("critical", "high", "medium", "low")
 EMPTY = {"counts": dict.fromkeys(SEVERITIES, 0), "at_floor": 0, "top": []}
 
 
-def read():
-    """The db rows behind a snapshot. `reviews` and `fixes` keep the str keys the gate functions take."""
+def read(prs):
+    """The db rows behind a snapshot of `prs`, per project. `reviews` and `fixes` keep the str keys the gate
+    functions take."""
     repos = {repo: {"reviews": q.load(repo), "fixes": q.load(repo, q.FIXES), "next": db.next_list(repo)}
-             for repo in q.projects()}
+             for repo in projects.repos(q.cfg(), prs)}
     for repo, rows in repos.items():
         rows["results"] = {int(n): db.reviewer_results(repo, n) for n in rows["reviews"]}
-    return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "roots": q.projects()}
+    return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "checkouts": q.found()}
 
 
 def iso(at):
@@ -80,9 +81,7 @@ def entry(pr, rows, runs, cfg, first):
 def build(prs, state, runtime):
     """Pure: the fetched PRs, `read()` rows and the runtime {generated_at, fetched_at, paused, refresh} as the §3.2
     snapshot."""
-    repos, runs, cfg, roots = state["repos"], state["runs"], state["config"], state["roots"]
-    prs = [pr for pr in prs if pr["repo"] in repos]
-    on = {repo: config.effective(cfg, repo) for repo in roots}
+    repos, runs, cfg = state["repos"], state["runs"], state["config"]
     first = {repo: rows["next"] for repo, rows in repos.items()}
     active = {repo: [n for r, n in runs if r == repo] for repo in repos}
     rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]]), pr) for pr in prs]
@@ -101,10 +100,7 @@ def build(prs, state, runtime):
              "pending": sum(i["group"] == "queued" for i in items)},
             {"id": "fix", "lane": "fix", "repo": None, "workers": cfg["fix"]["workers"], "busy": busy("fix"),
              "pending": fixable}]},
-        "projects": [{"repo": repo, "status": "active", "available": True, "review": on[repo]["review"]["enabled"],
-                      "fix": on[repo]["fix"]["enabled"], "checkout": {"path": path, "source": "config"},
-                      "prs": sum(pr["repo"] == repo for pr in prs), "error": None, "conventions": None, "gates": []}
-                     for repo, path in roots.items()],
+        "projects": projects.listing(prs, cfg, state["checkouts"]),
         "refresh": runtime["refresh"],
         "counts": {g: sum(i["group"] == g for i in items) for g in GROUPS.values()},
         "items": items,

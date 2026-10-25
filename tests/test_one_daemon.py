@@ -22,9 +22,11 @@ def node(repo, number, mine=True, title="t"):
             "reviews": {"totalCount": 0}, "reviewThreads": {"nodes": []}}
 
 
-def search(mine=(), requested=(), reviewed=()):
-    return json.dumps({"data": {"mine": {"nodes": list(mine)}, "requested": {"nodes": list(requested)},
-                                "reviewed": {"nodes": list(reviewed)}}})
+def search(mine=(), requested=(), assigned=(), reviewed=()):
+    found = {"mine": mine, "requested": requested, "assigned": assigned, "reviewed": reviewed}
+    return json.dumps({"data": {"rateLimit": {"cost": 1, "remaining": 4999},
+                                **{alias: {"issueCount": len(nodes), "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                           "nodes": list(nodes)} for alias, nodes in found.items()}}})
 
 
 class OneDaemon(unittest.TestCase):
@@ -42,14 +44,14 @@ class OneDaemon(unittest.TestCase):
             prs = rq.queue()
         return prs, sh.call_args.args
 
-    def test_query_has_the_repo_and_one_qualifier_per_repo(self):
-        self.assertIn("repository { nameWithOwner }", rq.QUEUE_QUERY)
-        self.assertEqual(rq.QUEUE_QUERY.count("search("), 3)
+    def test_query_has_the_repo_and_no_repo_qualifier(self):
+        self.assertIn("repository { nameWithOwner }", rq.FRAGMENT)
         _, args = self.fetch(search())
-        scope = "repo:iprally/iprally repo:iprally/gitops is:pr is:open"
-        self.assertIn(f"mine={scope} author:@me", args)
-        self.assertIn(f"requested={scope} user-review-requested:@me", args)
-        self.assertIn(f"reviewed={scope} reviewed-by:@me -author:@me", args)
+        self.assertIn("mine=is:pr is:open author:@me", args)
+        self.assertIn("requested=is:pr is:open user-review-requested:@me", args)
+        self.assertIn("assigned=is:pr is:open assignee:@me", args)
+        self.assertIn("reviewed=is:pr is:open reviewed-by:@me -author:@me", args)
+        self.assertFalse([a for a in args if "repo:" in a])
 
     def test_prs_carry_their_repo_and_the_same_number_does_not_collide(self):
         prs, _ = self.fetch(search(mine=[node(rq.MONOREPO, 7), node(GITOPS, 7)],

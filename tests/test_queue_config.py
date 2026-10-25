@@ -8,7 +8,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
-from pr_wizard import config, db, snapshot
+from pr_wizard import config, db, projects, snapshot
 
 NEW = "acme/widgets"
 OTHER = "b" * 40
@@ -26,6 +26,11 @@ class Configured(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(db.close)
+        remotes = patch.object(projects, "remotes", lambda path: set(rq.cfg()["projects"]))
+        remotes.start()
+        self.addCleanup(remotes.stop)
+        rq.CHECKOUTS.key = None
+        self.addCleanup(setattr, rq.CHECKOUTS, "key", None)
 
     def write(self, doc):
         with open(self.path, "w") as fh:
@@ -104,25 +109,17 @@ class Live(Configured):
 
 class Projects(Configured):
     def test_defaults_serve_both_repos_with_their_lanes(self):
-        self.assertEqual(list(rq.projects()), [MONOREPO, GITOPS])
-        self.assertEqual((rq.lanes(MONOREPO), rq.lanes(GITOPS)), ("review+fix", "fix"))
+        self.assertEqual(rq.checkouts(), {MONOREPO: os.path.expanduser("~/workdir/iprally"),
+                                          GITOPS: os.path.expanduser("~/workdir/gitops")})
+        self.assertEqual(rq.summary(rq.listed([])), f"{MONOREPO} review+fix, {GITOPS} fix")
 
-    def test_a_config_project_needs_a_root_else_it_is_skipped_with_a_log_line(self):
+    def test_a_config_root_overrides_the_scan_and_a_project_without_one_has_no_checkout(self):
         self.write({"projects": {NEW: {"review": {"rounds": 2}}, "acme/tools": {"root": "~/src/tools"},
                                  MONOREPO: {"root": "/src/iprally"}}})
-        with patch.object(rq, "log") as log:
-            rq.unrooted()
-        self.assertEqual(rq.projects(), {MONOREPO: "/src/iprally", GITOPS: os.path.expanduser("~/workdir/gitops"),
-                                 "acme/tools": os.path.expanduser("~/src/tools")})
-        log.assert_called_once_with(NEW, "-", f"skipped: no checkout, set projects[{NEW}].root in the config")
+        self.assertEqual(rq.checkouts(), {MONOREPO: "/src/iprally", GITOPS: os.path.expanduser("~/workdir/gitops"),
+                                          "acme/tools": os.path.expanduser("~/src/tools")})
+        self.assertEqual({p["repo"]: p["status"] for p in rq.listed([])}[NEW], "no-checkout")
         self.assertEqual(rq.child("acme/tools")["env"]["IPR_REPO_ROOT"], os.path.expanduser("~/src/tools"))
-
-    def test_the_query_scopes_every_project(self):
-        self.write({"projects": {NEW: {"root": "/src/widgets"}}})
-        with patch.object(rq, "sh", return_value=json.dumps({"data": {s: {"nodes": []} for s in
-                                                                      ("mine", "requested", "reviewed")}})) as sh:
-            rq.queue()
-        self.assertIn(f"mine=repo:{MONOREPO} repo:{GITOPS} repo:{NEW} is:pr is:open author:@me", sh.call_args.args)
 
     def test_lanes_follow_the_project_and_the_labels_still_win(self):
         self.write({"projects": {NEW: {"root": "/src/w", "fix": {"enabled": False}}, GITOPS: {"review": {"enabled": True}}}})
@@ -132,12 +129,12 @@ class Projects(Configured):
         self.assertFalse(rq.fixing(pr(repo=NEW), {"1": {"status": "posted"}}, {}))
         seen = {"sha": HEAD, "status": "posted", "verdict": "posted", "at": "2026-10-25 10:00:00"}
         self.assertEqual(rq.row(pr(repo=NEW), seen, {}, []), (4, "posted", "fix lane off"))
-        self.assertEqual(rq.lanes(NEW), "review")
+        self.assertIn(f"{NEW} review", rq.summary(rq.listed([])))
 
     def test_the_snapshot_reports_projects_and_pools_from_the_config(self):
         self.write({"review": {"workers": 2}, "projects": {NEW: {"root": "/src/w", "review": {"enabled": False}}}})
-        snap = snapshot.build([], snapshot.read(), {"generated_at": None, "fetched_at": None, "paused": False,
-                                                    "refresh": {}})
+        snap = snapshot.build([], snapshot.read([]), {"generated_at": None, "fetched_at": None, "paused": False,
+                                                      "refresh": {}})
         self.assertEqual([(p["repo"], p["review"], p["checkout"]["path"]) for p in snap["projects"]][2],
                          (NEW, False, "/src/w"))
         self.assertEqual([p["workers"] for p in snap["lanes"]["pools"]], [2, 3])

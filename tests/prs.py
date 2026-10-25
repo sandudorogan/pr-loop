@@ -11,6 +11,8 @@ from pr_wizard import queue as rq  # noqa: E402
 import pr_fix, pr_review  # noqa: E402
 
 MONOREPO, GITOPS = rq.MONOREPO, "iprally/gitops"
+CHECKOUTS = {repo: where["root"] for repo, where in rq.REPOS.items()}
+rq.CHECKOUTS.scan = lambda roots: CHECKOUTS
 HEAD = "a" * 40
 
 

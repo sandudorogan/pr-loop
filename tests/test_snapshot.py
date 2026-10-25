@@ -124,7 +124,7 @@ class Snapshot(unittest.TestCase):
         self.prs = script()
 
     def snap(self):
-        return snapshot.build(self.prs, snapshot.read(), RUNTIME)
+        return snapshot.build(self.prs, snapshot.read(self.prs), RUNTIME)
 
     def items(self):
         return {i["key"]: i for i in self.snap()["items"]}
@@ -194,13 +194,17 @@ class Snapshot(unittest.TestCase):
                          (True, True))
         self.assertEqual(items["iprally/iprally#13"]["author"], "ghost")
 
-    def test_prs_of_a_repo_dropped_from_the_config_are_left_out(self):
-        state = snapshot.read()
-        state["repos"].pop(GITOPS)
-        state["roots"].pop(GITOPS)
-        snap = snapshot.build(self.prs, state, RUNTIME)
-        self.assertEqual({i["repo"] for i in snap["items"]}, {MONOREPO})
-        self.assertEqual([p["repo"] for p in snap["projects"]], [MONOREPO])
+    def test_prs_of_a_repo_without_a_checkout_stay_listed_as_skipped(self):
+        prs = self.prs + [item(3, "acme/site", mine=False, requested=True)]
+        state = snapshot.read(prs)
+        state["checkouts"] = {k: v for k, v in state["checkouts"].items() if k != GITOPS}
+        with patch.dict(rq.CHECKOUTS.found, clear=True, **{MONOREPO: state["checkouts"][MONOREPO]}):
+            snap = snapshot.build(prs, state, RUNTIME)
+        items = {i["key"]: (i["group"], i["status"], i["detail"]) for i in snap["items"]}
+        self.assertEqual((items["acme/site#3"], items["iprally/gitops#10"]),
+                         (("idle", "skipped", "no checkout"), ("idle", "skipped", "no checkout")))
+        self.assertEqual([(p["repo"], p["status"], p["prs"]) for p in snap["projects"]],
+                         [(MONOREPO, "active", 12), (GITOPS, "no-checkout", 2), ("acme/site", "no-checkout", 1)])
 
     def test_rev_ignores_generated_at_and_follows_the_state(self):
         a, b = self.snap(), self.snap()

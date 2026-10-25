@@ -13,9 +13,10 @@ A push from it is the next review round.
 Labels opt a PR out: no-auto-review skips the reviewers (the fix lane then acts on feedback alone),
 no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
-One process serves every project: REPOS and the config's projects. The config (~/.config/pr-wizard/config.json)
-sets each project's lanes, reviewers and gates; by default iprally/gitops gets the fix lane alone.
-The daemon prunes the worktrees of every repo at start and every 30 min. pr_wizard/cli.py is the command line.
+One process serves every project it detects: the repos of my PRs, of the PRs that request or are assigned to me,
+and the config's projects, worked when a checkout under detect.roots (or the project's root) has them. The config
+(~/.config/pr-wizard/config.json) sets each project's lanes, reviewers and gates; by default iprally/gitops gets the
+fix lane alone. The daemon prunes the worktrees of every active project at start and every 30 min. pr_wizard/cli.py is the command line.
 
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
@@ -29,7 +30,7 @@ from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
-from pr_wizard import __version__, api, config, db, names, snapshot
+from pr_wizard import __version__, api, config, db, names, projects, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
                               REPOS, STATE, env_repo, path, tag)
 
@@ -63,12 +64,6 @@ fragment pr on PullRequest {
   reviews { totalCount }
   reviewThreads(first: 100) { nodes { isResolved comments { totalCount } } }
 }"""
-QUEUE_QUERY = """
-query($mine: String!, $requested: String!, $reviewed: String!) {
-  mine: search(query: $mine, type: ISSUE, first: 50) { nodes { ...pr } }
-  requested: search(query: $requested, type: ISSUE, first: 50) { nodes { ...pr } }
-  reviewed: search(query: $reviewed, type: ISSUE, first: 50) { nodes { ...pr } }
-}""" + FRAGMENT
 WORKTREE_FRAGMENT = """
 fragment done on PullRequest {
   number state headRefOid
@@ -83,6 +78,7 @@ query($owner: String!, $name: String!, $number: Int!) {
 
 GUARD, GIT = threading.Lock(), threading.Lock()
 NOTED = {}
+CHECKOUTS = projects.Checkouts()
 
 
 class Settings:
@@ -123,25 +119,26 @@ def reviewers(repo):
     return [r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("enabled", True)]
 
 
-def configured():
-    """{repo: override} of REPOS and the config's projects: every repo the daemon knows."""
-    return {**dict.fromkeys(REPOS), **cfg()["projects"]}
+def found(wanted=()):
+    return CHECKOUTS.get(cfg(), wanted)
 
 
-def projects():
-    """{repo: root} of REPOS and the config's projects. A config project with no root of its own is skipped."""
-    roots = {repo: (override or {}).get("root") or REPOS.get(repo, {}).get("root")
-             for repo, override in configured().items()}
-    return {repo: os.path.expanduser(where) for repo, where in roots.items() if where}
+def checkouts():
+    """{repo: path} of every local checkout: the scan of detect.roots, with the config's roots over it."""
+    return {repo: where["path"] for repo, where in found().items() if "path" in where}
 
 
-def unrooted():
-    for repo in cfg()["projects"].keys() - projects().keys():
-        log_once(repo, "-", f"skipped: no checkout, set projects[{repo}].root in the config")
+def listed(prs):
+    """Every project of the fetch and the config, with its status (api.md §3.2 `projects[]`)."""
+    return projects.listing(prs, cfg(), found())
+
+
+def active(prs):
+    return [p["repo"] for p in listed(prs) if p["status"] == "active"]
 
 
 def root(repo):
-    return projects()[repo]
+    return checkouts()[repo]
 
 
 def child(repo):
@@ -195,7 +192,7 @@ def review_notifier(repo, pr, *args):
 
 
 def sh(*args, repo=MONOREPO):
-    return subprocess.run(args, cwd=root(repo), capture_output=True, text=True,
+    return subprocess.run(args, cwd=repo and root(repo), capture_output=True, text=True,
                           timeout=600, check=True).stdout
 
 
@@ -212,7 +209,11 @@ def bumped(repo):
 
 
 def bumps():
-    return {repo: bumped(repo) for repo in projects()}
+    first = {}
+    for key in db.next_keys():
+        repo, n = key.rsplit("#", 1)
+        first.setdefault(repo, []).append(int(n))
+    return first
 
 
 def save_bumped(repo, prs):
@@ -239,18 +240,24 @@ def pr_of(repo, n):
     return [tagged(pr, True)] if pr["state"] == "OPEN" else []
 
 
+def graphql(*flags):
+    return lambda query, variables: json.loads(sh("gh", "api", "graphql", *flags, "-f", f"query={query}",
+                                                  *(f for k, v in variables.items() for f in ("-f", f"{k}={v}")),
+                                                  repo=None))["data"]
+
+
+def fetched(*flags, note=lambda _: None):
+    """(PRs, points spent, points left): my own PRs, review requests and PRs assigned to me (drafts too), plus PRs
+    I reviewed before, since a posted review drops the request, in any repo. `flags` go to the `gh api` calls."""
+    searches, cost, left = projects.fetch(graphql(*flags), FRAGMENT, note)
+    hits = {alias: [tagged(p, False) for p in nodes] for alias, nodes in searches.items()}
+    requested = {pr_key(p) for p in hits["requested"]}
+    prs = {pr_key(p): p for alias in ("reviewed", "assigned", "requested", "mine") for p in hits[alias]}
+    return [dict(p, requested=k in requested) for k, p in sorted(prs.items())], cost, left
+
+
 def queue(*flags):
-    """My own PRs and review requests (drafts too), plus PRs I reviewed before, since a posted
-    review drops the request, in every project. `flags` go to the `gh api` call."""
-    scope = " ".join(f"repo:{repo}" for repo in projects()) + " is:pr is:open"
-    data = json.loads(sh("gh", "api", "graphql", *flags, "-f", f"query={QUEUE_QUERY}",
-                         "-f", f"mine={scope} author:@me",
-                         "-f", f"requested={scope} user-review-requested:@me",
-                         "-f", f"reviewed={scope} reviewed-by:@me -author:@me"))["data"]
-    found = lambda search: [tagged(p, False) for p in data[search]["nodes"]]
-    requested = {pr_key(p) for p in found("requested")}
-    prs = {pr_key(p): p for p in found("reviewed") + found("requested") + found("mine")}
-    return [dict(p, requested=k in requested) for k, p in sorted(prs.items())]
+    return fetched(*flags)[0]
 
 
 def approved(pr):
@@ -264,11 +271,11 @@ def labeled(pr, label):
 
 
 def unreviewed(pr):
-    return not lanes_of(pr)["review"]["enabled"]
+    return pr["repo"] not in checkouts() or not lanes_of(pr)["review"]["enabled"]
 
 
 def unfixed(pr):
-    return not lanes_of(pr)["fix"]["enabled"]
+    return pr["repo"] not in checkouts() or not lanes_of(pr)["fix"]["enabled"]
 
 
 def colleague_approved(pr):
@@ -606,7 +613,7 @@ class Pending:
             pr = min(self.prs, key=lambda p: priority(p, first))
             self.prs.remove(pr)
             self.busy.add(pr_key(pr))
-            return pr, first[pr["repo"]]
+            return pr, first.get(pr["repo"], [])
 
     def done(self, key):
         with self.cond:
@@ -665,7 +672,8 @@ def reviewer(only, dry_run):
 def tick(only, dry_run):
     """`only` is (repo, number): review that PR now."""
     started = time.monotonic()
-    pending = Pending(pr_of(*only) if only else queue(), cfg()["review"]["workers"])
+    pending = Pending(pr_of(*only) if only else [pr for pr in queue() if pr["repo"] in checkouts()],
+                      cfg()["review"]["workers"])
     say(f"tick started{' (dry run)' if dry_run else ''}: {len(pending.prs)} PR(s) in queue")
     if only and not pending.prs:
         log(*only, "not an open PR")
@@ -681,9 +689,13 @@ def review_now(repo, n):
         log(repo, n, f"review now failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
 
 
-def lanes(repo):
-    on = effective(repo)
-    return "+".join(lane for lane in ("review", "fix") if on[lane]["enabled"]) or "off"
+def lanes(project):
+    return "+".join(lane for lane in ("review", "fix") if project[lane]) if project["status"] == "active" \
+        else project["status"]
+
+
+def summary(listing):
+    return ", ".join(f"{p['repo']} {lanes(p)}" for p in listing)
 
 
 def serving(held):
@@ -697,7 +709,7 @@ def serving(held):
         except BlockingIOError:
             lock.close()
             log_once(repo, "-", f"skipped: an old {repo} daemon holds {path(repo, LOCK)}")
-    return {repo for repo in projects() if repo == MONOREPO or repo in held or repo not in REPOS}
+    return {repo for repo in checkouts() if repo == MONOREPO or repo in held or repo not in REPOS}
 
 
 class Runtime:
@@ -744,8 +756,9 @@ class Runtime:
 
     def bump(self, prs, only_queued):
         """api.md §3.9: the PRs that may go first move to the front in one transaction, then the queue refetches."""
-        fetched, runs = {pr_key(p): p for p in self.prs}, db.live_runs()
-        why = [unbumpable(repo, n, fetched.get((repo, n)), runs) if only_queued or repo not in configured()
+        known, runs = {pr_key(p): p for p in self.prs}, db.live_runs()
+        repos = self.repos()
+        why = [unbumpable(repo, n, known.get((repo, n)), runs, repos) if only_queued or repo not in repos
                else None for repo, n in prs]
         go = [pr for pr, reason in zip(prs, why) if reason is None]
         if go:
@@ -758,8 +771,8 @@ class Runtime:
 
     def review(self, repo, n):
         """api.md §3.10: `--pr n` past every gate and label, but not past the config."""
-        known(repo)
-        if repo not in projects():
+        self.known(repo)
+        if repo not in checkouts():
             raise api.Problem(409, "no_checkout", f"{repo} has no local checkout, set projects[{repo}].root")
         if not effective(repo)["review"]["enabled"]:
             raise api.Problem(409, "review_lane_off", f"the review lane of {repo} is off")
@@ -768,7 +781,7 @@ class Runtime:
 
     def fix(self, repo, n):
         """api.md §3.11: re-arms the PR's fix pass, so the next refresh queues one."""
-        known(repo)
+        self.known(repo)
         pr = next((p for p in self.prs if pr_key(p) == (repo, n)), None)
         if not pr:
             raise api.Problem(404, "not_in_queue", f"{repo}#{n} is not in the last queue fetch")
@@ -796,11 +809,18 @@ class Runtime:
         self.refresh = {"last_at": at, "last_error": error}
         self.changes.touch()
 
+    def repos(self):
+        return projects.repos(cfg(), self.prs)
+
+    def known(self, repo):
+        if repo not in self.repos():
+            raise api.Problem(404, "unknown_repo", f"{repo} is not a known project")
+
     def events(self, since):
         return db.events_after(since)
 
     def snapshot(self):
-        return snapshot.build(self.prs, snapshot.read(), {"generated_at": db.now(), "fetched_at": self.fetched_at,
+        return snapshot.build(self.prs, snapshot.read(self.prs), {"generated_at": db.now(), "fetched_at": self.fetched_at,
                                                           "paused": paused(), "refresh": self.refresh})
 
     def info(self):
@@ -813,17 +833,12 @@ class Runtime:
                 "paths": {"socket": names.SOCKET, "state": names.WIZARD, "db": db.DB, "log": LOG}}
 
     def config(self):
-        loaded, projects = self.cfg, self.snapshot()["projects"]
+        loaded, listing = self.cfg, self.snapshot()["projects"]
         return {"rev": loaded.rev, "path": loaded.path, "real_path": loaded.real_path, "source": loaded.source,
                 "error": loaded.error, "config": loaded.config, "defaults": config.DEFAULTS,
                 "effective": {p["repo"]: {"root": p["checkout"] and p["checkout"]["path"],
-                                          **config.effective(loaded.config, p["repo"])} for p in projects},
+                                          **config.effective(loaded.config, p["repo"])} for p in listing},
                 "choices": config.choices()}
-
-
-def known(repo):
-    if repo not in configured():
-        raise api.Problem(404, "unknown_repo", f"{repo} is not a known project")
 
 
 def idle(repo, n):
@@ -831,9 +846,9 @@ def idle(repo, n):
         raise api.Problem(409, "busy", f"a live run already holds {repo}#{n}")
 
 
-def unbumpable(repo, n, pr, runs):
+def unbumpable(repo, n, pr, runs, repos):
     """Why `--next` leaves the PR where it is, or None to bump it. A bump is a review request."""
-    if repo not in configured():
+    if repo not in repos:
         return "unknown-repo"
     if not pr or approved(pr):
         return "not-in-queue"
@@ -882,16 +897,20 @@ def daemon():
             started, every = time.monotonic(), cfg()["refresh"]
             try:
                 rt.resize(pending, fixes)
-                unrooted()
+                prs, cost, left = fetched(note=say)
+                found({pr["repo"] for pr in prs})
                 served = serving(held)
-                prs = [pr for pr in queue() if pr["repo"] in served]
-                pending.refill(prs)
+                worked = [pr for pr in prs if pr["repo"] in served]
+                pending.refill(worked)
                 state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
-                fixes.refill([pr for pr in prs if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
+                fixes.refill([pr for pr in worked if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
                 rt.refreshed(prs)
+                if NOTED.get("projects") != (line := f"projects: {summary(listed(prs))}"):
+                    NOTED["projects"] = line
+                    say(line)
                 if not idle:
                     say(f"queue refreshed: {len(prs)} PR(s), {len(pending.busy)} in review, "
-                         f"{len(fixes.prs) + len(fixes.busy)} to fix")
+                         f"{len(fixes.prs) + len(fixes.busy)} to fix, search cost {cost} points ({left} left)")
             except Exception as e:
                 error = (getattr(e, 'stderr', None) or str(e)).strip()[-200:]
                 say(f"queue refresh failed: {error}")
@@ -906,11 +925,10 @@ def daemon():
             rt.refresh_now.clear()
 
     knobs = cfg()
-    say(f"daemon started: {', '.join(f'{repo} {lanes(repo)}' for repo in projects())}")
+    say(f"daemon started: {summary(listed([]))}")
     say(f"{knobs['review']['workers']} review and {knobs['fix']['workers']} fix workers, queue refresh every "
          f"{knobs['refresh']['interval_s'] // 60} min, every {knobs['refresh']['idle_s']} s while a review worker is idle")
-    unrooted()
-    start_pruner()
+    start_pruner(lambda: active(rt.prs))
     refresh()
 
 
@@ -991,6 +1009,10 @@ def row(pr, seen, now, first, fixed={}):
                   else NO_FIX if owed and labeled(pr, NO_FIX) else "fix lane off" if owed and unfixed(pr)
                   else "fix queued" if owed else seen["at"])
         return 4, seen.get("verdict") or seen["status"], detail
+    if pr["repo"] not in checkouts():
+        return 4, "skipped", "no checkout"
+    if not effective(pr["repo"])["review"]["enabled"] and not effective(pr["repo"])["fix"]["enabled"]:
+        return 4, "skipped", "lanes off"
     if unreviewed(pr):
         return 4, "skipped", NO_REVIEW
     if not seen and baselined(pr, requested):
@@ -1016,7 +1038,7 @@ def bump(repo, n):
 def show(prs=None):
     prs, at = prs or queue("--cache", LIST_CACHE), db.now()
     runtime = {"generated_at": at, "fetched_at": at, "paused": paused(), "refresh": {"last_at": at, "last_error": None}}
-    print(snapshot.render(snapshot.build(prs, snapshot.read(), runtime), sys.stdout.isatty()), end="")
+    print(snapshot.render(snapshot.build(prs, snapshot.read(prs), runtime), sys.stdout.isatty()), end="")
 
 
 def worktrees(repo):
@@ -1123,14 +1145,14 @@ def prune_all(repos, dry_run):
     return failed
 
 
-def prune_forever(sleep=time.sleep):
+def prune_forever(repos, sleep=time.sleep):
     while True:
-        prune_all(projects(), False)
+        prune_all(repos(), False)
         sleep(PRUNE_EVERY)
 
 
-def start_pruner():
-    threading.Thread(target=prune_forever, daemon=True).start()
+def start_pruner(repos):
+    threading.Thread(target=prune_forever, args=(repos,), daemon=True).start()
 
 
 def migrated(done, dry_run):

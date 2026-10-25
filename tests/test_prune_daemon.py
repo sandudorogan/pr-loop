@@ -22,18 +22,18 @@ class PruneInDaemon(unittest.TestCase):
 
     def test_pruner_is_a_daemon_thread_on_the_loop(self):
         with patch.object(rq.threading, "Thread") as thread:
-            rq.start_pruner()
-        thread.assert_called_once_with(target=rq.prune_forever, daemon=True)
+            rq.start_pruner(list)
+        thread.assert_called_once_with(target=rq.prune_forever, args=(list,), daemon=True)
         thread.return_value.start.assert_called_once_with()
 
     def test_the_daemon_starts_the_pruner(self):
-        self.assertIn("start_pruner()", Path(rq.__file__).read_text().split("def daemon()")[1])
+        self.assertIn("start_pruner(lambda: active(rt.prs))", Path(rq.__file__).read_text().split("def daemon()")[1])
 
     def test_loop_prunes_every_repo_at_start_then_every_interval(self):
         sleep, prune = MagicMock(side_effect=[None, Stop]), MagicMock()
         with patch.object(rq, "prune", prune), contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(Stop):
-                rq.prune_forever(sleep)
+                rq.prune_forever(lambda: list(rq.REPOS), sleep)
         self.assertEqual(rq.PRUNE_EVERY, 1800)
         self.assertEqual(sleep.call_args_list, [call(1800), call(1800)])
         self.assertEqual(prune.call_args_list, [call(r, False) for r in rq.REPOS] * 2)
@@ -61,12 +61,12 @@ class PruneInDaemon(unittest.TestCase):
         with patch.object(rq, "prune", MagicMock(side_effect=RuntimeError("x"))), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             with self.assertRaises(Stop):
-                rq.prune_forever(sleep)
+                rq.prune_forever(lambda: list(rq.REPOS), sleep)
         self.assertEqual(out.getvalue().count("prune failed: x"), 2 * len(rq.REPOS))
 
     def test_cli_prune_without_repo_loops_every_repo_and_with_repo_one(self):
         for argv, repos in ((["--prune"], list(rq.REPOS)), (["--prune", "--repo", "iprally/gitops"], ["iprally/gitops"])):
-            with patch.object(rq, "prune_all", return_value=False) as prune_all, \
+            with patch.object(rq, "prune_all", return_value=False) as prune_all, patch.object(rq, "queue", return_value=[]), \
                     patch.object(cli.sys, "argv", ["review-queue", *argv]), self.assertRaises(SystemExit) as exit:
                 cli.main()
             self.assertEqual([list(prune_all.call_args.args[0]), prune_all.call_args.args[1]], [repos, False])
