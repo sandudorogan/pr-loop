@@ -106,7 +106,7 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
 1. Work in a worktree: `git worktree add .worktrees/<branch> -b <branch> origin/main`. Never edit the main checkout: the daemon runs it.
 2. Test: `python3 -m unittest discover -s tests -v` (about 1 s).
 3. Dry-run what you can: `review-queue -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`.
-4. Land on `main`, then `git -C ~/workdir/review-queue pull --ff-only`.
+4. Push straight to `main` (`git push origin HEAD:main`). Open no PRs here. Then `git -C ~/workdir/review-queue pull --ff-only`.
 5. Restart only for daemon code (`bin/review-queue`). Check `review-queue -l` for ▶ rows first: a restart kills in-flight passes.
    `launchctl kickstart -k gui/$(id -u)/local.review-queue`
    `pr_review.py`, `pr_fix.py` and prompts load fresh per run: no restart.
