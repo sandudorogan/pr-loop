@@ -126,7 +126,7 @@ A `v*` tag publishes a GitHub release:
 ```
 
 ```sh
-git tag v1.2.0 && git push origin v1.2.0
+git tag -a v1.2.0 -m v1.2.0 && git push origin v1.2.0
 cd app && VERSION=1.2.0 script/package    # the same files locally, in app/build/
 ```
 

@@ -238,7 +238,7 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
    Never plain `swift test`: under the Command Line Tools it runs 0 tests and exits 0.
 3. Dry-run what you can: `pr-wizard -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`.
 4. Push straight to `main` (`git push origin HEAD:main`). Open no PRs here. Then `git -C ~/workdir/review-queue pull --ff-only`.
-   Release the app: `git tag vX.Y.Z && git push origin vX.Y.Z`. CI builds and publishes it; tag only a commit on `main`.
+   Release the app: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z` (the git config refuses a bare tag). CI builds and publishes it; tag only a commit on `main`.
 5. Restart only for daemon code (`pr_wizard/*.py`). Check `pr-wizard -l` for ▶ rows first: a restart kills in-flight passes.
    `launchctl kickstart -k gui/$(id -u)/local.pr-wizard`
    `pr_review.py`, `pr_fix.py`, prompts and the config load fresh per run: no restart.
