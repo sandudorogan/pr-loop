@@ -67,8 +67,6 @@ It backs up what it replaces under `~/.local/state/review-queue/backups/`. It do
 
 The app (Command Line Tools only, no Xcode): `cd app && script/install` puts `PR Wizard.app` in `/Applications`.
 
-Until the daemon stops calling it, the "ready" notification also uses a copy of `terminal-notifier` at
-`~/.local/share/review-queue/Review Queue.app`.
 The task briefs come from [agent-delegator](https://github.com/sandudorogan/agent-delegator), which also uses the PR watch skill in `claude/`.
 PR Wizard runs without either.
 

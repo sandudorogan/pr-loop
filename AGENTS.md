@@ -182,7 +182,6 @@ GET · PATCH · DELETE   prs/<o>/<n>/<N>/config      the PR override and its eff
 
 **Events.** The daemon has no UI. It records `ready_for_approval` (a colleague's PR reviewed READY) and `ready_withdrawn`
 (a new head on it). The app posts the macOS notification from them and catches up on launch with its stored cursor.
-Until plan unit 27 the daemon also calls terminal-notifier.
 
 **History.** Each review or fix result writes a `history` row. The app shows it as "Recently worked on" when the queue is empty.
 
@@ -293,8 +292,6 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
   falls back to `origin/<base>...head`, or the reviewer blames other PRs' code.
 - **Stale generated packages.** iprally's Karma gate runs the root `npm run postinstall` first: a base merge leaves
   `loyto/packages/*/output/` stale and the gate runs 0 tests.
-- **Notifier.** `terminal-notifier` rejects a `-message` that starts with `[ ( { ' "`; `escaped()` handles it.
-  Ready alerts use the copy at `~/.local/share/review-queue/Review Queue.app` (Persistent style). Plan unit 27 removes it.
 
 ## Scope rules
 

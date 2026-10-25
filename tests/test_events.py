@@ -30,23 +30,20 @@ class Store(unittest.TestCase):
 
 
 class Handle(Store):
-    """handle() records the events of api.md §3.3 beside the terminal-notifier calls."""
+    """handle() records the events of api.md §3.3 for UIs to notify from."""
 
     def handle(self, p, outcome, seen=None, only=False):
         seen = READY_SEEN if seen is None else seen
         with patch.object(rq, "load", return_value={str(p["number"]): seen}), \
                 patch.object(rq, "fingerprint", return_value={"a.py": "2"}), \
                 patch.object(rq, "review", return_value=outcome), patch.object(rq, "record"), \
-                patch.object(rq, "post_clean_notice"), patch.object(rq, "ready_alert") as alert, \
-                patch.object(rq, "drop_ready_alert"), patch.object(rq, "in_review"), patch.object(rq, "kick"), \
+                patch.object(rq, "post_clean_notice"), patch.object(rq, "in_review"), patch.object(rq, "kick"), \
                 patch.object(rq, "save_bumped"), patch.object(rq, "bumped", return_value=[]), \
                 patch.object(rq, "log_once"), patch.object(rq, "log"):
             rq.handle(p, [], only, False)
-        return alert
 
     def test_a_clean_colleague_pr_is_ready_for_approval(self):
-        alert = self.handle(pr(mine=False, requested=True), ("clean", "no findings"), seen={})
-        alert.assert_called_once()
+        self.handle(pr(mine=False, requested=True), ("clean", "no findings"), seen={})
         (e,) = self.events()
         self.assertEqual((e["type"], e["key"], e["verdict"], e["author"], e["head"], e["title"]),
                          ("ready_for_approval", f"{MONOREPO}#1", "clean", "colleague", HEAD, "title 1"))

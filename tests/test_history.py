@@ -45,7 +45,7 @@ class Remember(Store):
         with patch.object(rq, "load", return_value={str(p["number"]): seen or {}}), \
                 patch.object(rq, "fingerprint", return_value={"a.py": "2"}), patch.object(rq, "decide", return_value=skip), \
                 patch.object(rq, "review", return_value=outcome), patch.object(rq, "post_clean_notice"), \
-                patch.object(rq, "ready_alert"), patch.object(rq, "drop_ready_alert"), patch.object(rq, "in_review"), \
+                patch.object(rq, "in_review"), \
                 patch.object(rq, "kick"), patch.object(rq, "save_bumped"), patch.object(rq, "bumped", return_value=[]), \
                 patch.object(rq, "log_once"), patch.object(rq, "log"):
             rq.handle(p, [], True, False)

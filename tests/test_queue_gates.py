@@ -283,42 +283,47 @@ class Verdicts(unittest.TestCase):
                 patch.object(rq, "review", return_value=outcome), \
                 patch.object(rq, "record", side_effect=lambda repo, key, entry, kind=rq.STATE: recorded.append(
                     (repo, key, entry))), \
-                patch.object(rq, "post_clean_notice") as notice, patch.object(rq, "ready_alert") as alert, \
-                patch.object(rq, "drop_ready_alert"), patch.object(rq, "in_review"), patch.object(rq, "kick") as kick, \
+                patch.object(rq, "post_clean_notice") as notice, \
+                patch.object(rq, "in_review"), patch.object(rq, "kick") as kick, \
                 patch.object(rq, "save_bumped"), patch.object(rq, "bumped", return_value=[]), \
                 patch.object(rq, "log_once"), patch.object(rq, "log"):
             rq.handle(p, list(first), False, False)
         (repo, key, entry), = recorded
         self.assertEqual((repo, key), (p["repo"], str(p["number"])))
-        return entry, notice, alert, kick
+        return entry, notice, kick
+
+    def events(self):
+        return db.events_after("x.0")["events"]
 
     def test_clean_on_my_pr_holds_it_and_posts_the_notice(self):
-        entry, notice, alert, kick = self.handle(pr(), ("clean", "no findings"))
+        entry, notice, kick = self.handle(pr(), ("clean", "no findings"))
         self.assertEqual((entry["verdict"], entry["rounds"], entry["hold"], entry["files"]),
                          ("clean", 0, True, {"a.py": "1"}))
         notice.assert_called_once_with(MONOREPO, 1, HEAD)
-        alert.assert_not_called()
+        self.assertEqual(self.events(), [])
         kick.assert_not_called()
 
-    def test_clean_on_a_colleagues_pr_alerts_and_does_not_hold(self):
-        entry, notice, alert, _ = self.handle(pr(mine=False, requested=True), ("clean", "no findings"))
+    def test_clean_on_a_colleagues_pr_emits_ready_and_does_not_hold(self):
+        entry, _, _ = self.handle(pr(mine=False, requested=True), ("clean", "no findings"))
         self.assertEqual((entry["verdict"], entry["hold"]), ("clean", False))
-        alert.assert_called_once_with(MONOREPO, 1, "title 1")
+        (e,) = self.events()
+        self.assertEqual((e["type"], e["key"], e["title"]), ("ready_for_approval", f"{MONOREPO}#1", "title 1"))
 
     def test_posted_findings_add_a_round_and_kick_the_fix_lane_on_my_pr(self):
-        entry, _, alert, kick = self.handle(pr(), ("posted", "opus, codex"))
+        entry, _, kick = self.handle(pr(), ("posted", "opus, codex"))
         self.assertEqual((entry["verdict"], entry["rounds"], entry["hold"]), ("posted", 3, False))
         kick.assert_called_once_with()
-        alert.assert_not_called()
+        self.assertEqual(self.events(), [])
 
     def test_posted_quality_notes_only_are_ready(self):
-        entry, _, alert, kick = self.handle(pr(mine=False, requested=True), ("posted", "quality"))
+        entry, _, kick = self.handle(pr(mine=False, requested=True), ("posted", "quality"))
         self.assertEqual((entry["verdict"], entry["rounds"]), ("quality-only", 3))
-        alert.assert_called_once()
+        (e,) = self.events()
+        self.assertEqual((e["type"], e["verdict"]), ("ready_for_approval", "quality-only"))
         kick.assert_not_called()
-        entry, _, alert, kick = self.handle(pr(), ("posted", "quality"))
+        entry, _, kick = self.handle(pr(), ("posted", "quality"))
         self.assertEqual(entry["verdict"], "quality-only")
-        alert.assert_not_called()
+        self.assertEqual(self.events(), [e])
         kick.assert_called_once()
 
     def test_posted_by_several_reviewers_is_not_quality_only(self):
@@ -345,10 +350,10 @@ class Verdicts(unittest.TestCase):
         notice.assert_not_called()
 
     def test_baseline_has_no_verdict(self):
-        entry, _, alert, _ = self.handle(pr(mine=False), None, seen={}, files={"a.py": "1"})
+        entry, _, _ = self.handle(pr(mine=False), None, seen={}, files={"a.py": "1"})
         self.assertEqual((entry["status"], entry["verdict"], entry["rounds"], entry["files"]),
                          ("baseline", None, 0, {"a.py": "1"}))
-        alert.assert_not_called()
+        self.assertEqual(self.events(), [])
 
 
 if __name__ == "__main__":

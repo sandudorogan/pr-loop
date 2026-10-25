@@ -197,7 +197,7 @@ class Verdict(Configured):
         with patch.object(rq, "load", return_value={"1": seen}), patch.object(rq, "fingerprint", return_value={"a.py": "2"}), \
                 patch.object(rq, "review", return_value=outcome), \
                 patch.object(rq, "record", side_effect=lambda repo, key, entry, kind=rq.STATE: recorded.append(entry)), \
-                patch.object(rq, "post_clean_notice"), patch.object(rq, "ready_alert"), patch.object(rq, "drop_ready_alert"), \
+                patch.object(rq, "post_clean_notice"), \
                 patch.object(rq, "in_review"), patch.object(rq, "kick"), patch.object(rq, "announce"), \
                 patch.object(rq, "log_once"), patch.object(rq, "log"):
             rq.handle(pr(mine=False, requested=True), [], None, False)
@@ -214,7 +214,7 @@ class Verdict(Configured):
         seen = {"sha": OTHER, "status": "posted", "verdict": "posted", "rounds": 1, "hold": False,
                 "at": "2026-10-25 09:00:00", "files": {"a.py": "1"}}
         with patch.object(rq, "load", return_value={"1": seen}), patch.object(rq, "fingerprint", return_value={"a.py": "2"}), \
-                patch.object(rq, "review", side_effect=RuntimeError("boom")), patch.object(rq, "drop_ready_alert"), \
+                patch.object(rq, "review", side_effect=RuntimeError("boom")), \
                 patch.object(rq, "announce"), patch.object(rq, "in_review") as in_review, \
                 patch.object(rq, "log_once"), patch.object(rq, "log"):
             with self.assertRaises(RuntimeError):

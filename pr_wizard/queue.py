@@ -31,7 +31,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from pr_wizard import __version__, api, config, db, history, names, pools, projects, snapshot
-from pr_wizard.names import (FIXES, LABEL, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PR_FIX, PR_REVIEW, REPOS, STATE,
+from pr_wizard.names import (FIXES, LABEL, LOG, MONOREPO, NO_FIX, NO_REVIEW, PR_FIX, PR_REVIEW, REPOS, STATE,
                               env_repo, tag)
 
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
@@ -170,29 +170,10 @@ def url(repo, pr):
     return f"https://github.com/{repo}/pull/{pr}"
 
 
-def escaped(message):
-    return f"\\{message}" if message[:1] in "[({'\"" else message
-
-
-def ready_alert(repo, pr, title):
-    review_notifier(repo, pr, "-title", "Ready for your approval", "-subtitle", f"#{pr}",
-                    "-message", escaped(title), "-open", url(repo, pr), "-sound", "default")
-
-
-def drop_ready_alert(repo, pr):
-    review_notifier(repo, pr, "-remove", f"review-queue{tag(repo)}-{pr}")
-
-
 def announce(type, pr, verdict=None):
     """Records a `ready_for_approval` or `ready_withdrawn` event for the API (api.md §3.3). UIs notify from it."""
     db.add_event(type, pr["repo"], pr["number"], pr["title"], url(pr["repo"], pr["number"]),
                  (pr["author"] or {}).get("login", "ghost"), pr["headRefOid"], verdict)
-
-
-def review_notifier(repo, pr, *args):
-    out = subprocess.run([NOTIFIER, "-group", f"review-queue{tag(repo)}-{pr}", *args], capture_output=True, text=True)
-    if out.returncode:
-        log(repo, pr, f"Review Queue notifier failed: {(out.stderr or out.stdout).strip()}")
 
 
 def sh(*args, repo=MONOREPO):
@@ -479,7 +460,6 @@ def handle(pr, first, only, dry_run):
         status, note = skip
     else:
         log(repo, n, f"reviewing {pr['headRefOid'][:12]}: {pr['title']}")
-        drop_ready_alert(repo, n)
         if seen.get("verdict") in READY and not pr["viewerDidAuthor"]:
             announce("ready_withdrawn", pr)
         in_review(repo, n, True)
@@ -494,7 +474,6 @@ def handle(pr, first, only, dry_run):
     if status == "clean":
         post_clean_notice(repo, n, pr["headRefOid"])
     if status in ("clean", "posted") and verdict in READY and not pr["viewerDidAuthor"]:
-        ready_alert(repo, n, pr["title"])
         announce("ready_for_approval", pr, verdict)
     absorbed = status in ("posted", "clean", "baseline", "unchanged", "trivial")
     rounds = 0 if status == "clean" else (0 if only else seen.get("rounds", 0)) + (status == "posted")
