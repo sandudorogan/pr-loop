@@ -1,0 +1,157 @@
+{
+  "key": "iprally/iprally#17201",
+  "rev": "2e8fe284ec8f",
+  "override": {
+    "review": {
+      "reviewers": [
+        {
+          "id": "opus",
+          "enabled": true,
+          "label": "Claude Opus 5.5",
+          "prompt": "opus.md",
+          "engine": "claude",
+          "fallback": true,
+          "needs_conventions": false,
+          "advisory": false,
+          "claude": {
+            "model": "opus",
+            "effort": "high",
+            "incremental": {
+              "model": "opus",
+              "effort": "medium"
+            }
+          },
+          "codex": {
+            "model": null,
+            "effort": null
+          }
+        }
+      ]
+    }
+  },
+  "layers": {
+    "project": [
+      "fix.gates"
+    ],
+    "pr": [
+      "review.reviewers"
+    ]
+  },
+  "labels": [],
+  "effective": {
+    "review": {
+      "enabled": true,
+      "workers": 3,
+      "rounds": 8,
+      "max_added": 4000,
+      "trivial": [
+        "*.lock",
+        "*lock.json",
+        "*.lockb",
+        "*.md",
+        "*.png",
+        "*.jpg",
+        "*.svg"
+      ],
+      "timeout_s": 2700,
+      "reviewers": [
+        {
+          "id": "opus",
+          "enabled": true,
+          "label": "Claude Opus 5.5",
+          "prompt": "opus.md",
+          "engine": "claude",
+          "fallback": true,
+          "needs_conventions": false,
+          "advisory": false,
+          "claude": {
+            "model": "opus",
+            "effort": "high",
+            "incremental": {
+              "model": "opus",
+              "effort": "medium"
+            }
+          },
+          "codex": {
+            "model": null,
+            "effort": null
+          }
+        }
+      ]
+    },
+    "fix": {
+      "enabled": true,
+      "workers": 3,
+      "engine": "codex",
+      "model": null,
+      "effort": null,
+      "prompt": "fix.md",
+      "merge_prompt": "merge.md",
+      "turn_timeout_s": 2700,
+      "pass_timeout_s": 14400,
+      "max_errors": 3,
+      "test_retries": 2,
+      "ci_tries": 3,
+      "ci_apps": [
+        "github-actions"
+      ],
+      "gates": [
+        {
+          "name": "cljfmt",
+          "kind": "format",
+          "when": [
+            "*.clj",
+            "*.cljs",
+            "*.cljc",
+            "*.edn"
+          ],
+          "requires": "cljfmt",
+          "run": "cljfmt fix {files}"
+        },
+        {
+          "name": "Karma",
+          "kind": "test",
+          "when": [
+            "ui/src/cljs/*.cljs",
+            "ui/test/*_test.cljs"
+          ],
+          "cwd": "ui",
+          "prelude": ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null",
+          "needs": [
+            "ui/node_modules"
+          ],
+          "targets": {
+            "map": [
+              [
+                "^ui/src/cljs/(.+)\\.cljs$",
+                "ui/test/\\1_test.cljs"
+              ]
+            ],
+            "keep": "^ui/test/(.+_test)\\.cljs$",
+            "exists": true,
+            "item": {
+              "/": ".",
+              "_": "-"
+            },
+            "valid": "^[\\w.-]+$"
+          },
+          "setup": {
+            "name": "shadow-cljs compile karma-test",
+            "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+          },
+          "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
+          "timeout_s": 1800,
+          "slot": true,
+          "protect": [
+            "shadow-cljs.edn",
+            "karma.conf.js",
+            "package.json"
+          ],
+          "note": "Do not run tests that need a JVM or a browser (lein, Karma): they abort in this sandbox. The caller runs the Karma namespaces you touch after you finish and sends any failure back to you."
+        }
+      ]
+    }
+  },
+  "created_at": "2026-10-25T12:10:00+03:00",
+  "updated_at": "2026-10-25T12:12:30+03:00"
+}

@@ -1,7 +1,7 @@
 """History (api.md §3.13): the PRs the wizard worked on, for the empty queue window.
 
   review / fix result ──remember──▶ history row, in the result's transaction
-  PR leaves the fetch ──settle────▶ one batched pullRequest(number:) query ──▶ state merged | closed
+  PR leaves the fetch ──settle────▶ one batched pullRequest(number:) query ──▶ state merged | closed, override dropped
   daemon start, once ─▶ seed ─────▶ rows from the reviews and fixes the db already holds
   GET /v1/history ────▶ entries ──▶ rows, minus the open PRs the queue still works, plus the findings digest
 
@@ -62,11 +62,12 @@ def lookup(graphql, pairs):
 
 
 def settle(graphql, prs, say):
-    """Marks the open entries whose PR left the fetch `merged` or `closed`. A PR the lookup finds open stays out of
-    the next lookups for RECHECK seconds."""
+    """Marks the open entries whose PR left the fetch `merged` or `closed`, and drops those PRs' overrides (api.md
+    §4.10), also of PRs with no entry. A PR the lookup finds open stays out of the next lookups for RECHECK seconds."""
     inside, now = {(p["repo"], p["number"]) for p in prs}, time.monotonic()
-    gone = [(r["repo"], r["number"]) for r in db.history(db.HISTORY_KEEP) if r["state"] == "open"
-            and (r["repo"], r["number"]) not in inside and now - LOOKED.get((r["repo"], r["number"]), -RECHECK) >= RECHECK]
+    entries = [(r["repo"], r["number"]) for r in db.history(db.HISTORY_KEEP) if r["state"] == "open"]
+    gone = [k for k in dict.fromkeys(entries + list(db.pr_overrides()))
+            if k not in inside and now - LOOKED.get(k, -RECHECK) >= RECHECK]
     LOOKED.update(dict.fromkeys(gone, now))
     if not gone:
         return
@@ -74,7 +75,8 @@ def settle(graphql, prs, say):
     with db.tx():
         for (repo, n), node in found.items():
             if node["state"] != "OPEN":
-                db.upsert_history(repo, n, state=node["state"].lower(), closed_at=db.now())
+                (repo, n) in entries and db.upsert_history(repo, n, state=node["state"].lower(), closed_at=db.now())
+                db.drop_pr_override(repo, n)
     say(f"history: {len(gone)} PR(s) left the queue, {sum(n['state'] != 'OPEN' for n in found.values())} merged or closed, "
         f"lookup cost {cost} points")
 

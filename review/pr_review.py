@@ -45,8 +45,6 @@ REPO = names.env_repo()
 REPO_ROOT = names.env_root(REPO)
 LOADED = config.load()
 LOADED.error and print(f"config: {LOADED.error}, running on the defaults", file=sys.stderr)
-CFG = config.effective(LOADED.config, REPO)
-TIMEOUT = CFG["review"]["timeout_s"]
 
 INLINE_SEVERITIES = {"critical", "high", "medium"}
 LATE_SEVERITIES = {"critical", "high"}
@@ -59,10 +57,18 @@ MARKER_PREFIX = "<!-- agent-review:"
 MARKER_RE = re.compile(
     r"<!--\s*agent-review:\s*reviewer=(\S+)\s+round=(\d+)\s+sha=(\S+)\s*-->")
 
-REVIEWERS = {r["id"]: r for r in CFG["review"]["reviewers"]}
 BRIEFS = names.BRIEFS
 ENGINE_LABELS = {"claude": "Claude", "codex": "Codex"}
 LIMIT = re.compile(r"(usage|spend|session|rate) limit|hit your \S+ limit|quota exceeded", re.I)
+
+
+def configure(cfg):
+    """Sets the effective config a run works with: the project's at import, the PR's once `--pr` is known."""
+    global CFG, TIMEOUT, REVIEWERS
+    CFG, TIMEOUT, REVIEWERS = cfg, cfg["review"]["timeout_s"], {r["id"]: r for r in cfg["review"]["reviewers"]}
+
+
+configure(config.effective(LOADED.config, REPO))
 
 
 def cleared(pr, sha):
@@ -512,18 +518,21 @@ def main():
 
     r = sub.add_parser("run")
     r.add_argument("--pr", required=True)
-    r.add_argument("--reviewer", required=True, choices=sorted(REVIEWERS))
+    r.add_argument("--reviewer", required=True)
     r.add_argument("--force", action="store_true", help="re-review a head already reviewed")
     r.add_argument("--dry-run", action="store_true", help="print the review payload, post nothing")
 
     p = sub.add_parser("post")
     p.add_argument("--pr", required=True)
-    p.add_argument("--reviewer", required=True, choices=sorted(REVIEWERS))
+    p.add_argument("--reviewer", required=True)
     p.add_argument("--findings", required=True)
     p.add_argument("--dry-run", action="store_true", help="print the review payload, post nothing")
 
     a = ap.parse_args()
     names.migrate()
+    configure(config.effective_for(REPO, a.pr, cfg=LOADED.config))
+    if a.cmd != "scope" and a.reviewer not in REVIEWERS:
+        ap.error(f"argument --reviewer: invalid choice: {a.reviewer!r} (choose from {', '.join(sorted(REVIEWERS))})")
     sc = scope(a.pr)
 
     if a.cmd == "scope":

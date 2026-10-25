@@ -7,6 +7,8 @@ import os
 import re
 from typing import Any, Callable, NamedTuple
 
+from pr_wizard import db
+
 NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
 ENGINES, FIX_ENGINES, GATE_KINDS = ["claude", "codex"], ["codex"], ["format", "test"]
 CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
@@ -343,6 +345,18 @@ def effective(config, repo, pr_override=None, labels=()):
         if label in labels:
             eff[lane]["enabled"] = False
     return eff
+
+
+def effective_for(repo, number, labels=(), cfg=None):
+    """`effective()` of one PR: the config file (or `cfg`), the PR's `pr_overrides` row and its labels. The daemon
+    and both scripts call it, so a run by hand gets the config of a daemon run."""
+    row = db.pr_override(repo, number)
+    return effective(cfg or load().config, repo, row and row["config"], labels)
+
+
+def paths(doc, prefix=""):
+    """The leaf paths an override sets: objects descend, arrays and scalars are leaves."""
+    return [p for k, v in doc.items() for p in (paths(v, f"{prefix}{k}.") if isinstance(v, dict) else [f"{prefix}{k}"])]
 
 
 # ---------------------------------------------------------------- choices

@@ -106,17 +106,21 @@ def cfg():
     return SETTINGS.get().config
 
 
-def effective(repo, labels=()):
-    return config.effective(cfg(), repo, labels=labels)
+def effective(repo):
+    return config.effective(cfg(), repo)
+
+
+def effective_for(repo, n, labels=()):
+    return config.effective_for(repo, n, labels, cfg())
 
 
 def lanes_of(pr):
-    """The PR's effective config: its project's, with the labels applied."""
-    return effective(pr["repo"], [l["name"] for l in pr["labels"]["nodes"]])
+    """The PR's effective config: its project's, its override, then its labels."""
+    return effective_for(pr["repo"], pr["number"], [l["name"] for l in pr["labels"]["nodes"]])
 
 
-def reviewers(repo):
-    return [r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("enabled", True)]
+def reviewers(repo, n):
+    return [r["id"] for r in effective_for(repo, n)["review"]["reviewers"] if r.get("enabled", True)]
 
 
 def found(wanted=()):
@@ -317,7 +321,7 @@ def progress(repo, pr, reviewer, state, attempt):
     with db.tx():
         steps = {s["id"]: s for s in db.live_runs(repo)[pr]["reviewers"]}
         steps[reviewer] = {"id": reviewer, "state": state, "attempt": attempt, "since": db.now()}
-        db.run_update(repo, pr, [steps[r] for r in reviewers(repo) if r in steps])
+        db.run_update(repo, pr, [steps[r] for r in reviewers(repo, pr) if r in steps])
 
 
 def run_reviewer(repo, pr, reviewer):
@@ -371,7 +375,7 @@ def reviewer_result(res):
 
 
 def review(repo, pr, sha):
-    ids = reviewers(repo)
+    ids = reviewers(repo, pr)
     if not ids:
         return "skipped", "no reviewer enabled"
     with ThreadPoolExecutor(len(ids)) as pool:
@@ -409,7 +413,7 @@ def decide(pr, seen, files, only):
                if files.get(f) != seen.get("files", {}).get(f)}
     if seen and not changed:
         return "unchanged", "own diff unchanged (merge of base or rebase)"
-    gate = effective(pr["repo"])["review"]
+    gate = lanes_of(pr)["review"]
     if seen and all(any(fnmatch(f, g) for g in gate["trivial"]) for f in changed):
         return "trivial", f"only trivial files: {', '.join(sorted(changed))}"
     if seen.get("hold") and not pr["requested"]:
@@ -484,7 +488,7 @@ def handle(pr, first, only, dry_run):
         finally:
             in_review(repo, n, False)
     log(repo, n, f"{status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
-    advisory = {r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("advisory")}
+    advisory = {r["id"] for r in lanes_of(pr)["review"]["reviewers"] if r.get("advisory")}
     verdict = {"clean": "clean", "posted": "quality-only" if set(note.split(", ")) <= advisory else "posted"}.get(
         status, seen.get("verdict") if status in ("unchanged", "trivial", "limited") else None)
     if status == "clean":
@@ -563,7 +567,7 @@ def fix_note(res, err, repo=MONOREPO):
 def fix(pr, first):
     repo, n, head = pr["repo"], pr["number"], pr["headRefOid"]
     log(repo, n, f"fixing {head[:12]}: {pr['title']}")
-    knobs = effective(repo)["fix"]
+    knobs = lanes_of(pr)["fix"]
     in_review(repo, n, True, "fix")
     try:
         out = subprocess.run([sys.executable, PR_FIX, "run", "--pr", str(n)], **child(repo), capture_output=True,
@@ -792,17 +796,14 @@ class Runtime:
         self.known(repo)
         if repo not in checkouts():
             raise api.Problem(409, "no_checkout", f"{repo} has no local checkout, set projects[{repo}].root")
-        if not effective(repo)["review"]["enabled"]:
-            raise api.Problem(409, "review_lane_off", f"the review lane of {repo} is off")
+        if not effective_for(repo, n)["review"]["enabled"]:
+            raise api.Problem(409, "review_lane_off", f"the review lane of {repo}#{n} is off")
         idle(repo, n)
         threading.Thread(target=review_now, args=(repo, n), daemon=True).start()
 
     def fix(self, repo, n):
         """api.md §3.11: re-arms the PR's fix pass, so the next refresh queues one."""
-        self.known(repo)
-        pr = next((p for p in self.prs if pr_key(p) == (repo, n)), None)
-        if not pr:
-            raise api.Problem(404, "not_in_queue", f"{repo}#{n} is not in the last queue fetch")
+        pr = self.fetched(repo, n)
         if not pr["viewerDidAuthor"]:
             raise api.Problem(409, "not_mine", f"{repo}#{n} is not my PR")
         if labeled(pr, NO_FIX):
@@ -812,6 +813,25 @@ class Runtime:
         idle(repo, n)
         db.rearm_fix(repo, n)
         self.refetch()
+
+    def fetched(self, repo, n):
+        self.known(repo)
+        if pr := next((p for p in self.prs if pr_key(p) == (repo, n)), None):
+            return pr
+        raise api.Problem(404, "not_in_queue", f"{repo}#{n} is not in the last queue fetch")
+
+    def pr_labels(self, repo, n):
+        return [l["name"] for l in self.fetched(repo, n)["labels"]["nodes"]]
+
+    def pr_override(self, repo, n):
+        return db.pr_override(repo, n)
+
+    def put_pr_override(self, repo, n, doc):
+        """Stores the PR's override, or drops it for None. The lanes read it on their next look at the PR."""
+        db.put_pr_override(repo, n, doc) if doc else db.drop_pr_override(repo, n)
+        log(repo, n, f"override {', '.join(config.paths(doc))}" if doc else "override dropped")
+        self.refetch()
+        self.changes.touch()
 
     def pause(self, on):
         db.meta_set("paused", int(on))
@@ -1048,7 +1068,7 @@ def row(pr, seen, now, first, fixed={}):
         return 4, seen.get("verdict") or seen["status"], detail
     if pr["repo"] not in checkouts():
         return 4, "skipped", "no checkout"
-    if not effective(pr["repo"])["review"]["enabled"] and not effective(pr["repo"])["fix"]["enabled"]:
+    if not any(effective_for(pr["repo"], pr["number"])[lane]["enabled"] for lane in ("review", "fix")):
         return 4, "skipped", "lanes off"
     if unreviewed(pr):
         return 4, "skipped", NO_REVIEW

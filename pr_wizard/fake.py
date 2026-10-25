@@ -25,6 +25,8 @@ class Runtime:
         self.log, self.hist, self.version = self.read("events")["events"], self.read("history")["entries"], 0
         self.epoch = epoch or "k" + secrets.token_hex(3)
         self.bumps = [i["key"] for i in self.snap["items"] if i["bumped"]]
+        seeded = self.read("pr-config")
+        self.overrides = {seeded["key"]: {k: seeded[k] for k in ("created_at", "updated_at")} | {"config": seeded["override"]}}
         if os.environ.get("PRW_FAKE_EMPTY") if empty is None else empty:
             self.snap["items"] = []
             self.counts()
@@ -63,6 +65,18 @@ class Runtime:
     def history(self, repo, limit):
         with self.lock:
             return {"entries": self.get([h for h in self.hist if repo in (None, h["repo"])][:limit])}
+
+    def pr_labels(self, repo, n):
+        with self.lock:
+            if item := self.target(repo, n):
+                return list(item["labels"])
+            raise api.Problem(404, "not_in_queue", f"{repo}#{n} is not in the last queue fetch")
+
+    def pr_override(self, repo, n):
+        return self.get(self.overrides.get(f"{repo}#{n}"))
+
+    def effective(self, repo, n):
+        return config.effective(self.cfg, repo, (self.overrides.get(f"{repo}#{n}") or {}).get("config"))
 
     # ---------------------------------------------------------------- the snapshot
 
@@ -117,6 +131,17 @@ class Runtime:
             self.publish()
         return self.config()
 
+    def put_pr_override(self, repo, n, doc):
+        with self.lock:
+            key, now = f"{repo}#{n}", db.now()
+            if doc:
+                self.overrides[key] = {"config": copy.deepcopy(doc), "updated_at": now,
+                                       "created_at": (self.overrides.get(key) or {}).get("created_at") or now}
+            else:
+                self.overrides.pop(key, None)
+            self.target(repo, n)["override"] = config.paths(doc or {})
+            self.publish()
+
     def refetch(self):
         with self.lock:
             now = db.now()
@@ -159,7 +184,8 @@ class Runtime:
 
     def lane_on(self, item, lane):
         project = next(p for p in self.snap["projects"] if p["repo"] == item["repo"])
-        return project[lane] and f"no-auto-{lane}" not in item["labels"]
+        return bool(project["checkout"]) and self.effective(item["repo"], item["number"])[lane]["enabled"] \
+            and f"no-auto-{lane}" not in item["labels"]
 
     def target(self, repo, n):
         if repo not in {p["repo"] for p in self.snap["projects"]}:
@@ -176,14 +202,14 @@ class Runtime:
             project = next(p for p in self.snap["projects"] if p["repo"] == repo)
             if not project["checkout"]:
                 raise api.Problem(409, "no_checkout", f"{repo} has no local checkout, set projects[{repo}].root")
-            if not config.effective(self.cfg, repo)["review"]["enabled"]:
-                raise api.Problem(409, "review_lane_off", f"the review lane of {repo} is off")
+            if not self.effective(repo, n)["review"]["enabled"]:
+                raise api.Problem(409, "review_lane_off", f"the review lane of {repo}#{n} is off")
             if item is None:
                 return
             self.hold(item)
             if item["group"] == "ready" and not item["mine"]:
                 self.emit("ready_withdrawn", item, None)
-            ids = [r for r in config.effective(self.cfg, repo)["review"]["reviewers"] if r["enabled"]]
+            ids = [r for r in self.effective(repo, n)["review"]["reviewers"] if r["enabled"]]
             now = db.now()
             item.update(group="active", status="reviewing", detail=f"since {now[11:19]}", active={
                 "lane": "review", "since": now,

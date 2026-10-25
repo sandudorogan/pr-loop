@@ -99,6 +99,7 @@ The live service runs the code in the **main checkout** (`~/workdir/review-queue
 | `state.db` `runs` | live runs | `(repo, number)` → `{pid, lane, since}` for `-l` ▶ rows; dead pids ignored |
 | `state.db` `fix_state` | pr_fix.py | Codex session, handled reviews/jobs, deferred threads, `ci_tries`, `reruns`, `red` |
 | `state.db` `clean_reviews` | pr_review.py | `(repo, number, sha, reviewer)` heads a reviewer cleared |
+| `state.db` `pr_overrides` | API (`PATCH`/`DELETE …/config`) | `(repo, number)` → partial `review.*`/`fix.*` config; `config.effective_for()` reads it for the daemon and both scripts; dropped on merge/close, kept across pushes |
 | `~/.local/state/review-queue.{lock,pid}` | daemon | single-daemon flock, pid for SIGUSR1 |
 | `~/.local/state/pr-wizard/locks/<owner>/<name>/<N>` | both lanes | per-PR flock across processes (`<N>.fix`: a pr_fix.py run) |
 | `~/.local/state/pr-wizard/slot.{0,1}.lock` | pr_fix.py | 2 `slot: true` gate runs (iprally's Karma) machine-wide |
@@ -171,7 +172,7 @@ review-queue --pr 16400                  # review now, past every gate and label
 review-queue --bg                        # SIGUSR1 refresh, or start the daemon
 review-queue --prune -n                  # which worktrees the daemon would prune (every repo)
 tail -f ~/Library/Logs/review-queue.log
-curl -s --unix-socket ~/.local/state/pr-wizard/api.sock http://x/v1/queue   # GET info, queue, config, prompts/<name>
+curl -s --unix-socket ~/.local/state/pr-wizard/api.sock http://x/v1/queue   # GET info, queue, config, prompts/<name>, prs/<o>/<n>/<N>/config
 curl -s --unix-socket ~/.local/state/pr-wizard/api.sock -X POST http://x/v1/pause   # also resume, refresh, next, prs/<o>/<n>/<N>/{review,fix}
 ```
 

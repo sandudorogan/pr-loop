@@ -30,22 +30,26 @@ import argparse, fcntl, json, os, re, shutil, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [DIR, os.path.dirname(DIR)]
-from pr_review import CFG, LIMIT, REPO, REPO_ROOT, brief, codex_flags
-from pr_wizard import conventions, db, gates, names
+from pr_review import CFG, LIMIT, LOADED, REPO, REPO_ROOT, brief, codex_flags
+from pr_wizard import config, conventions, db, gates, names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
-FIX = CFG["fix"]
-PROMPT = os.path.join(DIR, "prompts", FIX["prompt"])
-MERGE_PROMPT = os.path.join(DIR, "prompts", FIX["merge_prompt"])
-TIMEOUT = FIX["turn_timeout_s"]
-TEST_RETRIES = FIX["test_retries"]
-GATES = FIX["gates"]
 AGENT_MARKER = "<!-- agent-review:"
 FYI_MARKER = "<!-- agent-review-fyi -->"
 CI_LOG_CHARS = 20000
-CI_TRIES = FIX["ci_tries"]
 LOG_NOISE = re.compile(r"^﻿?\d{4}-\d\d-\d\dT\S+Z |\x1b\[[0-9;]*m", re.M)
 ATTRIBUTION = re.compile(r"^(co-authored-by:|.*generated with \[?claude)", re.I | re.M)
+
+
+def configure(cfg):
+    """Sets the fixer config a pass works with: the project's at import, the PR's once `--pr` is known."""
+    global FIX, PROMPT, MERGE_PROMPT, TIMEOUT, TEST_RETRIES, GATES, CI_TRIES
+    FIX = cfg["fix"]
+    PROMPT, MERGE_PROMPT = (os.path.join(DIR, "prompts", FIX[k]) for k in ("prompt", "merge_prompt"))
+    TIMEOUT, TEST_RETRIES, GATES, CI_TRIES = FIX["turn_timeout_s"], FIX["test_retries"], FIX["gates"], FIX["ci_tries"]
+
+
+configure(CFG)
 
 THREADS_QUERY = """
 query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
@@ -443,6 +447,7 @@ def main():
     ap.add_argument("--pr", type=int, required=True)
     a = ap.parse_args()
     names.migrate()
+    configure(config.effective_for(REPO, a.pr, cfg=LOADED.config))
     if a.cmd == "dump":
         meta = json.loads(sh(["gh", "pr", "view", str(a.pr), "--repo", REPO, "--json", "headRefOid"]))
         state = load(a.pr)

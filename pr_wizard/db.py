@@ -421,6 +421,11 @@ def pr_override(repo, n):
                                      "updated_at": row["updated_at"]}
 
 
+def pr_overrides():
+    """{(repo, number): config} of every stored PR override."""
+    return {(r["repo"], r["number"]): _load(r["config"]) for r in _all("SELECT * FROM pr_overrides ORDER BY repo, number")}
+
+
 def put_pr_override(repo, n, config):
     with tx() as c:
         row = c.execute("SELECT created_at FROM pr_overrides WHERE repo = ? AND number = ?", (repo, int(n))).fetchone()

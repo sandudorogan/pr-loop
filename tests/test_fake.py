@@ -274,6 +274,46 @@ class Waking(Fake):
             self.assertNotEqual(out[0][1][1]["rev"], rev, path)
 
 
+class PrConfig(Fake):
+    def url(self, n, repo=IPRALLY):
+        return f"/v1/prs/{repo}/{n}/config"
+
+    def patch_pr(self, n, patch_, base=None, repo=IPRALLY):
+        return self.call("PATCH", self.url(n, repo), {"base_rev": base, "patch": patch_})
+
+    def test_the_fixture_override_is_served_and_badges_its_item(self):
+        self.assertEqual(self.call("GET", self.url(17201)), (200, fixture("pr-config")))
+        self.assertEqual(self.item(f"{IPRALLY}#17201")["override"], ["review.reviewers"])
+
+    def test_a_review_runs_the_pr_reviewers(self):
+        self.patch_pr(17166, {"review": {"reviewers": fixture("pr-config")["override"]["review"]["reviewers"]}})
+        self.call("POST", f"/v1/prs/{IPRALLY}/17166/review")
+        self.assertEqual([r["id"] for r in self.item(f"{IPRALLY}#17166")["findings"]["reviewers"]], ["opus"])
+
+    def test_patch_turns_a_lane_on_or_off_for_one_pr(self):
+        status, body = self.patch_pr(412, {"review": {"enabled": True}}, config.rev({}), GITOPS)
+        self.assertEqual((status, body["layers"], body["effective"]["review"]["enabled"]),
+                         (200, {"project": ["review.enabled"], "pr": ["review.enabled"]}, True))
+        self.assertEqual(self.item(f"{GITOPS}#412")["override"], ["review.enabled"])
+        self.assertEqual(self.call("POST", f"/v1/prs/{GITOPS}/412/review")[0], 202)
+        self.patch_pr(17166, {"review": {"enabled": False}})
+        self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17166/review")[1]["error"]["code"], "review_lane_off")
+
+    def test_delete_drops_it_and_the_badge(self):
+        status, body = self.call("DELETE", self.url(17201))
+        self.assertEqual((status, body["override"], body["layers"]["pr"], body["created_at"]), (200, None, [], None))
+        self.assertEqual(self.item(f"{IPRALLY}#17201")["override"], [])
+
+    def test_refusals_change_nothing(self):
+        before = self.call("GET", self.url(17201))[1]
+        self.assertEqual(self.patch_pr(17201, {"fix": {"enabled": False}}, config.rev({}))[1]["error"]["code"], "stale_config")
+        problems = self.patch_pr(17201, {"review": {"workers": 1}, "root": "/x"})[1]["error"]
+        self.assertEqual((problems["code"], [d["path"] for d in problems["details"]]), ("invalid_config", ["root", "review.workers"]))
+        self.assertEqual(self.call("GET", self.url(17201))[1], before)
+        self.assertEqual(self.call("GET", self.url(1, "a/b"))[1]["error"]["code"], "unknown_repo")
+        self.assertEqual(self.call("DELETE", self.url(1))[1]["error"]["code"], "not_in_queue")
+
+
 class Timed(Fake):
     speed = 0.8
 

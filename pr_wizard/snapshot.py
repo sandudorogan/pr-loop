@@ -19,7 +19,8 @@ def read(prs):
              for repo in projects.repos(q.cfg(), prs)}
     for repo, rows in repos.items():
         rows["results"] = {int(n): db.reviewer_results(repo, n) for n in rows["reviews"]}
-    return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "checkouts": q.found()}
+    return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "checkouts": q.found(),
+            "overrides": db.pr_overrides()}
 
 
 def iso(at):
@@ -51,7 +52,7 @@ def findings(repo, seen, results, head, cfg):
             "reviewers": reviewers, "top": ranked[:3]}
 
 
-def entry(pr, rows, runs, cfg, first):
+def entry(pr, rows, runs, cfg, first, override):
     repo, n, head = pr["repo"], pr["number"], pr["headRefOid"]
     seen, fixed = rows["reviews"].get(str(n), {}), rows["fixes"].get(str(n), {})
     now = {k: f"{r['lane']} {r['since'][11:19]}" for (r_repo, k), r in runs.items() if r_repo == repo}
@@ -71,9 +72,9 @@ def entry(pr, rows, runs, cfg, first):
         if seen else None,
         "findings": findings(repo, seen, rows["results"].get(n), head, cfg),
         "fix": {k: v for k, v in fixed.items() if k not in ("key", "gate")}
-        | {"current": fixed["sha"] == head, "parked": fixed["errors"] >= config.effective(cfg, repo)["fix"]["max_errors"], "at": iso(fixed["at"])}
+        | {"current": fixed["sha"] == head, "parked": fixed["errors"] >= config.effective(cfg, repo, override)["fix"]["max_errors"], "at": iso(fixed["at"])}
         if fixed else None,
-        "fix_queued": q.fixing(pr, rows["reviews"], rows["fixes"]), "override": [],
+        "fix_queued": q.fixing(pr, rows["reviews"], rows["fixes"]), "override": config.paths(override or {}),
         "fixable": q.fixable(pr, rows["reviews"], rows["fixes"]),
     }
 
@@ -89,10 +90,10 @@ def pool(lane, repo, workers, items):
 def build(prs, state, runtime):
     """Pure: the fetched PRs, `read()` rows and the runtime {generated_at, fetched_at, paused, refresh} as the §3.2
     snapshot."""
-    repos, runs, cfg = state["repos"], state["runs"], state["config"]
+    repos, runs, cfg, overrides = state["repos"], state["runs"], state["config"], state["overrides"]
     first = {repo: rows["next"] for repo, rows in repos.items()}
     active = {repo: [n for r, n in runs if r == repo] for repo in repos}
-    rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]]), pr) for pr in prs]
+    rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]], overrides.get(q.pr_key(pr))), pr) for pr in prs]
     rows = sorted(((i, pr) for i, pr in rows if i["active"] or not q.approved(pr)),
                   key=lambda r: (list(GROUPS.values()).index(r[0]["group"]), q.priority(r[1], first),
                                  r[1]["number"] < max(active[r[1]["repo"]], default=0), r[1]["number"], r[1]["repo"]))
