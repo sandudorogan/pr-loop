@@ -33,8 +33,17 @@ def listed(snap):
     print(snapshot.render(snap, sys.stdout.isatty()), end="")
 
 
+def label():
+    """The label the last daemon wrote at its start: the job that is loaded, also before cutover A."""
+    try:
+        with open(names.LABEL_FILE) as fh:
+            return fh.read().strip()
+    except FileNotFoundError:
+        return LABEL
+
+
 def start():
-    subprocess.run(["launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"], check=True)
+    subprocess.run(["launchctl", "kickstart", f"gui/{os.getuid()}/{label()}"], check=True)
 
 
 def up(method, path, body=None):

@@ -152,6 +152,7 @@ What stays a file:
 | Path | Owner | Role |
 | --- | --- | --- |
 | `~/.local/state/pr-wizard/daemon.{lock,pid}` | daemon | single-daemon flock, pid for SIGUSR1 |
+| `~/.local/state/review-queue.lock` | daemon | the pre-rename daemon lock, also held: an old-code daemon and a new one refuse to run together |
 | `~/.local/state/pr-wizard/api.sock` | daemon | control API socket, `0600` in a `0700` dir; SIGTERM unlinks it, a stale one goes at start |
 | `~/.local/state/pr-wizard/launchd-label` | daemon | the label to `launchctl kickstart` (`local.pr-wizard`), written at every start; the app reads it |
 | `~/.local/state/pr-wizard/locks/<owner>/<name>/<N>` | both lanes | per-PR flock across processes (`<N>.fix`: a pr_fix.py run) |

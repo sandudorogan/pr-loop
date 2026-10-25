@@ -906,12 +906,19 @@ def serve(rt):
 def daemon():
     """Workers review nonstop. The queue data behind them refreshes every `refresh.interval_s`, every
     `refresh.idle_s` while a worker has nothing to take, and at once on SIGUSR1. Each refresh builds the pools
-    the config asks for."""
+    the config asks for. The daemon also holds the pre-rename review-queue.lock for its lifetime, so it and an
+    old-code daemon never run at once, in either start order."""
     lock = open(names.DAEMON_LOCK, "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return say("daemon already running")
+    old = open(names.OLD_DAEMON_LOCK, "w")
+    try:
+        fcntl.flock(old, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        say("an old review-queue daemon still holds review-queue.lock; not starting")
+        sys.exit(1)
     with open(names.DAEMON_PID, "w") as fh:
         fh.write(str(os.getpid()))
     db.sweep_runs()

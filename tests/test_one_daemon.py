@@ -1,4 +1,5 @@
 import contextlib
+import fcntl
 import io
 import json
 from pathlib import Path
@@ -85,6 +86,32 @@ class OneDaemon(unittest.TestCase):
     def test_review_lane_is_off_for_gitops(self):
         self.assertFalse(rq.unreviewed(dict(node(rq.MONOREPO, 1), repo=rq.MONOREPO)))
         self.assertTrue(rq.unreviewed(dict(node(GITOPS, 1), repo=GITOPS)))
+
+    def locks(self):
+        for name in ("DAEMON_LOCK", "DAEMON_PID", "OLD_DAEMON_LOCK"):
+            patcher = patch.object(names, name, f"{self.state}/{name.lower()}")
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_an_old_daemon_holding_its_lock_stops_the_new_one(self):
+        self.locks()
+        with open(names.OLD_DAEMON_LOCK, "w") as old:
+            fcntl.flock(old, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with contextlib.redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit) as stopped:
+                rq.daemon()
+        self.assertEqual(stopped.exception.code, 1)
+        self.assertIn("an old review-queue daemon still holds review-queue.lock; not starting", out.getvalue())
+
+    def test_the_new_daemon_holds_the_old_lock_so_old_code_refuses(self):
+        self.locks()
+
+        def probe():
+            with open(names.OLD_DAEMON_LOCK, "w") as old, self.assertRaises(BlockingIOError):
+                fcntl.flock(old, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            raise StopIteration
+
+        with patch.object(rq.db, "sweep_runs", side_effect=probe), self.assertRaises(StopIteration):
+            rq.daemon()
 
     def test_list_mixes_both_repos_in_priority_order(self):
         db.bump(GITOPS, 3)

@@ -100,6 +100,17 @@ class RunnerPaths(unittest.TestCase):
         templates = json.loads((ROOT / "links.json").read_text())["templates"]
         self.assertEqual(templates, {"Library/LaunchAgents/local.pr-wizard.plist": "launchd/local.pr-wizard.plist.tmpl"})
 
+    def test_the_cli_kickstarts_the_label_the_daemon_wrote(self):
+        from pr_wizard import cli
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(names, "LABEL_FILE", f"{temporary}/launchd-label"), \
+                patch.object(cli.subprocess, "run") as run:
+            cli.start()
+            Path(names.LABEL_FILE).write_text("local.review-queue\n")
+            cli.start()
+        self.assertEqual([c.args[0][-1].rsplit("/", 1)[1] for c in run.call_args_list],
+                         ["local.pr-wizard", "local.review-queue"])
+
     def test_the_label_file_names_the_launchd_job(self):
         with tempfile.TemporaryDirectory() as temporary, \
                 patch.object(names, "LABEL_FILE", f"{temporary}/launchd-label"):
