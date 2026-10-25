@@ -100,7 +100,7 @@ def build(prs, state, runtime):
              "pending": sum(i["group"] == "queued" for i in items)},
             {"id": "fix", "lane": "fix", "repo": None, "workers": cfg["fix"]["workers"], "busy": busy("fix"),
              "pending": fixable}]},
-        "projects": projects.listing(prs, cfg, state["checkouts"]),
+        "projects": projects.listing(prs, cfg, state["checkouts"], projects.CONVENTIONS.get),
         "refresh": runtime["refresh"],
         "counts": {g: sum(i["group"] == g for i in items) for g in GROUPS.values()},
         "items": items,

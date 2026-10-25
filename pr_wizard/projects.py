@@ -7,7 +7,7 @@ each project's status.
 import os, re, subprocess, threading, time
 from glob import glob
 
-from pr_wizard import config
+from pr_wizard import config, conventions
 
 SEARCHES = {"mine": "author:@me", "requested": "user-review-requested:@me", "assigned": "assignee:@me",
             "reviewed": "reviewed-by:@me -author:@me"}
@@ -96,15 +96,48 @@ def repos(cfg, prs):
     return keys + sorted({pr["repo"] for pr in prs} - set(keys))
 
 
-def project(repo, cfg, found, prs):
+class Conventions:
+    """`conventions.names()` of each checkout's default branch, cached per (repo, ref sha). One `for-each-ref` call
+    reads the ref and its sha, and `ls-tree` runs again only when the sha moves."""
+
+    def __init__(self, names=conventions.names):
+        self.names, self.cache, self.lock = names, {}, threading.Lock()
+
+    def get(self, repo, path):
+        """`{ref, files, skills}` at `origin/<default branch>`, or None when the checkout has no origin/HEAD."""
+        out = subprocess.run(["git", "-C", path, "for-each-ref", "--format=%(symref:short) %(objectname)",
+                              "refs/remotes/origin/HEAD"], capture_output=True, text=True).stdout.split()
+        if len(out) != 2:
+            return None
+        ref, sha = out
+        with self.lock:
+            if (repo, sha) not in self.cache:
+                self.cache = {k: v for k, v in self.cache.items() if k[0] != repo}
+                self.cache[repo, sha] = self.names(path, ref)
+            return self.cache[repo, sha]
+
+
+CONVENTIONS = Conventions()
+
+
+def gates(repo, on):
+    """The effective fixer gates as `{name, kind, source}`: `default` while they match the built-in config."""
+    built = config.effective(config.DEFAULTS, repo)["fix"]["gates"]
+    return [{"name": g["name"], "kind": g["kind"], "source": "default" if on["fix"]["gates"] == built else "config"}
+            for g in on["fix"]["gates"]]
+
+
+def project(repo, cfg, found, prs, names=None):
     on, where = config.effective(cfg, repo), found.get(repo, {})
     checkout = where if "path" in where else None
     review, fix = bool(checkout) and on["review"]["enabled"], bool(checkout) and on["fix"]["enabled"]
     status = "error" if "error" in where else "no-checkout" if not checkout else "active" if review or fix else "off"
     return {"repo": repo, "status": status, "available": bool(checkout), "review": review, "fix": fix,
-            "checkout": checkout, "prs": prs, "error": where.get("error"), "conventions": None, "gates": []}
+            "checkout": checkout, "prs": prs, "error": where.get("error"), "gates": gates(repo, on),
+            "conventions": names(repo, checkout["path"]) if names and checkout else None}
 
 
-def listing(prs, cfg, found):
-    """The §3.2 `projects[]`: every repo of the fetch or the config, with its checkout and status."""
-    return [project(repo, cfg, found, sum(pr["repo"] == repo for pr in prs)) for repo in repos(cfg, prs)]
+def listing(prs, cfg, found, names=None):
+    """The §3.2 `projects[]`: every repo of the fetch or the config, with its checkout, status, gates and, when
+    `names(repo, path)` is given, the conventions of each checkout."""
+    return [project(repo, cfg, found, sum(pr["repo"] == repo for pr in prs), names) for repo in repos(cfg, prs)]

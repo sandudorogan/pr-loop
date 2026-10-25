@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from prs import GITOPS, MONOREPO, pr, rq
-from pr_wizard import config, projects
+from pr_wizard import config, conventions, projects
 
 SITE, MINE = "clojure/clojurescript-site", "sandudorogan/dataspex"
 
@@ -123,6 +123,68 @@ class Status(unittest.TestCase):
         self.assertEqual(self.listing([pr(1, MINE)], found)[MINE]["status"], "active")
         off = {MINE: {"review": {"enabled": False}, "fix": {"enabled": False}}}
         self.assertEqual(self.listing([pr(1, MINE)], found, off)[MINE]["status"], "off")
+
+
+class Follows(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.dir = os.path.realpath(temp.name)
+        git("init", "-q", self.dir)
+        self.cache = projects.Conventions(self.counted)
+        self.runs = []
+
+    def counted(self, path, ref):
+        self.runs.append(ref)
+        return conventions.names(path, ref)
+
+    def land(self, *files):
+        for f in files:
+            os.makedirs(os.path.dirname(os.path.join(self.dir, f)) or self.dir, exist_ok=True)
+            open(os.path.join(self.dir, f), "w").close()
+        git("-C", self.dir, "add", "-A")
+        git("-C", self.dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
+        git("-C", self.dir, "update-ref", "refs/remotes/origin/trunk", "HEAD")
+        git("-C", self.dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+
+    def test_the_names_come_from_the_default_branch_of_the_remote(self):
+        self.land("AGENTS.md", "ui/CLAUDE.md", ".claude/skills/lint/SKILL.md")
+        self.assertEqual(self.cache.get("a/b", self.dir),
+                         {"ref": "origin/trunk", "files": ["AGENTS.md", "ui/CLAUDE.md"], "skills": ["lint"]})
+
+    def test_git_runs_again_only_when_the_ref_moves(self):
+        self.land("AGENTS.md")
+        for _ in range(3):
+            self.cache.get("a/b", self.dir)
+        self.assertEqual(len(self.runs), 1)
+        self.land("CLAUDE.md")
+        self.assertEqual(self.cache.get("a/b", self.dir)["files"], ["AGENTS.md", "CLAUDE.md"])
+        self.assertEqual(len(self.runs), 2)
+
+    def test_a_checkout_without_origin_head_has_none(self):
+        git("-C", self.dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+        self.assertIsNone(self.cache.get("a/b", self.dir))
+        self.assertIsNone(self.cache.get("a/b", "/no/such/dir"))
+        self.assertEqual(self.runs, [])
+
+    def test_a_listing_reads_only_projects_with_a_checkout(self):
+        asked = []
+        names = lambda repo, path: asked.append((repo, path)) or {"ref": "origin/main", "files": [], "skills": []}
+        cfg = config.merge(config.DEFAULTS, {})
+        found = {MONOREPO: {"path": "/w/iprally", "source": "detected"}, GITOPS: {"error": "bad root"}}
+        got = {p["repo"]: p for p in projects.listing([pr(1, MINE), pr(2, SITE)], cfg, found, names)}
+        self.assertEqual(asked, [(MONOREPO, "/w/iprally")])
+        self.assertEqual([got[r]["conventions"] is None for r in (MONOREPO, GITOPS, MINE, SITE)], [False, True, True, True])
+
+    def test_gates_are_default_until_the_owner_overrides_them(self):
+        listed = lambda over: {p["repo"]: p["gates"] for p in projects.listing([pr(1, MINE)], config.merge(
+            config.DEFAULTS, {"projects": over}), {})}
+        self.assertEqual(listed({})[MONOREPO], [{"name": "cljfmt", "kind": "format", "source": "default"},
+                                                {"name": "Karma", "kind": "test", "source": "default"}])
+        self.assertEqual(listed({})[MINE], [])
+        mine = {"fix": {"gates": [{"name": "pytest", "kind": "test", "run": "pytest"}]}}
+        self.assertEqual(listed({MINE: mine})[MINE], [{"name": "pytest", "kind": "test", "source": "config"}])
+        self.assertEqual(listed({MONOREPO: mine})[MONOREPO], [{"name": "pytest", "kind": "test", "source": "config"}])
 
 
 class Checkouts(unittest.TestCase):
