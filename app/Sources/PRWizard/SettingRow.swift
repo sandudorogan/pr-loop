@@ -13,7 +13,7 @@ struct SettingRow<Control: View>: View {
                 control
                 if scope != .allRepos { OverrideMarker(key, in: scope, store: settings) }
             }
-            FieldError(messages: settings.errors.messages(at: key, in: scope))
+            FieldError(messages: settings.errors.messages(within: key, in: scope))
         }
     }
 }

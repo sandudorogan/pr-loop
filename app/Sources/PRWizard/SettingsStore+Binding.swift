@@ -34,3 +34,21 @@ extension SettingsStore {
         }
     }
 }
+
+extension SettingsStore {
+    func intBinding(_ key: String, in scope: SettingsScope, per unit: Int = 1) -> Binding<Int> {
+        Binding {
+            self.int(key, in: scope, per: unit)
+        } set: {
+            self.setInt(key, to: $0, in: scope, per: unit)
+        }
+    }
+
+    func stringsBinding(_ key: String, in scope: SettingsScope) -> Binding<[String]> {
+        Binding {
+            self.strings(key, in: scope)
+        } set: {
+            self.setStrings(key, to: $0, in: scope)
+        }
+    }
+}

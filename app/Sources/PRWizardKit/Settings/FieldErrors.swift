@@ -24,3 +24,11 @@ public struct FieldErrors: Hashable, Sendable {
         }
     }
 }
+
+extension FieldErrors {
+    /// Messages at the key itself or at an element of it (`review.trivial[2]`).
+    public func messages(within key: String, in scope: SettingsScope) -> [String] {
+        let path = scope.path(of: key)
+        return problems.filter { $0.path == path || $0.path.hasPrefix("\(path)[") }.map(\.message)
+    }
+}
