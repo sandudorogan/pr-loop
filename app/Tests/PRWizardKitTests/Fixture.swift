@@ -1,0 +1,19 @@
+import Foundation
+import PRWizardKit
+
+enum Fixture {
+    static let directory = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appending(path: "tests/fixtures/api/v1")
+
+    static func data(_ name: String) throws -> Data {
+        try Data(contentsOf: directory.appending(path: name))
+    }
+
+    static func decode<Value: Decodable>(_ type: Value.Type, from name: String) throws -> Value {
+        try JSONDecoder.daemon.decode(type, from: data(name))
+    }
+}
