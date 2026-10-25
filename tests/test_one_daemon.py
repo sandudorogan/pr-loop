@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from pr_wizard import queue as rq
+from pr_wizard import names, queue as rq
 
 GITOPS = "iprally/gitops"
 
@@ -31,7 +31,7 @@ class OneDaemon(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.state = temp.name
-        patcher = patch.object(rq, "STATE_DIR", self.state)
+        patcher = patch.object(names, "STATE_DIR", self.state)
         patcher.start()
         self.addCleanup(patcher.stop)
 

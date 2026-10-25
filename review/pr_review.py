@@ -35,11 +35,14 @@ owner's token. See `skills/pr-review-loop/scan.py`.
 import argparse, fcntl, json, os, re, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.dirname(DIR))
+from pr_wizard import names
+
 SCHEMA = os.path.join(DIR, "review-schema.json")
 PROMPTS = os.path.join(DIR, "prompts")
 
-REPO = os.environ.get("IPR_REPO", "iprally/iprally")
-REPO_ROOT = os.environ.get("IPR_REPO_ROOT", os.path.expanduser(f"~/workdir/{REPO.split('/')[1]}"))
+REPO = names.env_repo()
+REPO_ROOT = names.env_root(REPO)
 TIMEOUT = int(os.environ.get("IPR_REVIEW_TIMEOUT", "2700"))
 
 INLINE_SEVERITIES = {"critical", "high", "medium"}
@@ -48,7 +51,7 @@ LATE_ROUND = 4
 MIN_CONFIDENCE = 0.6
 FYI_MARKER = "<!-- agent-review-fyi -->"
 
-CLEAN_CACHE = os.path.expanduser("~/.claude/skills/delegator/.clean-reviews.json")
+CLEAN_CACHE = names.CLEAN_CACHE
 
 MARKER_PREFIX = "<!-- agent-review:"
 MARKER_RE = re.compile(
@@ -61,7 +64,7 @@ REVIEWERS = {
     "quality": {"label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md", "engine": "claude",
                 "claude": ("haiku", "xhigh")},
 }
-BRIEFS = os.path.expanduser("~/.claude/skills/delegator/briefs")
+BRIEFS = names.BRIEFS
 ENGINE_LABELS = {"claude": "Claude", "codex": "Codex"}
 LIMIT = re.compile(r"(usage|spend|session|rate) limit|hit your \S+ limit|quota exceeded", re.I)
 
@@ -339,7 +342,7 @@ def review_worktree(pr, head):
 
     `review-queue --prune` removes it once the PR is merged or approved.
     """
-    root = os.path.join(REPO_ROOT, ".claude", "worktrees")
+    root = names.worktrees(REPO_ROOT)
     path = os.path.join(root, f".review-{pr}")
     sh(["git", "fetch", "origin", head], cwd=REPO_ROOT, timeout=600, check=False)
     os.makedirs(root, exist_ok=True)

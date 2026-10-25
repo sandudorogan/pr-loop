@@ -40,19 +40,10 @@ from datetime import datetime
 from fnmatch import fnmatch
 from glob import glob
 
-HOME = os.path.expanduser("~")
-REVIEW_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "review")
-PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
-PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
-MONOREPO = "iprally/iprally"
-REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally", "review": True},
-         "iprally/gitops": {"root": f"{HOME}/workdir/gitops", "review": False}}
-STATE_DIR = f"{HOME}/.local/state"
-STATE, FIXES, NEXT, LOCK, LOCKS, NOWS, PID = ".json", ".fixes.json", ".next", ".lock", ".locks", ".now.d", ".pid"
-LOG = f"{HOME}/Library/Logs/review-queue.log"
-LABEL = "local.review-queue"
+from pr_wizard.names import (FIXES, LABEL, LOCK, LOCKS, LOG, MONOREPO, NEXT, NO_FIX, NO_REVIEW, NOTIFIER, NOWS, PID,
+                              PR_FIX, PR_REVIEW, REPOS, STATE, env_repo, path, root, tag)
+
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
-NOTIFIER = f"{HOME}/.local/share/review-queue/Review Queue.app/Contents/MacOS/terminal-notifier"
 
 REVIEWERS = ("opus", "codex", "quality")
 WORKERS = 3
@@ -70,7 +61,6 @@ ROUNDS = 8
 WAIT_POLL = 30
 READY = ("clean", "quality-only")
 SETTLED = ("nothing-to-fix", "refuted-only", "no-changes")
-NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
 LIMITED = object()
 TRIVIAL = ("*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg")
 FALSE_CLEAN = re.compile(
@@ -110,18 +100,6 @@ query($owner: String!, $name: String!, $number: Int!) {
 
 GUARD, GIT = threading.Lock(), threading.Lock()
 ACTIVE, NOTED = {}, {}
-
-
-def tag(repo):
-    return "" if repo == MONOREPO else f"-{repo.split('/')[1]}"
-
-
-def path(repo, kind):
-    return f"{STATE_DIR}/review-queue{tag(repo)}{kind}"
-
-
-def root(repo):
-    return REPOS[repo]["root"]
 
 
 def child(repo):
@@ -909,7 +887,7 @@ def main():
     ap.add_argument("--repo", choices=REPOS, help="the repo of --pr, --next and --wait (default $IPR_REPO, "
                                                   f"else {MONOREPO}); --prune: only this repo")
     a = ap.parse_args()
-    repo = a.repo or os.environ.get("IPR_REPO", MONOREPO)
+    repo = a.repo or env_repo()
     if a.list:
         return show()
     if a.next:

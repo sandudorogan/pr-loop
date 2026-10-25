@@ -6,14 +6,14 @@ Do not rely on memory files for this repository. When you learn something durabl
 ## What it is
 
 A macOS launchd daemon that reviews and fixes GitHub PRs for one owner (`gh` user).
-One process serves every repo in `REPOS` (`bin/review-queue`): `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
+One process serves every repo in `REPOS` (`pr_wizard/names.py`): `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
 
 ```text
                  one GraphQL call every 5 min (60 s when a worker idles, now on SIGUSR1)
                  mine (author:@me) + requested + reviewed-by:@me
                                    │
                                    ▼
- bin/review-queue ── gates ── review lane (3 workers) ─── pr_review.py run × {opus, codex, quality}
+ pr_wizard/queue ── gates ── review lane (3 workers) ─── pr_review.py run × {opus, codex, quality}
    decide()          │                                       │ posts 1 review per reviewer, marker in body
    same head         │                                       ▼
    own-diff hash     │                         state ~/.local/state/review-queue.json
@@ -46,7 +46,9 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 
 | Path | Role |
 | --- | --- |
-| `bin/review-queue` | Daemon, CLI, queue fetch, gates, both lanes, `--wait`, `-l`, `--prune` |
+| `pr_wizard/queue.py` | Daemon, CLI, queue fetch, gates, both lanes, `--wait`, `-l`, `--prune` |
+| `pr_wizard/names.py` | Repos, labels and every state, log and skill path. The queue, both scripts and `db.py` read them here |
+| `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.queue.main()`. `bin/review-queue` is a symlink to it |
 | `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
 | `review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
 | `review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}` |
@@ -66,7 +68,8 @@ The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, n
 The live service runs the code in the **main checkout** (`~/workdir/review-queue`) through symlinks:
 
 ```text
-~/.local/bin/review-queue                    → bin/review-queue
+~/.local/bin/review-queue                    → bin/review-queue → bin/pr-wizard (compat alias; launchd runs it)
+~/.local/bin/pr-wizard                       → bin/pr-wizard
 ~/.claude/skills/delegator/{pr_review.py,pr_fix.py,prompts,*-schema.json} → review/
 ~/.claude/skills/pr-review-loop              → claude/skills/pr-review-loop
 ~/Library/LaunchAgents/local.review-queue*.plist → .local/*.plist (rendered by install.py)

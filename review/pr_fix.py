@@ -30,13 +30,14 @@ import argparse, fcntl, json, os, re, shutil, signal, subprocess, sys, tempfile,
 from contextlib import contextmanager
 
 DIR = os.path.dirname(os.path.realpath(__file__))
-sys.path.insert(0, DIR)
+sys.path[:0] = [DIR, os.path.dirname(DIR)]
 from pr_review import LIMIT, REPO, REPO_ROOT, brief
+from pr_wizard import names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
 PROMPT = os.path.join(DIR, "prompts", "fix.md")
 MERGE_PROMPT = os.path.join(DIR, "prompts", "merge.md")
-STATE = os.path.expanduser("~/.local/state/pr-fix" + ("" if REPO == "iprally/iprally" else f"-{REPO.split('/')[1]}"))
+STATE = names.fix_dir(REPO)
 TIMEOUT = 2700
 TEST_RETRIES = 2
 UI_TIMEOUT = 1800
@@ -174,7 +175,7 @@ def worktree(meta, red):
             wt = fields["worktree"]
             break
     else:
-        wt = os.path.join(REPO_ROOT, ".claude", "worktrees", branch.replace("/", "+"))
+        wt = os.path.join(names.worktrees(REPO_ROOT), branch.replace("/", "+"))
         sh(["git", "fetch", "origin", branch])
         local = subprocess.run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"], cwd=REPO_ROOT,
                                capture_output=True).returncode == 0

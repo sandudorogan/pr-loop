@@ -9,7 +9,9 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 
-DB = os.path.expanduser("~/.local/state/pr-wizard/state.db")
+from pr_wizard import names
+
+DB = names.DB
 BUSY_MS = 10_000
 EVENTS_KEEP, HISTORY_KEEP, DAYS = 1000, 500, 30
 
