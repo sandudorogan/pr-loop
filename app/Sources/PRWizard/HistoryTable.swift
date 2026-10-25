@@ -16,7 +16,7 @@ struct HistoryTable: View {
                 TableColumn("Project") { Text(ProjectSummary.shortName(of: $0.entry.repo)).lineLimit(1) }
                     .width(min: 60, ideal: 80)
             }
-            TableColumn("Title") { Text($0.entry.title).lineLimit(1).truncationMode(.middle) }.width(min: 160)
+            TableColumn("Title") { Text($0.entry.title).lineLimit(1) }.width(min: 160)
             TableColumn("Rounds") { Text(verbatim: "\($0.entry.rounds)").monospacedDigit() }.width(56)
             TableColumn("Fixes pushed") { Text(verbatim: "\($0.entry.fixesPushed)").monospacedDigit() }.width(90)
             TableColumn("When") {

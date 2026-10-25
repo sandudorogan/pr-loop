@@ -22,7 +22,7 @@ struct QueueTable: View {
             TableColumn("Title") { item in
                 HStack(spacing: 4) {
                     if item.isDraft { Text("[Draft]").foregroundStyle(.secondary) }
-                    Text(item.title).lineLimit(1).truncationMode(.middle)
+                    Text(item.title).lineLimit(1)
                 }
             }
             .width(min: 160).customizationID("title")
