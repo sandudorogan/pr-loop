@@ -169,11 +169,20 @@ def _put(c, table, repo, n, **cols):
               (repo, int(n), *cols.values()))
 
 
+def _review(row):
+    return {k: row[k] for k in ("sha", "status", "verdict", "note", "rounds", "at")} | {
+        "hold": bool(row["hold"]), "files": _load(row["files"]) or {}}
+
+
 def review(repo, n):
     """{sha, status, verdict, note, rounds, hold, at, files}, or {} for a PR with no result."""
     row = _one("SELECT * FROM reviews WHERE repo = ? AND number = ?", repo, int(n))
-    return {} if row is None else {k: row[k] for k in ("sha", "status", "verdict", "note", "rounds", "at")} | {
-        "hold": bool(row["hold"]), "files": _load(row["files"]) or {}}
+    return {} if row is None else _review(row)
+
+
+def reviews(repo):
+    """{number: review} of every PR of the repo."""
+    return {r["number"]: _review(r) for r in _all("SELECT * FROM reviews WHERE repo = ? ORDER BY rowid", repo)}
 
 
 def put_review(repo, n, entry):
@@ -199,13 +208,20 @@ def put_reviewer_result(repo, n, sha, reviewer, entry):
              round=e["round"], digest=_dump(e["digest"]), conventions=_dump(e["conventions"]), url=e["url"], at=e["at"])
 
 
+def _fix(row):
+    gate = _load(row["gate"])
+    return {k: row[k] for k in ("sha", "key", "status", "note", "errors", "at")} | ({} if gate is None else {"gate": gate})
+
+
 def fix(repo, n):
     """{sha, key, status, note, errors, at, gate?}, or {} for a PR with no fix pass."""
     row = _one("SELECT * FROM fixes WHERE repo = ? AND number = ?", repo, int(n))
-    if row is None:
-        return {}
-    gate = _load(row["gate"])
-    return {k: row[k] for k in ("sha", "key", "status", "note", "errors", "at")} | ({} if gate is None else {"gate": gate})
+    return {} if row is None else _fix(row)
+
+
+def fixes(repo):
+    """{number: fix} of every PR of the repo."""
+    return {r["number"]: _fix(r) for r in _all("SELECT * FROM fixes WHERE repo = ? ORDER BY rowid", repo)}
 
 
 def put_fix(repo, n, entry):
@@ -218,13 +234,20 @@ def put_fix(repo, n, entry):
 FIX_STATE_JSON = ("handled_reviews", "handled_jobs", "deferred", "ci_tries", "reruns", "red")
 
 
+def _fix_state(row):
+    state = {"session": row["session"]} | {k: _load(row[k]) for k in FIX_STATE_JSON}
+    return {k: v for k, v in state.items() if v is not None}
+
+
 def fix_state(repo, n):
     """The pr-fix/<N>.json dict: only the keys that were saved."""
     row = _one("SELECT * FROM fix_state WHERE repo = ? AND number = ?", repo, int(n))
-    if row is None:
-        return {}
-    state = {"session": row["session"]} | {k: _load(row[k]) for k in FIX_STATE_JSON}
-    return {k: v for k, v in state.items() if v is not None}
+    return {} if row is None else _fix_state(row)
+
+
+def fix_states(repo):
+    """{number: fix_state} of every PR of the repo."""
+    return {r["number"]: _fix_state(r) for r in _all("SELECT * FROM fix_state WHERE repo = ? ORDER BY rowid", repo)}
 
 
 def put_fix_state(repo, n, state):
@@ -238,6 +261,14 @@ def clean(repo, n, sha):
     return [r["reviewer"] for r in _all(
         "SELECT reviewer FROM clean_reviews WHERE repo = ? AND number = ? AND sha = ? ORDER BY rowid",
         repo, int(n), sha)]
+
+
+def cleared():
+    """{(repo, number, sha): [reviewer]} of every cleared head, in the order they were cleared."""
+    heads = {}
+    for r in _all("SELECT * FROM clean_reviews ORDER BY rowid"):
+        heads.setdefault((r["repo"], r["number"], r["sha"]), []).append(r["reviewer"])
+    return heads
 
 
 def add_clean(repo, n, sha, reviewer):
@@ -381,3 +412,10 @@ def put_pr_override(repo, n, config):
 def drop_pr_override(repo, n):
     with tx() as c:
         c.execute("DELETE FROM pr_overrides WHERE repo = ? AND number = ?", (repo, int(n)))
+
+
+def log_moves(moves, at=None):
+    """Records [(old_path, new_path, kind)] of a migration. new_path is None for a deleted file."""
+    with tx() as c:
+        c.executemany("INSERT INTO migration_log (old_path, new_path, kind, at) VALUES (?, ?, ?, ?)",
+                      [(*m, at or now()) for m in moves])

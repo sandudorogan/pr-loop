@@ -58,7 +58,7 @@ class Scope(unittest.TestCase):
                 "title": "T", "isDraft": False}
         with patch.object(prr, "pr_meta", return_value=meta), patch.object(prr, "gh_json", return_value=reviews), \
                 patch.object(prr, "linear_since", return_value=linear) as since, \
-                patch.object(prr, "clean_cache", return_value=clean or {}):
+                patch.object(prr, "cleared", side_effect=lambda pr, sha: (clean or {}).get(f"{pr}/{sha}", [])):
             sc = prr.scope(5)
         self.since = since
         return sc

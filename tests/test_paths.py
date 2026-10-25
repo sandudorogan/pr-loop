@@ -17,7 +17,7 @@ STATE = Path.home() / ".local/state"
 
 def script_names(script, **env):
     probe = ("import json, runpy, sys; g = runpy.run_path(sys.argv[1]); "
-             "print(json.dumps({k: g.get(k) for k in ('REPO', 'REPO_ROOT', 'STATE', 'BRIEFS', 'CLEAN_CACHE')}))")
+             "print(json.dumps({k: g.get(k) for k in ('REPO', 'REPO_ROOT', 'BRIEFS')}))")
     clean = {k: v for k, v in os.environ.items() if not k.startswith("IPR_")}
     out = subprocess.run([sys.executable, "-c", probe, str(script)], env={**clean, **env}, cwd="/",
                          capture_output=True, text=True, check=True)
@@ -63,17 +63,17 @@ class RunnerPaths(unittest.TestCase):
                 gitops = script_names(link, IPR_REPO=GITOPS, IPR_REPO_ROOT="/tmp/gitops")
             self.assertEqual((default["REPO"], default["REPO_ROOT"]), (names.MONOREPO, str(Path.home() / "workdir/iprally")))
             self.assertEqual((gitops["REPO"], gitops["REPO_ROOT"]), (GITOPS, "/tmp/gitops"))
-            if script == "pr_fix.py":
-                self.assertEqual((default["STATE"], gitops["STATE"]), (str(STATE / "pr-fix"), str(STATE / "pr-fix-gitops")))
-            else:
+            if script == "pr_review.py":
                 self.assertEqual(Path(default["BRIEFS"]), Path.home() / ".claude/skills/delegator/briefs")
-                self.assertEqual(Path(default["CLEAN_CACHE"]), Path.home() / ".claude/skills/delegator/.clean-reviews.json")
 
     def test_names_keep_todays_paths(self):
         self.assertEqual(names.LOG, str(Path.home() / "Library/Logs/review-queue.log"))
         self.assertEqual(names.root(GITOPS), str(Path.home() / "workdir/gitops"))
         self.assertEqual(db.DB, names.DB)
         self.assertEqual(names.DB, str(STATE / "pr-wizard/state.db"))
+        self.assertEqual(names.SCRATCH, str(STATE / "pr-wizard/scratch"))
+        self.assertEqual(names.slot(1), str(STATE / "pr-wizard/slot.1.lock"))
+        self.assertEqual(names.lock(GITOPS, 7, ".fix"), str(STATE / "pr-wizard/locks/iprally/gitops/7.fix"))
 
     def test_schema_and_launchd_templates_parse(self):
         for schema in (ROOT / "review").glob("*.json"):

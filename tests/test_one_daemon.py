@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from pr_wizard import names, queue as rq
+from pr_wizard import db, names, queue as rq
 
 GITOPS = "iprally/gitops"
 
@@ -31,9 +31,10 @@ class OneDaemon(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.state = temp.name
-        patcher = patch.object(names, "STATE_DIR", self.state)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for patcher in (patch.object(names, "STATE_DIR", self.state), patch.object(db, "DB", f"{self.state}/state.db")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(db.close)
 
     def fetch(self, out):
         with patch.object(rq, "sh", return_value=out) as sh:
@@ -62,9 +63,9 @@ class OneDaemon(unittest.TestCase):
         self.assertEqual(pending.prs, [])
 
     def test_path_helpers_keep_todays_names(self):
-        names = {kind: (Path(rq.path(rq.MONOREPO, kind)).name, Path(rq.path(GITOPS, kind)).name)
-                 for kind in (rq.STATE, rq.FIXES, rq.NEXT, rq.LOCKS, rq.NOWS, rq.LOCK, rq.PID)}
-        self.assertEqual(names, {
+        found = {kind: (Path(names.path(rq.MONOREPO, kind)).name, Path(names.path(GITOPS, kind)).name)
+                 for kind in (names.STATE, names.FIXES, names.NEXT, names.LOCKS, names.NOWS, names.LOCK, names.PID)}
+        self.assertEqual(found, {
             ".json": ("review-queue.json", "review-queue-gitops.json"),
             ".fixes.json": ("review-queue.fixes.json", "review-queue-gitops.fixes.json"),
             ".next": ("review-queue.next", "review-queue-gitops.next"),
@@ -95,7 +96,7 @@ class OneDaemon(unittest.TestCase):
         self.addCleanup(held[GITOPS].close)
 
     def test_list_mixes_both_repos_in_priority_order(self):
-        Path(rq.path(GITOPS, rq.NEXT)).write_text("[3]")
+        db.bump(GITOPS, 3)
         prs = [dict(node(rq.MONOREPO, 5, mine=False), repo=rq.MONOREPO, requested=True),
                dict(node(GITOPS, 3), repo=GITOPS, requested=False),
                dict(node(rq.MONOREPO, 3), repo=rq.MONOREPO, requested=False)]

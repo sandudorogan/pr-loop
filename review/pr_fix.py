@@ -32,12 +32,11 @@ from contextlib import contextmanager
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [DIR, os.path.dirname(DIR)]
 from pr_review import LIMIT, REPO, REPO_ROOT, brief
-from pr_wizard import names
+from pr_wizard import db, names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
 PROMPT = os.path.join(DIR, "prompts", "fix.md")
 MERGE_PROMPT = os.path.join(DIR, "prompts", "merge.md")
-STATE = names.fix_dir(REPO)
 TIMEOUT = 2700
 TEST_RETRIES = 2
 UI_TIMEOUT = 1800
@@ -79,15 +78,11 @@ def gh(*args):
 
 
 def load(pr):
-    try:
-        return json.load(open(f"{STATE}/{pr}.json"))
-    except (OSError, ValueError):
-        return {}
+    return db.fix_state(REPO, pr)
 
 
 def save(pr, state):
-    os.makedirs(STATE, exist_ok=True)
-    json.dump(state, open(f"{STATE}/{pr}.json", "w"), indent=2)
+    db.put_fix_state(REPO, pr, state)
 
 
 # ---------------------------------------------------------------- feedback
@@ -306,10 +301,10 @@ def saved(scratch, test):
 @contextmanager
 def karma_slot():
     """One of KARMA_SLOTS across every run on this machine: each Karma run is a cold JVM build plus Chrome."""
-    os.makedirs(STATE, exist_ok=True)
+    os.makedirs(names.WIZARD, exist_ok=True)
     while True:
         for i in range(KARMA_SLOTS):
-            with open(os.path.join(STATE, f"karma.{i}.lock"), "w") as fh:
+            with open(names.slot(i), "w") as fh:
                 try:
                     fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
@@ -412,8 +407,8 @@ def run(pr):
                                                            f"needs a human"} if names else \
             {"pr": pr, "status": "nothing-to-fix"}
     wt = worktree(meta, prior)
-    os.makedirs(STATE, exist_ok=True)
-    scratch = tempfile.mkdtemp(prefix=f"{pr}-", dir=STATE)
+    os.makedirs(names.SCRATCH, exist_ok=True)
+    scratch = tempfile.mkdtemp(prefix=f"{pr}-", dir=names.SCRATCH)
     try:
         if conflict:
             session, merged = merge(pr, wt, meta, state.get("session"), scratch)
@@ -502,13 +497,14 @@ def main():
     ap.add_argument("cmd", choices=("run", "dump"))
     ap.add_argument("--pr", type=int, required=True)
     a = ap.parse_args()
+    names.migrate()
     if a.cmd == "dump":
         meta = json.loads(sh(["gh", "pr", "view", str(a.pr), "--repo", REPO, "--json", "headRefOid"]))
         state = load(a.pr)
         return print(json.dumps(feedback(a.pr, meta["headRefOid"], state) + failed_jobs(checks(meta["headRefOid"]), state),
                                 indent=2))
-    os.makedirs(STATE, exist_ok=True)
-    with open(os.path.join(STATE, f"{a.pr}.lock"), "w") as lock:
+    os.makedirs(os.path.dirname(names.lock(REPO, a.pr)), exist_ok=True)
+    with open(names.lock(REPO, a.pr, ".fix"), "w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

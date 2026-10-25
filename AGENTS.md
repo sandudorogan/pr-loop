@@ -16,7 +16,7 @@ One process serves every repo in `REPOS` (`pr_wizard/names.py`): `iprally/iprall
  pr_wizard/queue ── gates ── review lane (3 workers) ─── pr_review.py run × {opus, codex, quality}
    decide()          │                                       │ posts 1 review per reviewer, marker in body
    same head         │                                       ▼
-   own-diff hash     │                         state ~/.local/state/review-queue.json
+   own-diff hash     │                         state ~/.local/state/pr-wizard/state.db
    trivial files     │                                       │ my PR, reviewers done, new feedback_key
    hold / rounds     │                                       ▼
    too big           └───────────────────── fix lane (3 workers) ─── pr_fix.py run
@@ -77,19 +77,22 @@ The live service runs the code in the **main checkout** (`~/workdir/review-queue
 
 | State | Owner | Shape |
 | --- | --- | --- |
-| `~/.local/state/review-queue.json` | review lane | `{pr: {sha, status, verdict, note, rounds, hold, at, files}}` |
-| `~/.local/state/review-queue.fixes.json` | fix lane | `{pr: {sha, key, status, note, errors, at}}` |
-| `~/.local/state/review-queue.next` | `--next`, `--wait` | JSON list of bumped PRs |
+| `~/.local/state/pr-wizard/state.db` `reviews` | review lane | `(repo, number)` → `{sha, status, verdict, note, rounds, hold, at, files}` |
+| `state.db` `fixes` | fix lane | `(repo, number)` → `{sha, key, status, note, errors, at}` |
+| `state.db` `next` | `--next`, `--wait` | bumped PRs in order |
+| `state.db` `runs` | live runs | `(repo, number)` → `{pid, lane, since}` for `-l` ▶ rows; dead pids ignored |
+| `state.db` `fix_state` | pr_fix.py | Codex session, handled reviews/jobs, deferred threads, `ci_tries`, `reruns`, `red` |
+| `state.db` `clean_reviews` | pr_review.py | `(repo, number, sha, reviewer)` heads a reviewer cleared |
 | `~/.local/state/review-queue.{lock,pid}` | daemon | single-daemon flock, pid for SIGUSR1 |
-| `~/.local/state/review-queue.locks/<N>` | both lanes | per-PR flock across processes |
-| `~/.local/state/review-queue.now.d/<pid>.json` | live runs | `{pr: "<lane> HH:MM:SS"}` for `-l` ▶ rows |
-| `~/.local/state/pr-fix/<N>.json` | pr_fix.py | Codex session, handled reviews/jobs, deferred threads, `ci_tries`, `reruns`, `red` |
-| `~/.local/state/pr-fix/karma.{0,1}.lock` | pr_fix.py | 2 Karma runs machine-wide |
-| `~/.claude/skills/delegator/.clean-reviews.json` | pr_review.py | `{"<pr>/<sha>": [reviewer]}` heads a reviewer cleared |
+| `~/.local/state/pr-wizard/locks/<owner>/<name>/<N>` | both lanes | per-PR flock across processes (`<N>.fix`: a pr_fix.py run) |
+| `~/.local/state/pr-wizard/slot.{0,1}.lock` | pr_fix.py | 2 Karma runs machine-wide |
+| `~/.local/state/pr-wizard/scratch/<N>-*` | pr_fix.py | Codex scratch dirs |
 | `~/.claude/skills/delegator/briefs/<N or branch>.md` | agent-delegator | task brief; branch name with `/` → `+` |
 | `~/Library/Logs/review-queue.log` | all | one shared log; gitops lines read `gitops#N` |
 
-State paths of a repo other than iprally carry a `-<name>` tag (`review-queue-gitops.*`, `pr-fix-gitops/`).
+`state.db` is SQLite in WAL mode, written through `pr_wizard/db.py` only. Every entry point runs `names.migrate()` first:
+it imports the old JSON files once (`pr-wizard migrate -n` shows what), moves them to `pr-wizard/legacy/<ts>/`,
+and `pr-wizard migrate --reverse` exports the db back to them.
 The daemon also holds `review-queue-gitops.lock` and skips gitops while an old gitops daemon holds it.
 Review worktrees: `<repo>/.claude/worktrees/.review-<N>` (one per PR, shared by its reviewers).
 Fix worktrees: the PR branch's existing worktree, else `<repo>/.claude/worktrees/<branch / → +>`.
@@ -152,17 +155,13 @@ tail -f ~/Library/Logs/review-queue.log
 
 Re-arm a parked fix pass (fix status stuck after `FIX_ERRORS` = 3):
 
-```python
-import fcntl, json, os
-p = os.path.expanduser("~/.local/state/review-queue.fixes.json")
-with open(p + ".lock", "w") as lock:
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    d = json.load(open(p)); d["16400"] |= {"key": None, "errors": 0}; json.dump(d, open(p, "w"), indent=2)
+```sh
+sqlite3 ~/.local/state/pr-wizard/state.db "UPDATE fixes SET key = NULL, errors = 0 WHERE repo = 'iprally/iprally' AND number = 16400"
 ```
 
 Then `review-queue --bg`.
 
-Clear a false clean: run the reviewer with `--force`, or remove it from the `"<pr>/<sha>"` list in `.clean-reviews.json`.
+Clear a false clean: run the reviewer with `--force`, or delete its `clean_reviews` row for that `(repo, number, sha)`.
 
 ## Gotchas
 
@@ -171,7 +170,7 @@ Clear a false clean: run the reviewer with `--force`, or remove it from the `"<p
 - **Full disk.** Worktree build caches (`ui/.shadow-cljs`, `ui/target`, `node_modules`) fill the disk.
   Reviewers and builds then fail with misleading output. Run `df -h` first when anything fails oddly.
 - **tests-red cause.** `fix_note` shows only "Karma red in <ns>". The cause is in
-  `~/.local/state/pr-fix/<N>.json` → `red.result.summary`.
+  `state.db` `fix_state.red` → `result.summary`.
 - **launchd priority.** `ProcessType` must stay `Standard`. `Background` pins every child to efficiency cores
   and shadow-cljs aborts with `aborted par-compile … still waiting for`.
 - **GraphQL search budget.** `search` queries use a separate hourly bucket that `gh api rate_limit` does not show.

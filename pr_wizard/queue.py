@@ -10,6 +10,7 @@ Usage:
   review-queue --wait 16400 16401   block until one of these PRs settles at its current head, print it
   review-queue --bg         refresh the daemon's queue now (starts the daemon if it is down)
   review-queue --prune      remove the worktrees of PRs that merged or that I approved (-n: dry run)
+  review-queue migrate      import today's JSON state into state.db (-n: dry run, --reverse: export it back)
 
 One GraphQL call lists the queue: my own open PRs, review requests, and PRs I reviewed. Local
 gates (head sha, own-diff fingerprint) drop every PR with nothing new, so the reviewers in
@@ -38,10 +39,10 @@ from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from fnmatch import fnmatch
-from glob import glob
 
-from pr_wizard.names import (FIXES, LABEL, LOCK, LOCKS, LOG, MONOREPO, NEXT, NO_FIX, NO_REVIEW, NOTIFIER, NOWS, PID,
-                              PR_FIX, PR_REVIEW, REPOS, STATE, env_repo, path, root, tag)
+from pr_wizard import db, names
+from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
+                              REPOS, STATE, env_repo, path, root, tag)
 
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
 
@@ -99,7 +100,7 @@ query($owner: String!, $name: String!, $number: Int!) {
 
 
 GUARD, GIT = threading.Lock(), threading.Lock()
-ACTIVE, NOTED = {}, {}
+NOTED = {}
 
 
 def child(repo):
@@ -152,17 +153,11 @@ def sh(*args, repo=MONOREPO):
 
 
 def load(repo, kind=STATE):
-    try:
-        return json.load(open(path(repo, kind)))
-    except (OSError, ValueError):
-        return {}
+    return {str(n): e for n, e in (db.reviews if kind == STATE else db.fixes)(repo).items()}
 
 
 def bumped(repo):
-    try:
-        return json.load(open(path(repo, NEXT)))
-    except (OSError, ValueError):
-        return []
+    return db.next_list(repo)
 
 
 def bumps():
@@ -170,21 +165,16 @@ def bumps():
 
 
 def save_bumped(repo, prs):
-    with open(f"{path(repo, NEXT)}.tmp", "w") as fh:
-        json.dump(prs, fh)
-    os.replace(f"{path(repo, NEXT)}.tmp", path(repo, NEXT))
+    with db.tx():
+        for n in set(bumped(repo)) - set(prs):
+            db.drop_next(repo, n)
+        db.bump(repo, *prs)
 
 
 def priority(pr, first):
     """Bumped PRs first, then mine, then the rest."""
     mine = first.get(pr["repo"], [])
     return pr["number"] not in mine, mine.index(pr["number"]) if pr["number"] in mine else 0, not pr["viewerDidAuthor"]
-
-
-def save(state, file):
-    with open(f"{file}.tmp", "w") as fh:
-        json.dump(state, fh, indent=2)
-    os.replace(f"{file}.tmp", file)
 
 
 def tagged(pr, requested):
@@ -338,30 +328,18 @@ def log_once(repo, n, msg):
 
 
 def in_review(repo, n, on, lane="review"):
-    with GUARD:
-        if on:
-            ACTIVE[repo, n] = f"{lane} {datetime.now():%T}"
-        else:
-            del ACTIVE[repo, n]
-        os.makedirs(path(repo, NOWS), exist_ok=True)
-        with open(f"{path(repo, NOWS)}/{os.getpid()}.json", "w") as fh:
-            json.dump({k: v for (r, k), v in ACTIVE.items() if r == repo}, fh)
+    db.run_start(repo, n, lane) if on else db.run_end(repo, n)
 
 
 def record(repo, key, entry, kind=STATE):
-    """Merge one PR's entry under a file lock: the daemon and a manual run may both write."""
-    with open(f"{path(repo, kind)}.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        state = load(repo, kind)
-        state[key] = entry
-        save(state, path(repo, kind))
+    (db.put_review if kind == STATE else db.put_fix)(repo, key, entry)
 
 
 @contextmanager
 def claimed(repo, n):
     """True while this process holds PR n; a second run skips it instead of reviewing it twice."""
-    os.makedirs(path(repo, LOCKS), exist_ok=True)
-    with open(f"{path(repo, LOCKS)}/{n}", "w") as fh:
+    os.makedirs(os.path.dirname(names.lock(repo, n)), exist_ok=True)
+    with open(names.lock(repo, n), "w") as fh:
         try:
             fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -561,9 +539,6 @@ def tick(only, dry_run):
     if only and not pending.prs:
         log(*only, "not an open PR")
     run(pending, False, reviewer(only, dry_run))
-    for repo in REPOS:
-        if os.path.exists(f"{path(repo, NOWS)}/{os.getpid()}.json"):
-            os.remove(f"{path(repo, NOWS)}/{os.getpid()}.json")
     say(f"tick done in {time.monotonic() - started:.0f} s")
 
 
@@ -595,6 +570,7 @@ def daemon():
         return say("daemon already running")
     with open(path(MONOREPO, PID), "w") as fh:
         fh.write(str(os.getpid()))
+    db.sweep_runs()
     pending, fixes, refresh_now, held = Pending(), Pending(workers=FIX_WORKERS), threading.Event(), {}
     signal.signal(signal.SIGUSR1, lambda *_: refresh_now.set())
 
@@ -691,15 +667,8 @@ def wait(repo, numbers, timeout):
 
 
 def reviewing(repo):
-    """{pr: start time} of the repo's PRs that live runs review now."""
-    prs = {}
-    for live in glob(f"{path(repo, NOWS)}/*.json"):
-        try:
-            os.kill(int(os.path.basename(live)[:-5]), 0)
-            prs |= {int(n): at for n, at in json.load(open(live)).items()}
-        except (OSError, ValueError):
-            pass
-    return prs
+    """{pr: "<lane> HH:MM:SS"} of the repo's PRs that live runs review or fix now."""
+    return {n: f"{r['lane']} {r['since'][11:19]}" for n, r in db.live_runs(repo).items()}
 
 
 def row(pr, seen, now, first, fixed={}):
@@ -871,8 +840,19 @@ def start_pruner():
     threading.Thread(target=prune_forever, daemon=True).start()
 
 
+def migrated(done, dry_run):
+    if not done:
+        return "state.db already holds the imported state"
+    rows = "\n".join(f"  {repo:<16} " + "  ".join(f"{t} {n}" for t, n in tables.items())
+                     for repo, tables in done["rows"].items())
+    return (f"{'would import' if dry_run else 'imported'}:\n{rows}\n{len(done['files'])} files to legacy/, "
+            f"{len(done['scratch'])} scratch dirs to scratch/, {len(done['ephemera'])} locks and live-run files deleted")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", nargs="?", choices=["migrate"], help="import today's JSON state into state.db")
+    ap.add_argument("--reverse", action="store_true", help="migrate: export state.db back to today's JSON files")
     ap.add_argument("--pr", type=int, help="review this PR now, even if its own diff is unchanged")
     ap.add_argument("-n", "--dry-run", action="store_true", help="print gate decisions, review nothing")
     ap.add_argument("-l", "--list", action="store_true", help="list the queue and each PR's last result")
@@ -888,6 +868,10 @@ def main():
                                                   f"else {MONOREPO}); --prune: only this repo")
     a = ap.parse_args()
     repo = a.repo or env_repo()
+    if a.cmd:
+        return print("\n".join(names.reverse()) if a.reverse else migrated(names.migrate(a.dry_run), a.dry_run))
+    if not (a.prune or a.bg):
+        names.migrate()
     if a.list:
         return show()
     if a.next:

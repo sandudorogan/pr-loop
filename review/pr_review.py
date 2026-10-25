@@ -25,8 +25,8 @@ next round number and the base to diff against, so a fresh session picks up exac
 where the last one stopped. A `briefs/<N>.md` (or `briefs/<branch, / → +>.md`, written before
 the PR existed) beside this script is the task the PR was opened for; the opus reviewer also
 checks the change against it. The one thing the PR cannot record is a round that found
-nothing, so those go in a local `.clean-reviews.json` — purely to avoid re-running a
-reviewer over a head it already cleared. Losing that file costs one redundant review.
+nothing, so those go in the `clean_reviews` table of state.db — purely to avoid re-running a
+reviewer over a head it already cleared. Losing that row costs one redundant review.
 
 The same marker is what makes these reviews visible to the PR watch loop: its
 scanner skips comments authored by the repo owner, and these are posted under the
@@ -36,7 +36,7 @@ import argparse, fcntl, json, os, re, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(DIR))
-from pr_wizard import names
+from pr_wizard import db, names
 
 SCHEMA = os.path.join(DIR, "review-schema.json")
 PROMPTS = os.path.join(DIR, "prompts")
@@ -50,8 +50,6 @@ LATE_SEVERITIES = {"critical", "high"}
 LATE_ROUND = 4
 MIN_CONFIDENCE = 0.6
 FYI_MARKER = "<!-- agent-review-fyi -->"
-
-CLEAN_CACHE = names.CLEAN_CACHE
 
 MARKER_PREFIX = "<!-- agent-review:"
 MARKER_RE = re.compile(
@@ -69,25 +67,12 @@ ENGINE_LABELS = {"claude": "Claude", "codex": "Codex"}
 LIMIT = re.compile(r"(usage|spend|session|rate) limit|hit your \S+ limit|quota exceeded", re.I)
 
 
-def clean_cache():
+def cleared(pr, sha):
     """Rounds that found nothing post no review, so they leave no marker on the PR; notes-only
-    rounds post one but leave nothing to fix. This remembers both only to avoid re-running a reviewer over a head it already cleared. Losing
-    the file costs one redundant review and nothing else — everything that matters is still on
-    the PR."""
-    try:
-        return json.load(open(CLEAN_CACHE))
-    except (OSError, ValueError):
-        return {}
-
-
-def record_clean(pr, sha, reviewer):
-    cache = clean_cache()
-    cache.setdefault(f"{pr}/{sha}", [])
-    if reviewer not in cache[f"{pr}/{sha}"]:
-        cache[f"{pr}/{sha}"].append(reviewer)
-    for key in list(cache)[:-40]:
-        del cache[key]
-    json.dump(cache, open(CLEAN_CACHE, "w"), indent=2)
+    rounds post one but leave nothing to fix. The db remembers both only to avoid re-running a reviewer over a head
+    it already cleared. Losing the rows costs one redundant review and nothing else — everything that matters is
+    still on the PR."""
+    return db.clean(REPO, pr, sha)
 
 
 def die(msg):
@@ -173,7 +158,7 @@ def scope(pr):
         note = f"This is review round {rnd} — the first review of this PR. Review the whole change."
 
     posted_at_head = {m["reviewer"] for m in at_head}
-    clean_at_head = set(clean_cache().get(f"{pr}/{head}", []))
+    clean_at_head = set(cleared(pr, head))
     seen_at_head = posted_at_head | clean_at_head
 
     return {
@@ -442,7 +427,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
 
     if not findings:
         if not dry_run:
-            record_clean(pr, sc["head"], reviewer)
+            db.add_clean(REPO, pr, sc["head"], reviewer)
         return {"posted": False, "stop": True, "reason": "no-findings", "round": sc["round"],
                 "verdict": data.get("verdict"), "findings": 0, "inline": 0,
                 "summary": (data.get("summary") or "").strip()}
@@ -468,7 +453,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
     if res is None:
         die("could not post the review")
     if fyi:
-        record_clean(pr, sc["head"], reviewer)
+        db.add_clean(REPO, pr, sc["head"], reviewer)
     return {"posted": True, "stop": fyi, **({"reason": "notes-only"} if fyi else {}),
             "review_id": res.get("id"), "url": res.get("html_url"),
             "inline": len(inline), "summary_only": len(findings) - len(inline),
@@ -506,6 +491,7 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="print the review payload, post nothing")
 
     a = ap.parse_args()
+    names.migrate()
     sc = scope(a.pr)
 
     if a.cmd == "scope":
