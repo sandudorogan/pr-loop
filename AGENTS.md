@@ -21,7 +21,7 @@ A macOS launchd daemon (`local.pr-wizard`) that reviews and fixes GitHub PRs for
 One process serves every project. Clients (the CLI, the app) read and change its state through a control API.
 
 ```text
- PR Wizard.app (app/)        pr-wizard CLI (review-queue = alias)        curl
+ PR Wizard.app (ui/)        pr-wizard CLI (review-queue = alias)        curl
         └───────────── HTTP/1.1 + JSON on ~/.local/state/pr-wizard/api.sock (0600) ─────────────┘
                                                 │
  pr-wizard --daemon ── refresh: one GraphQL call every 5 min (60 s when a worker idles, now on POST /v1/refresh)
@@ -39,7 +39,7 @@ One process serves every project. Clients (the CLI, the app) read and change its
    └─ prune thread: every 30 min, the worktrees of merged or approved PRs in every project
 ```
 
-- **Projects are detected** (`pr_wizard/projects.py`, api.md §4.7): the repos of every open PR I authored, that requests me,
+- **Projects are detected** (`daemon/pr_wizard/projects.py`, api.md §4.7): the repos of every open PR I authored, that requests me,
   that is assigned to me or that I reviewed, plus the keys of `projects` in the config. A project is worked only with a
   checkout: a main checkout under `detect.roots/*/` whose git remote is the repo, or `projects[repo].root`. Without one it
   is listed `no-checkout`, and its PRs are `skipped` rows. The daemon logs `projects: …` when the list changes.
@@ -47,7 +47,7 @@ One process serves every project. Clients (the CLI, the app) read and change its
 - **Review lane:** my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before, in every active project.
 - **Fix lane:** my PRs only. Input = unresolved threads, review bodies on the head, failed Actions jobs, base conflict.
 - **Pools:** one shared review pool and one shared fix pool. `lanes.separate` gives each active project its own pair,
-  sized by its effective `workers`. The switch is live: running passes finish in their old pool (`pr_wizard/pools.py`).
+  sized by its effective `workers`. The switch is live: running passes finish in their old pool (`daemon/pr_wizard/pools.py`).
 - Every PR dict carries `repo`. Lanes, locks and state key on `(repo, number)`: PR numbers of two repos overlap.
 - Children run with `PR_WIZARD_REPO` and `PR_WIZARD_REPO_ROOT` set to the PR's repo, `cwd` = its checkout.
   The scripts and the CLI read `IPR_REPO` / `IPR_REPO_ROOT` when the new names are unset. The daemon ignores both.
@@ -92,39 +92,52 @@ A PR override drops when the PR merges or closes. A push keeps it.
 
 **Project conventions, not iprally conventions.** The prompts are generic. Each run reads the project's own agent files,
 contributing doc, editorconfig, formatter and linter configs and skill list from the checkout at the PR head, and puts
-them in `{CONVENTIONS}` (`pr_wizard/conventions.py`, api.md §4.8). The fixer gates (`fix.gates`, api.md §4.9) are per-project config:
+them in `{CONVENTIONS}` (`daemon/pr_wizard/conventions.py`, api.md §4.8). The fixer gates (`fix.gates`, api.md §4.9) are per-project config:
 iprally's cljfmt and Karma live in its built-in override. A project with no gates runs none, and CI stays its gate.
 
 ## Files
 
+The daemon and each UI are separate trees. They share only the API contract.
+
+```text
+ daemon/      the backend: pr_wizard/ package, review/ runners + prompts, bin/, launchd/, tests/   (Python, stdlib)
+ ui/          PR Wizard.app, the macOS front end: SwiftPM package, script/                         (Swift)
+ contract/    api/v1/ wire fixtures + oracle/ config vectors: both sides test against them
+ docs/        the design
+ claude/      the pr-review-loop skill for agent-delegator
+ install.py   links.json: installs both sides into $HOME
+ bin review pr_wizard   temporary symlinks into daemon/, for a checkout that still runs the old links;
+                        drop them once install.py has re-linked (docs/status.md)
+```
+
 | Path | Role |
 | --- | --- |
-| `pr_wizard/queue.py` | Daemon, queue fetch, gates, both lanes, the local paths of the CLI (`--wait` loop, `-l` and `--next` with the daemon down, `--pr`, tick, `--prune`) |
-| `pr_wizard/pools.py` | The worker pools (api.md §4.7): shared, or one review + fix pair per project; `held` spans every pool so no PR runs twice |
-| `pr_wizard/cli.py` | The CLI (api.md §5): `-l`, `--next`, `--bg`, `--wait`'s bump, `--pause`, `--resume`, `config` go to the API; daemon down: `-l`/`--next` run on `state.db`, `--bg`/`--wait` kickstart `names.LABEL` |
-| `pr_wizard/client.py` | `client.call(method, path, body)` over `api.sock`; raises `Down` (no daemon) or `Failed` (api.md §2 error) |
-| `pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures; `--fake-speed S` and `--fake-empty` (or `PRW_FAKE_SPEED`, `PRW_FAKE_EMPTY=1`) set its knobs |
-| `pr_wizard/fake.py` | The stateful in-memory runtime behind `--fake` |
-| `pr_wizard/snapshot.py` | The queue snapshot (`GET /v1/queue`, `-l`): rows, groups, ranks, findings digests |
-| `pr_wizard/history.py` | `GET /v1/history` (api.md §3.13): a row per review or fix result, written in the result's transaction; merged/closed lookup of PRs that left the fetch (one batched `pullRequest(number:)` query per 20 PRs, ~1 point, only for open rows, an open PR is asked again after 30 min); the one-time seed from the stored results (`meta.history_seeded`) |
-| `pr_wizard/projects.py` | Project detection: the checkout scan of `detect.roots` and the project list with its status |
-| `pr_wizard/config.py` | `DEFAULTS`, load (never raises), validate, atomic save, `effective_for()` |
-| `pr_wizard/db.py` | `state.db`: schema by `user_version`, one connection per thread, every write `BEGIN IMMEDIATE` |
-| `pr_wizard/names.py` | Repos, the label and every state, log and skill path; `migrate()` / `reverse()` of the old JSON state |
-| `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.cli.main()`. `bin/review-queue` is a symlink to it |
-| `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
-| `review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
-| `review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |
-| `pr_wizard/gates.py` | The project's `fix.gates` (format, then test) run after Codex, `{GATES}` in `fix.md`, the retry prompt. iprally's cljfmt and Karma are its built-in override in `config.DEFAULTS`; a project without gates runs none |
-| `pr_wizard/conventions.py` | A project's own conventions read from the checkout at the PR head (agent files and their `@` includes, contributing doc, editorconfig, formatter configs, skills) → `{CONVENTIONS}`. None found: `needs_conventions` reviewers skip (`no-conventions`) |
-| `review/*-schema.json` | JSON schemas the engines must return |
+| `daemon/pr_wizard/queue.py` | Daemon, queue fetch, gates, both lanes, the local paths of the CLI (`--wait` loop, `-l` and `--next` with the daemon down, `--pr`, tick, `--prune`) |
+| `daemon/pr_wizard/pools.py` | The worker pools (api.md §4.7): shared, or one review + fix pair per project; `held` spans every pool so no PR runs twice |
+| `daemon/pr_wizard/cli.py` | The CLI (api.md §5): `-l`, `--next`, `--bg`, `--wait`'s bump, `--pause`, `--resume`, `config` go to the API; daemon down: `-l`/`--next` run on `state.db`, `--bg`/`--wait` kickstart `names.LABEL` |
+| `daemon/pr_wizard/client.py` | `client.call(method, path, body)` over `api.sock`; raises `Down` (no daemon) or `Failed` (api.md §2 error) |
+| `daemon/pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures; `--fake-speed S` and `--fake-empty` (or `PRW_FAKE_SPEED`, `PRW_FAKE_EMPTY=1`) set its knobs |
+| `daemon/pr_wizard/fake.py` | The stateful in-memory runtime behind `--fake` |
+| `daemon/pr_wizard/snapshot.py` | The queue snapshot (`GET /v1/queue`, `-l`): rows, groups, ranks, findings digests |
+| `daemon/pr_wizard/history.py` | `GET /v1/history` (api.md §3.13): a row per review or fix result, written in the result's transaction; merged/closed lookup of PRs that left the fetch (one batched `pullRequest(number:)` query per 20 PRs, ~1 point, only for open rows, an open PR is asked again after 30 min); the one-time seed from the stored results (`meta.history_seeded`) |
+| `daemon/pr_wizard/projects.py` | Project detection: the checkout scan of `detect.roots` and the project list with its status |
+| `daemon/pr_wizard/config.py` | `DEFAULTS`, load (never raises), validate, atomic save, `effective_for()` |
+| `daemon/pr_wizard/db.py` | `state.db`: schema by `user_version`, one connection per thread, every write `BEGIN IMMEDIATE` |
+| `daemon/pr_wizard/names.py` | Repos, the label and every state, log and skill path; `migrate()` / `reverse()` of the old JSON state |
+| `daemon/bin/pr-wizard` | CLI entry point: puts `daemon/` on `sys.path`, runs `pr_wizard.cli.main()`. `daemon/bin/review-queue` is a symlink to it |
+| `daemon/review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
+| `daemon/review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
+| `daemon/review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |
+| `daemon/pr_wizard/gates.py` | The project's `fix.gates` (format, then test) run after Codex, `{GATES}` in `fix.md`, the retry prompt. iprally's cljfmt and Karma are its built-in override in `config.DEFAULTS`; a project without gates runs none |
+| `daemon/pr_wizard/conventions.py` | A project's own conventions read from the checkout at the PR head (agent files and their `@` includes, contributing doc, editorconfig, formatter configs, skills) → `{CONVENTIONS}`. None found: `needs_conventions` reviewers skip (`no-conventions`) |
+| `daemon/review/*-schema.json` | JSON schemas the engines must return |
 | `claude/skills/pr-review-loop/` | Claude Code PR watch skill + `scan.py` (used by agent-delegator) |
-| `launchd/local.pr-wizard.plist.tmpl` | The one service template, `{{ .chezmoi.homeDir }}` placeholder |
-| `install.py`, `links.json` | The one install step: check the tools on the plist PATH, symlink the repo into `$HOME`, render the plist into `.local/`, link the config (chezmoi from `chezmoi source-path`), bootstrap or restart the daemon, `app/script/install` + open (`--no-app`, `--no-chezmoi`, `--dry-run`) |
+| `daemon/launchd/local.pr-wizard.plist.tmpl` | The one service template, `{{ .chezmoi.homeDir }}` placeholder |
+| `install.py`, `links.json` | The one install step: check the tools on the plist PATH, symlink the repo into `$HOME`, render the plist into `.local/`, link the config (chezmoi from `chezmoi source-path`), bootstrap or restart the daemon, `ui/script/install` + open (`--no-app`, `--no-chezmoi`, `--dry-run`) |
 | `docs/` | The design: architecture, the API contract (`api.md`, cited by § in the code), the app, decisions, open items |
-| `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
-| `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; `tests/test_api_read.py` asserts the server against them |
-| `.github/workflows/release.yml` | A `v*` tag push: app test + lint, `app/script/package`, `app/script/notes`, `gh release create` with the dmg, zip and `SHA256SUMS` |
+| `ui/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
+| `contract/api/v1/` | Control API responses. The Swift tests decode them; `daemon/tests/test_api_read.py` asserts the server against them |
+| `.github/workflows/release.yml` | A `v*` tag push: app test + lint, `ui/script/package`, `ui/script/notes`, `gh release create` with the dmg, zip and `SHA256SUMS` |
 
 Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless a new entry in `docs/decisions.md` changes it.
 The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, no dependencies.
@@ -134,15 +147,15 @@ The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, n
 The live service runs the code in the **main checkout** (`~/workdir/review-queue`) through symlinks:
 
 ```text
-~/.local/bin/pr-wizard                       → bin/pr-wizard (launchd runs it)
-~/.local/bin/review-queue                    → bin/review-queue → bin/pr-wizard (compat alias)
+~/.local/bin/pr-wizard                       → daemon/bin/pr-wizard (launchd runs it)
+~/.local/bin/review-queue                    → daemon/bin/review-queue → daemon/bin/pr-wizard (compat alias)
 ~/.claude/skills/delegator/{pr_review.py,pr_fix.py,prompts,*-schema.json} → review/
 ~/.claude/skills/pr-review-loop              → claude/skills/pr-review-loop
 ~/Library/LaunchAgents/local.pr-wizard.plist → .local/local.pr-wizard.plist (rendered by install.py)
 ~/.config/pr-wizard/config.json              → chezmoi source .pr-wizard/config.json
 ```
 
-`~/.local/state/pr-wizard/state.db` holds every piece of state (SQLite, WAL, written through `pr_wizard/db.py` only).
+`~/.local/state/pr-wizard/state.db` holds every piece of state (SQLite, WAL, written through `daemon/pr_wizard/db.py` only).
 One code path owns each table:
 
 | Table | Owner | Key → shape |
@@ -202,10 +215,10 @@ GET · PUT · PATCH · DELETE   prs/<o>/<n>/<N>/config   the PR override and its
 
 ## The app
 
-`app/` builds `PR Wizard.app`: the queue window (project sidebar, table, inspector, findings peek), Settings (⌘,: General,
+`ui/` builds `PR Wizard.app`: the queue window (project sidebar, table, inspector, findings peek), Settings (⌘,: General,
 Lanes, Reviewers, Fixer, with a scope dropdown: All repos, then each project), the menu bar extra and the "Ready for your
 approval" notification. It is a client only: it talks to the daemon over `api.sock`, and "Start Daemon" kickstarts the
-label in `launchd-label` (default `local.pr-wizard`). `python3 -m pr_wizard.api --fake` serves it without the live daemon.
+label in `launchd-label` (default `local.pr-wizard`). `python3 -m pr_wizard.api --fake` (from `daemon/`) serves it without the live daemon.
 The ready alert must stay until the owner dismisses it: `NSUserNotificationAlertStyle = alert` makes Persistent the
 default on first registration, and General shows a fix-it row while System Settings has PR Wizard on Temporary.
 
@@ -242,8 +255,8 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
 ## Change workflow
 
 1. Work in a worktree: `git worktree add .worktrees/<branch> -b <branch> origin/main`. Never edit the main checkout: the daemon runs it.
-2. Test: `python3 -m unittest discover -s tests -v` (about 1 min; one module: `python3 -m unittest discover -s tests -p test_paths.py`).
-   App (from `app/`): `script/test` (`--filter <Suite>` for one suite), `script/lint`, `script/bundle` → `build/PR Wizard.app`, `script/run`.
+2. Test the daemon from `daemon/`: `python3 -m unittest discover -s tests -v` (about 1 min; one module: `-p test_paths.py`).
+   App (from `ui/`): `script/test` (`--filter <Suite>` for one suite), `script/lint`, `script/bundle` → `build/PR Wizard.app`, `script/run`.
    `script/contract` runs `ContractTests` (the real client) against `python3 -m pr_wizard.api --fake` on a temp socket; run it after any change to a wire shape, either side.
    `script/install` quits the installed copy and puts a fresh bundle at `/Applications/PR Wizard.app` (`~/Applications` is root-owned here).
    `script/icon` renders `wand.and.stars` into `Resources/AppIcon.icns`; commit the result. "Open at login" survives a reinstall.
@@ -253,7 +266,7 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
 3. Dry-run what you can: `pr-wizard -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`.
 4. Push straight to `main` (`git push origin HEAD:main`). Open no PRs here. Then `git -C ~/workdir/review-queue pull --ff-only`.
    Release the app: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z` (the git config refuses a bare tag). CI builds and publishes it; tag only a commit on `main`.
-5. Restart only for daemon code (`pr_wizard/*.py`). Check `pr-wizard -l` for ▶ rows first: a restart kills in-flight passes.
+5. Restart only for daemon code (`daemon/pr_wizard/*.py`). Check `pr-wizard -l` for ▶ rows first: a restart kills in-flight passes.
    `launchctl kickstart -k gui/$(id -u)/local.pr-wizard`
    `pr_review.py`, `pr_fix.py`, prompts and the config load fresh per run: no restart.
 6. Plist template or `links.json` change: `~/workdir/review-queue/install.py --no-app` (boots the daemon out, then in).

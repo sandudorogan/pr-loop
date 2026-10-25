@@ -1,16 +1,16 @@
 {
   "links": {
-    ".local/bin/review-queue": "bin/review-queue",
-    ".local/bin/pr-wizard": "bin/pr-wizard",
-    ".claude/skills/delegator/pr_review.py": "review/pr_review.py",
-    ".claude/skills/delegator/pr_fix.py": "review/pr_fix.py",
-    ".claude/skills/delegator/review-schema.json": "review/review-schema.json",
-    ".claude/skills/delegator/fix-schema.json": "review/fix-schema.json",
-    ".claude/skills/delegator/prompts": "review/prompts",
+    ".local/bin/review-queue": "daemon/bin/review-queue",
+    ".local/bin/pr-wizard": "daemon/bin/pr-wizard",
+    ".claude/skills/delegator/pr_review.py": "daemon/review/pr_review.py",
+    ".claude/skills/delegator/pr_fix.py": "daemon/review/pr_fix.py",
+    ".claude/skills/delegator/review-schema.json": "daemon/review/review-schema.json",
+    ".claude/skills/delegator/fix-schema.json": "daemon/review/fix-schema.json",
+    ".claude/skills/delegator/prompts": "daemon/review/prompts",
     ".claude/skills/pr-review-loop": "claude/skills/pr-review-loop"
   },
   "config": ".config/pr-wizard/config.json",
   "templates": {
-    "Library/LaunchAgents/local.pr-wizard.plist": "launchd/local.pr-wizard.plist.tmpl"
+    "Library/LaunchAgents/local.pr-wizard.plist": "daemon/launchd/local.pr-wizard.plist.tmpl"
   }
 }

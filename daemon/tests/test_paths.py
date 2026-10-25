@@ -52,9 +52,9 @@ class RunnerPaths(unittest.TestCase):
                 self.assertIn("--daemon", out.stdout)
 
     def test_both_cli_names_are_installed(self):
-        links = json.loads((ROOT / "links.json").read_text())["links"]
-        self.assertEqual(links[".local/bin/review-queue"], "bin/review-queue")
-        self.assertEqual(links[".local/bin/pr-wizard"], "bin/pr-wizard")
+        links = json.loads((ROOT.parent / "links.json").read_text())["links"]
+        self.assertEqual(links[".local/bin/review-queue"], "daemon/bin/review-queue")
+        self.assertEqual(links[".local/bin/pr-wizard"], "daemon/bin/pr-wizard")
 
     def test_scripts_take_repo_and_paths_from_names(self):
         for script in ("pr_review.py", "pr_fix.py"):
@@ -97,8 +97,8 @@ class RunnerPaths(unittest.TestCase):
         self.assertEqual([p["Label"] for p in plists], [names.LABEL])
         self.assertEqual(plists[0]["ProcessType"], "Standard")
         self.assertIn("/usr/sbin", plists[0]["EnvironmentVariables"]["PATH"].split(":"))
-        templates = json.loads((ROOT / "links.json").read_text())["templates"]
-        self.assertEqual(templates, {"Library/LaunchAgents/local.pr-wizard.plist": "launchd/local.pr-wizard.plist.tmpl"})
+        templates = json.loads((ROOT.parent / "links.json").read_text())["templates"]
+        self.assertEqual(templates, {"Library/LaunchAgents/local.pr-wizard.plist": "daemon/launchd/local.pr-wizard.plist.tmpl"})
 
     def test_the_cli_kickstarts_the_label_the_daemon_wrote(self):
         from pr_wizard import cli

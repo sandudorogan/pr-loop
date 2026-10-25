@@ -21,7 +21,7 @@ TOOLS = {"python3": "brew install python", "git": "xcode-select --install", "gh"
 
 
 def default_config():
-    spec = importlib.util.spec_from_file_location("pr_wizard_config", Path(__file__).parent / "pr_wizard/config.py")
+    spec = importlib.util.spec_from_file_location("pr_wizard_config", Path(__file__).parent / "daemon/pr_wizard/config.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return json.dumps(module.DEFAULTS, indent=2) + "\n"
@@ -79,7 +79,7 @@ def start(plist, label, dry_run):
 def install_app(root, dry_run):
     print(f"Build {APP}, then open it")
     if not dry_run:
-        subprocess.run([str(root / "app/script/install")], check=True)
+        subprocess.run([str(root / "ui/script/install")], check=True)
         subprocess.run(["open", APP], check=True)
 
 

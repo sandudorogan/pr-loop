@@ -17,7 +17,7 @@ stated reason, and record the change here. Most date from the overhaul of 2026-1
 | Control | SIGUSR1, a shell snippet to re-arm | HTTP/1.1 + JSON on `api.sock` |
 | Ready alert | terminal-notifier | `ready_for_approval` events; the app notifies |
 | UI | `review-queue -l` | `pr-wizard -l` and `PR Wizard.app` |
-| Code | `bin/review-queue`, 841 lines | `pr_wizard/` package; `bin/review-queue` → `bin/pr-wizard` |
+| Code | `daemon/bin/review-queue`, 841 lines | `daemon/pr_wizard/` package; `daemon/bin/review-queue` → `daemon/bin/pr-wizard` |
 | Name | review-queue (repo, label, paths) | PR Wizard; `review-queue` stays as a CLI alias |
 
 ## Process and transport

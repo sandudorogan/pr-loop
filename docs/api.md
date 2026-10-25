@@ -2,7 +2,7 @@
 
 This file is the contract between the daemon (`pr-wizard --daemon`, Python) and its clients: the CLI, the SwiftUI app and
 later UIs. Code cites it by section (`api.md §3.14`): keep the numbers stable. Where a row says *today*, it names the
-code before the overhaul (`review-queue@3dc9b3f`, `queue.py` was `bin/review-queue`). With no config file, the defaults
+code before the overhaul (`review-queue@3dc9b3f`, `queue.py` was `daemon/bin/review-queue`). With no config file, the defaults
 reproduce that behaviour.
 
 Invariant: **one daemon process for the whole system.** It detects projects from the owner's PRs, works
@@ -468,7 +468,7 @@ catch-up, a UI checks `GET /v1/queue`: post it only when that `key` is still `gr
 | `real_path` | string | `os.path.realpath(path)`: the chezmoi source file when the symlink is in place |
 | `source` | `defaults` \| `file` | `defaults` when the file is missing or invalid |
 | `error` | string \| null | why the file was not used (parse error or the first validation problem) |
-| `choices.*` | [string] | the app builds pickers from these, never from hard-coded lists. `prompts` = `*.md` in `review/prompts/` |
+| `choices.*` | [string] | the app builds pickers from these, never from hard-coded lists. `prompts` = `*.md` in `daemon/review/prompts/` |
 | `choices.claude_efforts` | [string] | `claude --help` of Claude Code 2.1.310: `low, medium, high, xhigh, max` |
 | `choices.codex_efforts` | [string] | the levels codex-cli 0.164.0's model catalog offers. Its parser also takes `none` and `minimal`, but no listed model supports them, so they are left out. Validation accepts only this list |
 | `choices.claude_models` | [string] | suggestions; any non-empty string is valid |
@@ -1005,10 +1005,10 @@ PR arguments take `N` (repo = `--repo`, else `PR_WIZARD_REPO`/`IPR_REPO`, else `
 
 ## 7. Test fixtures
 
-`tests/fixtures/api/v1/` holds one JSON file per response above (`info.json`, `queue.json`,
+`contract/api/v1/` holds one JSON file per response above (`info.json`, `queue.json`,
 `events.json`, `history.json`, `config.json`, `pr-config.json`, `prompt.json`, `next.json`, `accepted.json`, `paused.json`,
 `error-invalid-config.json`, `error-busy.json`). Python tests assert the server's output for a fixed fake
-runtime equals them. Swift tests decode the same files. `python3 -m pr_wizard.api --fake --socket /tmp/prw.sock`
+runtime equals them. Swift tests decode the same files. `python3 -m pr_wizard.api --fake --socket /tmp/prw.sock` (from `daemon/`)
 serves that fake runtime. It is stateful and in memory, it starts from the fixtures, and it uses the real route table, validator and
 long-poll code. Every accepted action changes the snapshot and wakes the waiters:
 

@@ -4,7 +4,7 @@ PR Wizard.app is the macOS UI of the PR Wizard daemon. It shows the queue, edits
 "Ready for your approval" notification. It is one client of the control API on `api.sock`. It never runs reviews
 or fixes itself. Other OS UIs can come later. Each one is its own client of the same API (`docs/api.md`).
 
-Read this file before you change `app/`. `api.md` owns every wire shape: where this file names a field, `api.md` wins.
+Read this file before you change `ui/`. `api.md` owns every wire shape: where this file names a field, `api.md` wins.
 
 ## 1. Toolchain
 
@@ -20,10 +20,10 @@ The owner's machine has the Command Line Tools only. There is no Xcode.
 
 Hard rules:
 
-- **Never run plain `swift test`.** Under the CLT it builds the tests, runs zero, and exits 0. `app/script/test`
+- **Never run plain `swift test`.** Under the CLT it builds the tests, runs zero, and exits 0. `ui/script/test`
   adds `-Xswiftc -F <CLT>/Library/Developer/Frameworks` and the rpaths. The same flags in `Package.swift` do not help.
 - **No SwiftUI macros.** The CLT has no `SwiftUIMacros` plugin, so `@Entry` fails. Write `FocusedValueKey` and
-  `EnvironmentKey` by hand (see `app/Sources/PRWizard/FocusedValues+QueueFocus.swift`).
+  `EnvironmentKey` by hand (see `ui/Sources/PRWizard/FocusedValues+QueueFocus.swift`).
 - **No dependencies.** Apple frameworks only: SwiftUI, AppKit, Network, Observation, ServiceManagement, UserNotifications.
 
 ## 2. Conventions
@@ -32,7 +32,7 @@ A reviewer rejects a change that breaks one of these.
 
 | Topic | Rule |
 | --- | --- |
-| Language | Upcoming features on every target: `NonisolatedNonsendingByDefault`, `InferIsolatedConformances`, `ExistentialAny`, `MemberImportVisibility` (`app/Package.swift`). |
+| Language | Upcoming features on every target: `NonisolatedNonsendingByDefault`, `InferIsolatedConformances`, `ExistentialAny`, `MemberImportVisibility` (`ui/Package.swift`). |
 | Isolation | App target: `.defaultIsolation(MainActor.self)`. `PRWizardKit`: nonisolated by default. Stores are `@MainActor @Observable final class`. Models are `Codable, Sendable, Hashable` structs. Transport and client are `Sendable` structs. |
 | Concurrency | `async`/`await` only. No `DispatchQueue`, completion handlers, `Task.detached`, `@unchecked Sendable` or `nonisolated(unsafe)`. A store owns its long-lived `Task` and cancels it in `stop()`. Cancellation closes the socket. |
 | Observation | `@Observable` with `@State`, `@Environment(Type.self)`, `@Bindable`. No `ObservableObject`, no Combine. |
@@ -46,15 +46,15 @@ A reviewer rejects a change that breaks one of these.
 | Accessibility | An icon-only control has a `Label` or `.accessibilityLabel`. Color is never the only signal: a badge is symbol + text. Every toolbar action has a menu command and a shortcut. `.help` on toolbar items. |
 | Text | `Text("#\(n)")` formats the `Int` by locale (`#17.190`). Use `Text(verbatim:)` for numbers and ids. |
 | Resources | No SwiftPM `resources:` in shipping targets. Tests read fixtures by path. |
-| Format | `app/.swift-format`: 4 spaces, line length 120, `NeverForceUnwrap`, `NeverUseForceTry`, `NeverUseImplicitlyUnwrappedOptionals`, `OrderedImports`, `UseLetInEveryBoundCaseVariable`. Never write a partial `rules` map: it replaces the defaults (5 rules on instead of ~40). |
+| Format | `ui/.swift-format`: 4 spaces, line length 120, `NeverForceUnwrap`, `NeverUseForceTry`, `NeverUseImplicitlyUnwrappedOptionals`, `OrderedImports`, `UseLetInEveryBoundCaseVariable`. Never write a partial `rules` map: it replaces the defaults (5 rules on instead of ~40). |
 | Notifications | Exactly one kind: "Ready for your approval" on a colleague's PR (§6.6). Do not add more. |
 
 ## 3. Package layout
 
-One SwiftPM package at `app/`. XcodeGen and Tuist only make projects for `xcodebuild`, so they add nothing here.
+One SwiftPM package at `ui/`. XcodeGen and Tuist only make projects for `xcodebuild`, so they add nothing here.
 
 ```text
-app/
+ui/
 ├── Package.swift            PRWizardKit (library) · PRWizard (executable) · PRWizardKitTests
 ├── .swift-format
 ├── Resources/               Info.plist (bundle id local.pr-wizard.app) · AppIcon.icns (script/icon)
@@ -62,7 +62,7 @@ app/
 ├── Sources/
 │   ├── PRWizardKit/         models, transport, client, feeds, stores, presentation. No SwiftUI.
 │   └── PRWizard/            App, scenes, views, system adapters. Thin: no logic a test needs.
-└── Tests/PRWizardKitTests/  Swift Testing; fixtures from tests/fixtures/api/v1/ at the repo root
+└── Tests/PRWizardKitTests/  Swift Testing; fixtures from contract/api/v1/ at the repo root
 ```
 
 The split is the design. Every decision a test can check lives in `PRWizardKit`: what a row shows, which action is
@@ -70,7 +70,7 @@ on, which marker a setting gets, what a patch holds. A view reads a Kit value an
 
 ## 4. Build, run, install, release
 
-All commands run from `app/`.
+All commands run from `ui/`.
 
 | Task | Command |
 | --- | --- |
@@ -80,7 +80,7 @@ All commands run from `app/`.
 | Contract | `script/contract`: the fake daemon on a temp socket, then `ContractTests` against it |
 | Bundle | `script/bundle` → `build/PR Wizard.app` (release build, `Info.plist`, icon, ad-hoc sign, verify) |
 | Run | `script/run` · against a fake: `script/run -- -socket /tmp/prw.sock` |
-| Fake daemon | `python3 -m pr_wizard.api --fake --socket /tmp/prw.sock` (from the repo root; `api.md §7`) |
+| Fake daemon | `python3 -m pr_wizard.api --fake --socket /tmp/prw.sock` (from `daemon/`; `api.md §7`) |
 | Install | `script/install` → `/Applications/PR Wizard.app` |
 | Package | `VERSION=X.Y.Z script/package` → `build/PR-Wizard-X.Y.Z.{dmg,zip}` + `build/SHA256SUMS` |
 | Notes · icon | `script/notes vX.Y.Z` (release body) · `script/icon` → `Resources/AppIcon.icns` (commit it) |
@@ -107,13 +107,13 @@ All commands run from `app/`.
                      ~/.local/state/pr-wizard/api.sock ── the one daemon (launchd local.pr-wizard), every repo
 ```
 
-- `AppDelegate` (`app/Sources/PRWizard/AppDelegate.swift`) builds one `DaemonClient` and every store on it. It
+- `AppDelegate` (`ui/Sources/PRWizard/AppDelegate.swift`) builds one `DaemonClient` and every store on it. It
   calls `store.start()` and `notifications.start()` in `applicationDidFinishLaunching`. State restoration can
   launch the app with the main window closed, so a window `.task` must not start a feed.
 - The app talks to the daemon through the API only. It never reads `state.db`, never runs the `pr-wizard` CLI, and
   never runs git or chezmoi. A GUI app gets a minimal PATH in which `/usr/bin/python3` is too old.
 - **Start Daemon** runs `/bin/launchctl kickstart gui/<uid>/<label>` through `DaemonLauncher`
-  (`app/Sources/PRWizardKit/Daemon/DaemonLauncher.swift`). The label is the one line of
+  (`ui/Sources/PRWizardKit/Daemon/DaemonLauncher.swift`). The label is the one line of
   `~/.local/state/pr-wizard/launchd-label`, which survives a stop. Without the file it is `local.pr-wizard`.
   Paths live in `DaemonLocation`.
 
@@ -128,7 +128,7 @@ All commands run from `app/`.
 | `DaemonLauncher` | `ProcessDaemonLauncher` (app) | a recording `run` |
 | `LoginItemService` | `SMAppService` extension (app) | a scripted status |
 
-**Errors.** `APIError` (`app/Sources/PRWizardKit/APIError.swift`): `.down` (ENOENT, ECONNREFUSED), `.timeout`,
+**Errors.** `APIError` (`ui/Sources/PRWizardKit/APIError.swift`): `.down` (ENOENT, ECONNREFUSED), `.timeout`,
 `.http(status:code:message:details:)`, `.decoding`, `.incompatible(api:)`. Views switch on it. No string errors.
 
 - `NetworkConnection` waits forever on a missing or stale socket. `UnixSocketTransport` checks ENOENT and
@@ -137,7 +137,7 @@ All commands run from `app/`.
 
 ### 5.1 Live updates
 
-The queue and the events use one loop, `LongPoll<Value>` (`app/Sources/PRWizardKit/Feeds/LongPoll.swift`).
+The queue and the events use one loop, `LongPoll<Value>` (`ui/Sources/PRWizardKit/Feeds/LongPoll.swift`).
 A store never sees the transport.
 
 ```text
@@ -175,7 +175,7 @@ A store never sees the transport.
 
 ## 6. Scenes
 
-`app/Sources/PRWizard/PRWizardApp.swift` declares three scenes: the `Window` "PR Wizard" (id `queue`), `Settings`
+`ui/Sources/PRWizard/PRWizardApp.swift` declares three scenes: the `Window` "PR Wizard" (id `queue`), `Settings`
 and the `MenuBarExtra`. The activation policy is `.regular`. Closing the window keeps the app running while the
 menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAfterLastWindowClosed`).
 
@@ -424,13 +424,13 @@ notification center.
 
 | Layer | What | How |
 | --- | --- | --- |
-| Models | every `tests/fixtures/api/v1/*.json` decodes; unknown fields and enum values survive | `Fixture` reads the repo-root fixtures by `#filePath`. The Python tests (`tests/test_api_read.py`) assert the same files. |
+| Models | every `contract/api/v1/*.json` decodes; unknown fields and enum values survive | `Fixture` reads the repo-root fixtures by `#filePath`. The Python tests (`daemon/tests/test_api_read.py`) assert the same files. |
 | Codec | request bytes, response parse, chunked rejected | byte fixtures |
 | Client | method, path, query, body per endpoint; `PRRef` in the path; error bodies → `APIError` | `FakeTransport` |
 | Socket | 200, 4xx, ENOENT and refused → `.down`, timeout | `TestSocketServer` (POSIX socket in `$TMPDIR`) |
 | Feeds | cursor threading, backoff 2…30, cancellation | `ScriptedDaemon` + recording sleeper |
 | Stores | every phase, pending actions, 409 banner; settings dirty/revert/apply 200/412/422, scopes, Use Default, PATCH vs PUT; PR settings markers, writes, 412, 422, DELETE, gone; history refetch rule | `ScriptedDaemon` |
-| Resolver oracle | `OverrideResolver` on `config.json` equals the daemon's `effective` for every project; patches checked with `merge_patch` | `tests/fixtures/oracle/config.json` |
+| Resolver oracle | `OverrideResolver` on `config.json` equals the daemon's `effective` for every project; patches checked with `merge_patch` | `contract/oracle/config.json` |
 | Notifications | catch-up, live, cursor, permission, content | `FakeNotifier`, `MemoryCursor`, `events.json` |
 | Presentation | `StatusStyle`, `SeverityStyle`, `ActionAvailability`, `ConfigPatch`, `ReviewerSummary`, `WorkerTotals`, `LanesLayout`, `ConventionsLine`, `GateDraft`, `MenuItems`, `FindingsSpeech`, … | pure, parameterized |
 | Contract | the real `DaemonClient` against `python3 -m pr_wizard.api --fake`, every endpoint | `script/contract` sets `PR_WIZARD_CONTRACT_SOCKET`; `ContractTests` is disabled without it |

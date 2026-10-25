@@ -16,7 +16,7 @@ from test_snapshot import mismatches, spec
 import test_snapshot
 from pr_wizard import api, config, db, fake, names
 
-FIXTURES = Path(__file__).parent / "fixtures/api/v1"
+FIXTURES = ROOT.parent / "contract/api/v1"
 
 
 def fixture(name):

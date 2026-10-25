@@ -13,6 +13,17 @@ summary like "No ship: the round 5 blocker remains". `post()` records `no-findin
 checks only the summary's length and error words, so the run can count toward clean and the ready alert.
 Option: treat a non-ship verdict with zero findings as a false clean, and retry with `--force`.
 
+## Owner: deploy the daemon/ and ui/ layout
+
+The repo now keeps the backend in `daemon/` and the macOS app in `ui/`. Root symlinks `bin`, `review` and
+`pr_wizard` point into `daemon/`, so a plain pull keeps the installed links and the running daemon working.
+
+1. Wait until `pr-wizard -l` shows no ▶ rows.
+2. `git -C ~/workdir/review-queue pull --ff-only`, then `python3 ~/workdir/review-queue/install.py`. It re-links
+   into `daemon/`, restarts the daemon and rebuilds the app.
+3. `rm -rf ~/workdir/review-queue/app`: only ignored build output is left there.
+4. Then drop the three root symlinks in one commit.
+
 ## Owner: cutover B, the checkout half
 
 The checkout and the install backups keep the old name until then: `~/workdir/review-queue`,
@@ -65,10 +76,10 @@ An agent session cannot activate apps or capture the screen, so these wait for t
 
 | Where | What |
 | --- | --- |
-| `pr_wizard/names.py` `MONOREPO` | the default repo of a bare `N` on the CLI and in the scripts |
-| `pr_wizard/names.py` `REPOS` | the two repos of the old JSON layout, for `migrate()` / `--reverse` only |
-| `pr_wizard/config.py` `DEFAULTS` | iprally's gates and gitops' review-off, as built-in project overrides |
+| `daemon/pr_wizard/names.py` `MONOREPO` | the default repo of a bare `N` on the CLI and in the scripts |
+| `daemon/pr_wizard/names.py` `REPOS` | the two repos of the old JSON layout, for `migrate()` / `--reverse` only |
+| `daemon/pr_wizard/config.py` `DEFAULTS` | iprally's gates and gitops' review-off, as built-in project overrides |
 | `claude/skills/pr-review-loop/scan.py` | hard-coded `iprally/iprally`; reads `IPR_REPO_ROOT` only |
-| `review/pr_review.py` | briefs under `~/.claude/skills/delegator/briefs/`, by bare PR number or branch |
+| `daemon/review/pr_review.py` | briefs under `~/.claude/skills/delegator/briefs/`, by bare PR number or branch |
 | `claude/skills/pr-review-loop/SKILL.md` | needs agent-delegator's `pr-fixer` and `github` agents |
 | `links.json` | the symlinked entry points agent-delegator calls; keep them until it stops calling them |

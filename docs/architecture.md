@@ -55,22 +55,22 @@ Rules for every front end, present and future:
 
 | Module | Role |
 | --- | --- |
-| `pr_wizard/queue.py` | the daemon: `Runtime`, the refresh, the gates, both lanes, prune; and the CLI's local paths |
-| `pr_wizard/pools.py` | the worker pools: shared, or one review + fix pair per project; `held` spans every pool, so no PR runs twice |
-| `pr_wizard/projects.py` | project detection and the checkout scan of `detect.roots` |
-| `pr_wizard/api.py` | the control API server and its route table; `--fake` serves `fake.py` |
-| `pr_wizard/fake.py` | a stateful in-memory runtime for client tests and UI work without the live daemon |
-| `pr_wizard/snapshot.py` | the queue snapshot (`GET /v1/queue`, `-l`) |
-| `pr_wizard/history.py` | `GET /v1/history` and the merged/closed lookup of PRs that left the fetch |
-| `pr_wizard/config.py` | defaults, load (never raises), validate, atomic save, `effective_for()` |
-| `pr_wizard/db.py` | `state.db`: schema by `user_version`, one connection per thread, `BEGIN IMMEDIATE` writes |
-| `pr_wizard/conventions.py` | a project's own conventions, read from the checkout at the PR head → `{CONVENTIONS}` |
-| `pr_wizard/gates.py` | the project's fixer gates (format, then test) |
-| `pr_wizard/names.py` | repos, the label, every state, log and skill path; the one-time JSON → SQLite migration |
-| `pr_wizard/cli.py`, `client.py` | the CLI and its socket client |
-| `review/pr_review.py` | one reviewer on one PR: scope the round, run the engine, post the review |
-| `review/pr_fix.py` | one fix pass on one PR: collect feedback, run Codex, run the gates, commit, push, reply, resolve |
-| `review/prompts/*.md`, `review/*-schema.json` | prompt templates and the JSON the engines must return |
+| `daemon/pr_wizard/queue.py` | the daemon: `Runtime`, the refresh, the gates, both lanes, prune; and the CLI's local paths |
+| `daemon/pr_wizard/pools.py` | the worker pools: shared, or one review + fix pair per project; `held` spans every pool, so no PR runs twice |
+| `daemon/pr_wizard/projects.py` | project detection and the checkout scan of `detect.roots` |
+| `daemon/pr_wizard/api.py` | the control API server and its route table; `--fake` serves `fake.py` |
+| `daemon/pr_wizard/fake.py` | a stateful in-memory runtime for client tests and UI work without the live daemon |
+| `daemon/pr_wizard/snapshot.py` | the queue snapshot (`GET /v1/queue`, `-l`) |
+| `daemon/pr_wizard/history.py` | `GET /v1/history` and the merged/closed lookup of PRs that left the fetch |
+| `daemon/pr_wizard/config.py` | defaults, load (never raises), validate, atomic save, `effective_for()` |
+| `daemon/pr_wizard/db.py` | `state.db`: schema by `user_version`, one connection per thread, `BEGIN IMMEDIATE` writes |
+| `daemon/pr_wizard/conventions.py` | a project's own conventions, read from the checkout at the PR head → `{CONVENTIONS}` |
+| `daemon/pr_wizard/gates.py` | the project's fixer gates (format, then test) |
+| `daemon/pr_wizard/names.py` | repos, the label, every state, log and skill path; the one-time JSON → SQLite migration |
+| `daemon/pr_wizard/cli.py`, `client.py` | the CLI and its socket client |
+| `daemon/review/pr_review.py` | one reviewer on one PR: scope the round, run the engine, post the review |
+| `daemon/review/pr_fix.py` | one fix pass on one PR: collect feedback, run Codex, run the gates, commit, push, reply, resolve |
+| `daemon/review/prompts/*.md`, `daemon/review/*-schema.json` | prompt templates and the JSON the engines must return |
 
 ## 4. The lanes
 
@@ -153,7 +153,7 @@ is in AGENTS.md › Contracts.
 | `feedback_key` | the fix lane runs when it moves; any new kind of input must move it |
 | `review-queue --wait/--next/--pr/-l` and their output | the delegator skill, the `github` agent |
 | symlinked entry points in `links.json` | agent-delegator (`~/.claude/skills/delegator/{pr_review.py, pr_fix.py, prompts}`, `~/.local/bin/review-queue`) |
-| the control API v1 | every front end; `tests/fixtures/api/v1/` pins it on both sides |
+| the control API v1 | every front end; `contract/api/v1/` pins it on both sides |
 
 ## 8. Platform coupling
 

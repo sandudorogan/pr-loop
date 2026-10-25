@@ -7,7 +7,7 @@ enum Fixture {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
-        .appending(path: "tests/fixtures/api/v1")
+        .appending(path: "contract/api/v1")
 
     static func data(_ name: String) throws -> Data {
         try Data(contentsOf: directory.appending(path: name))

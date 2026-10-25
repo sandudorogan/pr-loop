@@ -5,6 +5,7 @@ from glob import glob
 
 HOME = os.path.expanduser("~")
 ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+CONTRACT = os.path.join(os.path.dirname(ROOT), "contract")
 REVIEW_DIR = os.path.join(ROOT, "review")
 PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
 PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from pr_wizard import api, config, db, names
 
-FIXTURES = os.path.join(names.ROOT, "tests", "fixtures", "api", "v1")
+FIXTURES = os.path.join(names.CONTRACT, "api", "v1")
 GROUPS = ("active", "queued", "ready", "idle", "paused")
 KEEP_EVENTS, ZERO = 1000, dict.fromkeys(("critical", "high", "medium", "low"), 0)
 

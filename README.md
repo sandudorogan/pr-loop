@@ -107,8 +107,8 @@ The design is in [docs/](docs/): [architecture](docs/architecture.md), the [API 
 the [app](docs/ui-macos.md), [decisions](docs/decisions.md) and [open items](docs/status.md).
 
 ```sh
-python3 -m unittest discover -s tests -v
-cd app && script/test && script/lint
+(cd daemon && python3 -m unittest discover -s tests -v)
+(cd ui && script/test && script/lint)
 ```
 
 ### Release
@@ -117,17 +117,17 @@ A `v*` tag publishes a GitHub release:
 
 ```text
  git push origin v1.2.0 ──▶ .github/workflows/release.yml (macos-26)
-                              app/script/test · lint
-                              VERSION=1.2.0 app/script/package ──▶ PR-Wizard-1.2.0.dmg   app + Applications link
+                              ui/script/test · lint
+                              VERSION=1.2.0 ui/script/package ──▶ PR-Wizard-1.2.0.dmg   app + Applications link
                                                                   PR-Wizard-1.2.0.zip
                                                                   SHA256SUMS
-                              app/script/notes v1.2.0 ──▶ install steps + commits since the last tag
+                              ui/script/notes v1.2.0 ──▶ install steps + commits since the last tag
                               gh release create v1.2.0
 ```
 
 ```sh
 git tag -a v1.2.0 -m v1.2.0 && git push origin v1.2.0
-cd app && VERSION=1.2.0 script/package    # the same files locally, in app/build/
+cd app && VERSION=1.2.0 script/package    # the same files locally, in ui/build/
 ```
 
 The tag sets the app's version (`CFBundleShortVersionString`). The commit count sets its build number.

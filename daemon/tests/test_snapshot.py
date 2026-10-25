@@ -233,7 +233,7 @@ class Snapshot(unittest.TestCase):
         self.assertNotEqual(self.snap()["rev"], a["rev"])
 
     def test_the_output_has_the_shape_of_the_api_fixture(self):
-        fixture = json.loads((FIXTURES / "api/v1/queue.json").read_text())
+        fixture = json.loads((FIXTURES.parents[2] / "contract/api/v1/queue.json").read_text())
         snap = self.snap()
         top = spec([fixture])
         self.assertEqual(snap.keys(), fixture.keys())
