@@ -34,6 +34,11 @@ public struct DaemonClient: DaemonAPI {
         return try await send(HTTPRequest(.patch, "/v1/config", body: JSONEncoder().encode(body)))
     }
 
+    public func putConfig(_ config: JSONValue, baseRev: String) async throws -> ConfigEnvelope {
+        let body: JSONValue = .object(["base_rev": .string(baseRev), "config": config])
+        return try await send(HTTPRequest(.put, "/v1/config", body: JSONEncoder().encode(body)))
+    }
+
     public func prompt(named name: String) async throws -> Prompt {
         try await send(HTTPRequest(.get, "/v1/prompts/\(name)"))
     }

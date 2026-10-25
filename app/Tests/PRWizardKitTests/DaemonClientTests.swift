@@ -63,6 +63,16 @@ import Testing
         #expect(try await transport.lastBody == .object(["base_rev": .string("3f9a0c1d2e4b"), "patch": patch]))
     }
 
+    @Test("putConfig sends the whole document with its base rev")
+    func putConfig() async throws {
+        let transport = try FakeTransport(fixture: "config.json")
+        let config: JSONValue = ["projects": ["iprally/gitops": ["fix": ["model": .null]]]]
+        _ = try await DaemonClient(transport: transport).putConfig(config, baseRev: "3f9a0c1d2e4b")
+        #expect(await transport.last?.method == .put)
+        #expect(await transport.last?.path == "/v1/config")
+        #expect(try await transport.lastBody == ["base_rev": "3f9a0c1d2e4b", "config": config])
+    }
+
     @Test("a stale base rev is a 412 stale_config")
     func staleConfig() async throws {
         let body = #"{"error": {"code": "stale_config", "message": "the config changed since rev 3f9a0c1d2e4b"}}"#

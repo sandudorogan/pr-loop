@@ -13,6 +13,7 @@ actor ScriptedDaemon: DaemonAPI {
         case setPaused(Bool)
         case config
         case patchConfig(JSONValue, baseRev: String)
+        case putConfig(JSONValue, baseRev: String)
     }
 
     private struct Unscripted: Error {}
@@ -68,6 +69,11 @@ actor ScriptedDaemon: DaemonAPI {
 
     func patchConfig(_ patch: JSONValue, baseRev: String) async throws -> ConfigEnvelope {
         calls.append(.patchConfig(patch, baseRev: baseRev))
+        return try Self.next(&patches)
+    }
+
+    func putConfig(_ config: JSONValue, baseRev: String) async throws -> ConfigEnvelope {
+        calls.append(.putConfig(config, baseRev: baseRev))
         return try Self.next(&patches)
     }
 

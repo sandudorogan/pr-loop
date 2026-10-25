@@ -38,7 +38,7 @@ import Observation
 
     public func reload() async {
         do {
-            try accept(await daemon.config())
+            accept(try await daemon.config())
             savedTo = nil
         } catch {
             failure = error
@@ -63,6 +63,10 @@ import Observation
         }
     }
 
+    public func prompt(named name: String) async throws -> Prompt {
+        try await daemon.prompt(named: name)
+    }
+
     public func revert() {
         draft = OverrideResolver(config: base)
         errors = FieldErrors()
@@ -73,7 +77,10 @@ import Observation
         isApplying = true
         defer { isApplying = false }
         do {
-            try accept(await daemon.patchConfig(patch, baseRev: original.rev))
+            accept(
+                try await isExpressible(patch)
+                    ? daemon.patchConfig(patch, baseRev: original.rev)
+                    : daemon.putConfig(draft.config, baseRev: original.rev))
             savedTo = self.original?.realPath
         } catch APIError.http(_, "stale_config", _, _) {
             isStale = true
@@ -84,13 +91,17 @@ import Observation
         }
     }
 
-    private func accept(_ envelope: ConfigEnvelope) throws {
-        base = try JSONValue(encoding: envelope.config)
+    private func accept(_ envelope: ConfigEnvelope) {
+        base = envelope.rawConfig
         original = envelope
         draft = OverrideResolver(config: base)
         errors = FieldErrors()
         isStale = false
         failure = nil
+    }
+
+    private func isExpressible(_ patch: JSONValue) -> Bool {
+        !patch.nullPaths.contains { $0.first == "projects" && draft.config[$0] == .null }
     }
 
     private func edit(_ next: OverrideResolver) {

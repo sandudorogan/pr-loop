@@ -4,6 +4,7 @@ public protocol DaemonAPI: Sendable {
     func events(since cursor: String?, wait: Duration) async throws -> EventPage
     func config() async throws -> ConfigEnvelope
     func patchConfig(_ patch: JSONValue, baseRev: String) async throws -> ConfigEnvelope
+    func putConfig(_ config: JSONValue, baseRev: String) async throws -> ConfigEnvelope
     func prompt(named name: String) async throws -> Prompt
     func history(repo: String?, limit: Int) async throws -> [HistoryEntry]
     func refresh() async throws

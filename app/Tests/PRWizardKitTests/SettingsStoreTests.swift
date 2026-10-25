@@ -88,6 +88,40 @@ import Testing
         #expect(store.savedTo == nil)
     }
 
+    @Test("an explicit null in a project override goes out as the whole document")
+    func explicitNull() async throws {
+        let (store, daemon) = try await loaded(patch: [.success(try Settings.envelope())])
+        store.set("fix.model", to: "gpt-6-astra", in: .allRepos)
+        store.set("fix.model", to: .null, in: gitops)
+        let draft = store.draft.config
+        await store.apply()
+        #expect(await daemon.calls.last == .putConfig(draft, baseRev: "5c663cb8963c"))
+        #expect(draft[["projects", "iprally/gitops", "fix", "model"]] == .null)
+    }
+
+    @Test("a null at the top level is a delete, so it stays a patch")
+    func topLevelNull() async throws {
+        let set = try Settings.envelope(merging: ["config": ["fix": ["model": "gpt-6-astra"]]])
+        let daemon = ScriptedDaemon(config: [.success(set)], patch: [.success(try Settings.envelope())])
+        let store = SettingsStore(daemon: daemon)
+        await store.load()
+        store.set("fix.model", to: .null, in: .allRepos)
+        await store.apply()
+        #expect(await daemon.calls.last == .patchConfig(["fix": ["model": .null]], baseRev: "5c663cb8963c"))
+    }
+
+    @Test("an explicit null override in the file survives the load")
+    func keepsNull() async throws {
+        let null = try Settings.envelope(merging: [
+            "config": ["projects": ["iprally/gitops": ["fix": ["model": .null]]]]
+        ])
+        let store = SettingsStore(daemon: ScriptedDaemon(config: [.success(null)]))
+        await store.load()
+        let model = store.resolve("fix.model", in: gitops)
+        #expect(model.value == .null)
+        #expect(model.source == .project("iprally/gitops"))
+    }
+
     @Test("apply 412 keeps the draft and flags it stale until Reload")
     func stale() async throws {
         let daemon = ScriptedDaemon(
