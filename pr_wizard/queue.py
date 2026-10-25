@@ -30,7 +30,7 @@ from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
-from pr_wizard import __version__, api, config, db, names, projects, snapshot
+from pr_wizard import __version__, api, config, db, names, pools, projects, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
                               REPOS, STATE, env_repo, path, tag)
 
@@ -583,11 +583,12 @@ def fix(pr, first):
 
 
 class Pending:
-    """The PRs from the latest queue fetch that no worker has taken yet, keyed by (repo, number)."""
+    """The PRs from the latest queue fetch that no worker has taken yet, keyed by (repo, number). Pools that share
+    `cond` and `held` never hand out a PR another of them runs."""
 
-    def __init__(self, prs=(), workers=0):
-        self.prs, self.busy, self.cond, self.workers, self.live = list(prs), set(), threading.Condition(), workers, 0
-        self.paused = False
+    def __init__(self, prs=(), workers=0, cond=None, held=None):
+        self.prs, self.busy, self.workers, self.live = list(prs), set(), workers, 0
+        self.cond, self.held, self.paused = cond or threading.Condition(), self.busy if held is None else held, False
 
     def pause(self, on):
         """A paused pool hands out no PR. Running passes finish."""
@@ -606,12 +607,12 @@ class Pending:
 
     def refill(self, prs):
         with self.cond:
-            self.prs = [pr for pr in prs if pr_key(pr) not in self.busy]
+            self.prs = [pr for pr in prs if pr_key(pr) not in self.held]
             self.cond.notify_all()
 
     def take(self, wait):
         with self.cond:
-            while not self.prs or self.live > self.workers or self.paused:
+            while not self.free() or self.live > self.workers or self.paused:
                 if self.live > self.workers or not wait:
                     return None
                 self.cond.wait()
@@ -619,11 +620,17 @@ class Pending:
             pr = min(self.prs, key=lambda p: priority(p, first))
             self.prs.remove(pr)
             self.busy.add(pr_key(pr))
+            self.held.add(pr_key(pr))
             return pr, first.get(pr["repo"], [])
+
+    def free(self):
+        self.prs = [pr for pr in self.prs if pr_key(pr) not in self.held]
+        return self.prs
 
     def done(self, key):
         with self.cond:
             self.busy.discard(key)
+            self.held.discard(key)
 
     def retire(self):
         with self.cond:
@@ -724,7 +731,7 @@ class Runtime:
     def __init__(self):
         self.prs, self.fetched_at, self.refresh = [], None, {"last_at": None, "last_error": None}
         self.started, self.started_at, self.changes = time.time(), db.now(), api.Changes()
-        self.refresh_now, self.pools = threading.Event(), ()
+        self.refresh_now, self.pools = threading.Event(), None
         self.commit = subprocess.run(["git", "-C", names.ROOT, "rev-parse", "--short", "HEAD"],
                                      capture_output=True, text=True).stdout.strip() or None
 
@@ -732,17 +739,17 @@ class Runtime:
     def cfg(self):
         return SETTINGS.get()
 
-    def resize(self, review, fixes):
-        """Sizes both pools to the config, live."""
-        knobs = self.cfg.config
-        review.resize(knobs["review"]["workers"], lambda: worker(review, True, reviewer(None, False)))
-        fixes.resize(knobs["fix"]["workers"], lambda: worker(fixes, True, fix))
+    def apply(self):
+        """Builds the pools the config asks for over the last fetch's projects, live."""
+        self.pools.apply(self.cfg.config, listed(self.prs))
+        if NOTED.get("pools") != (line := "pools: " + ", ".join(f"{k} ×{n}" for k, n in self.pools.sizes().items())):
+            NOTED["pools"] = line
+            say(line)
 
-    def attach(self, review, fixes):
-        """The daemon's pools, which config writes resize and pause stops. They start paused when the db says so."""
-        self.pools = review, fixes
-        for pool in self.pools:
-            pool.pause(paused())
+    def attach(self, pools):
+        """The daemon's pools, which config writes rebuild and pause stops. They start paused when the db says so."""
+        self.pools = pools
+        pools.pause(paused())
         if paused():
             say("paused: workers take no new PR until POST /v1/resume")
 
@@ -754,7 +761,7 @@ class Runtime:
         config.save(doc)
         SETTINGS.stamp = None
         if self.pools:
-            self.resize(*self.pools)
+            self.apply()
         self.refetch()
         self.changes.touch()
         say(f"config saved: rev {config.rev(doc)}")
@@ -803,8 +810,7 @@ class Runtime:
 
     def pause(self, on):
         db.meta_set("paused", int(on))
-        for pool in self.pools:
-            pool.pause(on)
+        self.pools.pause(on)
         say("paused: workers take no new PR" if on else "resumed")
         return on
 
@@ -881,8 +887,8 @@ def serve(rt):
 
 def daemon():
     """Workers review nonstop. The queue data behind them refreshes every `refresh.interval_s`, every
-    `refresh.idle_s` while a worker has nothing to take, and at once on SIGUSR1. Each refresh sizes the pools
-    to the config."""
+    `refresh.idle_s` while a worker has nothing to take, and at once on SIGUSR1. Each refresh builds the pools
+    the config asks for."""
     lock = open(path(MONOREPO, LOCK), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -893,8 +899,8 @@ def daemon():
     db.sweep_runs()
     rt = Runtime()
     serve(rt)
-    pending, fixes, held = Pending(), Pending(), {}
-    rt.attach(pending, fixes)
+    held = {}
+    rt.attach(pools.Pools())
     signal.signal(signal.SIGUSR1, lambda *_: rt.refetch())
 
     def refresh():
@@ -902,21 +908,21 @@ def daemon():
         while True:
             started, every = time.monotonic(), cfg()["refresh"]
             try:
-                rt.resize(pending, fixes)
                 prs, cost, left = fetched(note=say)
                 found({pr["repo"] for pr in prs})
                 served = serving(held)
                 worked = [pr for pr in prs if pr["repo"] in served]
-                pending.refill(worked)
-                state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
-                fixes.refill([pr for pr in worked if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
                 rt.refreshed(prs)
+                rt.apply()
+                rt.pools.refill("review", worked)
+                state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
+                rt.pools.refill("fix", [pr for pr in worked if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
                 if NOTED.get("projects") != (line := f"projects: {summary(listed(prs))}"):
                     NOTED["projects"] = line
                     say(line)
                 if not idle:
-                    say(f"queue refreshed: {len(prs)} PR(s), {len(pending.busy)} in review, "
-                         f"{len(fixes.prs) + len(fixes.busy)} to fix, search cost {cost} points ({left} left)")
+                    say(f"queue refreshed: {len(prs)} PR(s), {sum(len(p.busy) for p, _ in rt.pools.of('review'))} in review, "
+                         f"{sum(len(p.prs) + len(p.busy) for p, _ in rt.pools.of('fix'))} to fix, search cost {cost} points ({left} left)")
             except Exception as e:
                 error = (getattr(e, 'stderr', None) or str(e)).strip()[-200:]
                 say(f"queue refresh failed: {error}")
@@ -925,16 +931,17 @@ def daemon():
             while not rt.refresh_now.wait(every["idle_s"]):
                 if time.monotonic() - started >= every["interval_s"]:
                     break
-                if pending.idle():
+                if rt.pools.idle():
                     idle = True
                     break
             rt.refresh_now.clear()
 
     knobs = cfg()
     say(f"daemon started: {summary(listed([]))}")
-    say(f"{knobs['review']['workers']} review and {knobs['fix']['workers']} fix workers, queue refresh every "
+    say(f"queue refresh every "
          f"{knobs['refresh']['interval_s'] // 60} min, every {knobs['refresh']['idle_s']} s while a review worker is idle")
     start_pruner(lambda: active(rt.prs))
+    rt.apply()
     refresh()
 
 

@@ -3,7 +3,7 @@ API JSON, `render()` prints it as the `-l` lines."""
 import hashlib, json
 from datetime import datetime
 
-from pr_wizard import config, db, projects, queue as q
+from pr_wizard import config, db, pools, projects, queue as q
 from pr_wizard.names import tag
 
 GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle"}
@@ -78,6 +78,14 @@ def entry(pr, rows, runs, cfg, first):
     }
 
 
+def pool(lane, repo, workers, items):
+    """One §3.2 `lanes.pools[]` entry over the items of its repo, or of every repo for a shared pool."""
+    mine = [i for i in items if repo in (None, i["repo"])]
+    return {"id": pools.name(lane, repo), "lane": lane, "repo": repo, "workers": workers,
+            "busy": sum(bool(i["active"]) and i["active"]["lane"] == lane for i in mine),
+            "pending": sum(i["group"] == "queued" if lane == "review" else i["fixable"] and not i["active"] for i in mine)}
+
+
 def build(prs, state, runtime):
     """Pure: the fetched PRs, `read()` rows and the runtime {generated_at, fetched_at, paused, refresh} as the §3.2
     snapshot."""
@@ -91,16 +99,14 @@ def build(prs, state, runtime):
     items = [i for i, _ in rows]
     for rank, i in enumerate((i for i in items if i["group"] == "queued"), 1):
         i["rank"] = rank
-    fixable = sum(i.pop("fixable") and not i["active"] for i in items)
-    busy = lambda lane: sum(bool(i["active"]) and i["active"]["lane"] == lane for i in items)
+    listing = projects.listing(prs, cfg, state["checkouts"], projects.CONVENTIONS.get)
+    lanes = [pool(lane, repo, workers, items) for (lane, repo), workers in pools.wanted(cfg, listing).items()]
+    for i in items:
+        del i["fixable"]
     snap = {
         "fetched_at": runtime["fetched_at"], "paused": runtime["paused"],
-        "lanes": {"separate": False, "pools": [
-            {"id": "review", "lane": "review", "repo": None, "workers": cfg["review"]["workers"], "busy": busy("review"),
-             "pending": sum(i["group"] == "queued" for i in items)},
-            {"id": "fix", "lane": "fix", "repo": None, "workers": cfg["fix"]["workers"], "busy": busy("fix"),
-             "pending": fixable}]},
-        "projects": projects.listing(prs, cfg, state["checkouts"], projects.CONVENTIONS.get),
+        "lanes": {"separate": cfg["lanes"]["separate"], "pools": lanes},
+        "projects": listing,
         "refresh": runtime["refresh"],
         "counts": {g: sum(i["group"] == g for i in items) for g in GROUPS.values()},
         "items": items,

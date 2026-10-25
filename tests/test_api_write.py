@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
 from test_api_read import fixture
-from pr_wizard import api, config, db
+from pr_wizard import api, config, db, pools
 
 OLD = "b" * 40
 
@@ -44,8 +44,9 @@ class Writes(unittest.TestCase):
         self.addCleanup(db.close)
         self.rt = rq.Runtime()
         self.rt.refreshed([dict(p, updatedAt=p["commits"]["nodes"][0]["commit"]["committedDate"]) for p in self.prs])
-        self.pools = rq.Pending(workers=3), rq.Pending(workers=3)
-        self.rt.attach(*self.pools)
+        self.pools = pools.Pools()
+        self.rt.attach(self.pools)
+        self.rt.apply()
         self.sock = f"{self.dir}/api.sock"
         server = api.bind(self.rt, self.sock)
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -76,7 +77,7 @@ class Config(Writes):
         with open(self.real) as fh:
             self.assertEqual(json.load(fh), body["config"])
         self.assertEqual((body["path"], body["real_path"]), (self.path, os.path.realpath(self.real)))
-        self.assertEqual([p.workers for p in self.pools], [2, 3])
+        self.assertEqual(self.pools.sizes(), {"review": 2, "fix": 3})
         self.assertTrue(self.refetched())
 
     def test_put_without_base_rev_replaces_the_whole_document(self):
@@ -90,7 +91,7 @@ class Config(Writes):
         self.assertEqual((body["config"]["review"]["workers"], body["config"]["fix"]["workers"]), (2, 1))
         body = self.call("PATCH", "/v1/config", {"patch": {"review": {"workers": None}}})[1]
         self.assertEqual((body["config"]["review"]["workers"], body["config"]["fix"]["workers"]), (3, 1))
-        self.assertEqual([p.workers for p in self.pools], [3, 1])
+        self.assertEqual(self.pools.sizes(), {"review": 3, "fix": 1})
 
     def test_a_stale_base_rev_is_412_and_saves_nothing(self):
         status, body = self.call("PATCH", "/v1/config", {"base_rev": "0" * 12, "patch": {"fix": {"workers": 1}}})
@@ -218,15 +219,19 @@ class Actions(Writes):
 
 
 class Pause(Writes):
+    def paused(self, lanes):
+        return [p.paused for p in lanes.pools.values()]
+
     def test_pause_and_resume_flip_the_snapshot_and_the_pools_and_survive_a_restart(self):
         self.assertEqual(self.call("POST", "/v1/pause"), (200, fixture("paused")))
         self.assertTrue(self.call("GET", "/v1/queue")[1]["paused"])
-        self.assertEqual([p.paused for p in self.pools], [True, True])
-        restarted = rq.Pending(), rq.Pending()
-        rq.Runtime().attach(*restarted)
-        self.assertEqual([p.paused for p in restarted], [True, True])
+        self.assertEqual(self.paused(self.pools), [True, True])
+        restarted = pools.Pools()
+        rq.Runtime().attach(restarted)
+        restarted.apply(rq.cfg(), [])
+        self.assertEqual(self.paused(restarted), [True, True])
         self.assertEqual(self.call("POST", "/v1/resume"), (200, {"paused": False}))
-        self.assertEqual((self.call("GET", "/v1/info")[1]["paused"], [p.paused for p in self.pools]),
+        self.assertEqual((self.call("GET", "/v1/info")[1]["paused"], self.paused(self.pools)),
                          (False, [False, False]))
 
     def test_a_paused_pool_lets_the_running_pass_finish_and_takes_no_new_pr(self):

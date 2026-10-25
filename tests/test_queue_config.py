@@ -8,7 +8,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
-from pr_wizard import config, db, projects, snapshot
+from pr_wizard import config, db, pools, projects, snapshot
 
 NEW = "acme/widgets"
 OTHER = "b" * 40
@@ -88,13 +88,14 @@ class Resize(unittest.TestCase):
 
 class Live(Configured):
     def test_the_daemon_resizes_its_pools_when_the_file_changes(self):
-        rt, review, fixes = rq.Runtime(), rq.Pending(), rq.Pending()
-        with patch.object(rq, "worker", return_value=None) as spawned:
-            rt.resize(review, fixes)
-            self.assertEqual((review.workers, fixes.workers, spawned.call_count), (3, 3, 6))
+        rt, lanes = rq.Runtime(), pools.Pools()
+        rt.attach(lanes)
+        with patch.object(rq, "worker", return_value=None) as spawned, patch.object(rq, "say"):
+            rt.apply()
+            self.assertEqual((lanes.sizes(), spawned.call_count), ({"review": 3, "fix": 3}, 6))
             self.write({"review": {"workers": 5}, "fix": {"workers": 1}})
-            rt.resize(review, fixes)
-        self.assertEqual((review.workers, fixes.workers, spawned.call_count), (5, 1, 8))
+            rt.apply()
+        self.assertEqual((lanes.sizes(), spawned.call_count), ({"review": 5, "fix": 1}, 8))
         self.assertEqual(rt.info()["refresh"]["interval_s"], 300)
 
     def test_a_save_beside_a_symlink_is_seen(self):

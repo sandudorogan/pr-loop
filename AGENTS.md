@@ -13,6 +13,8 @@ A project is worked only with a checkout: a main checkout under `detect.roots/*/
 defaults (both lanes on). The daemon logs `projects: …` whenever the list changes. The config sets each project's lanes,
 reviewers, gates, workers and refresh; the daemon re-reads it on every refresh and resizes the pools live, no restart.
 By default `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
+The pools are one shared review and one shared fix pool. `lanes.separate` gives each active project its own pair,
+sized by its effective `workers`, and switches live: running passes finish in their old pool (`pr_wizard/pools.py`).
 
 ```text
                  one GraphQL call every 5 min (60 s when a worker idles, now on SIGUSR1)
@@ -53,6 +55,7 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | Path | Role |
 | --- | --- |
 | `pr_wizard/queue.py` | Daemon, queue fetch, gates, both lanes, the local paths of the CLI (`--wait` loop, `-l` and `--next` with the daemon down, `--pr`, tick, `--prune`) |
+| `pr_wizard/pools.py` | The worker pools (api.md §4.7): shared, or one review + fix pair per project; `held` spans every pool so no PR runs twice |
 | `pr_wizard/cli.py` | The CLI (api.md §5): `-l`, `--next`, `--bg`, `--wait`'s bump, `--pause`, `--resume`, `config` go to the API; daemon down: `-l`/`--next` run on `state.db`, `--bg`/`--wait` kickstart `names.LABEL` |
 | `pr_wizard/client.py` | `client.call(method, path, body)` over `api.sock`; raises `Down` (no daemon) or `Failed` (api.md §2 error) |
 | `pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures |
