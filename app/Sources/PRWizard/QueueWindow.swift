@@ -58,10 +58,10 @@ struct QueueWindow: View {
     }
 
     /// SwiftUI drops a minimum on the detail column (it runs under the sidebar), so the window
-    /// carries it: the sidebar (220 plus its 8 pt inset), the table and the docked inspector column. Opening the
-    /// inspector in a narrower window grows the window, and the table never scrolls sideways.
+    /// carries it: the sidebar (220 plus its 8 pt inset), the table and the docked inspector column (320 plus its
+    /// 1 pt divider). Opening the inspector in a narrower window grows the window, and the table never scrolls sideways.
     private var minWidth: CGFloat {
-        max(820, (showsSidebar ? 228 : 0) + QueueTable.minWidth + (showsInspector ? 320 : 0))
+        max(820, (showsSidebar ? 228 : 0) + QueueTable.minWidth + (showsInspector ? 321 : 0))
     }
 
     private var columnVisibility: Binding<NavigationSplitViewVisibility> {
