@@ -48,11 +48,11 @@ macOS: the launchd plist, `launchctl kickstart`/`bootstrap`, `ProcessType Standa
 
 ```text
  unit 27     drop terminal-notifier       after the app runs at login with notifications allowed
- cutover B   GitHub repo + checkout       sandudorogan/review-queue → pr-wizard, ~/workdir/review-queue → ~/workdir/pr-wizard
+ cutover B   checkout                     ~/workdir/review-queue → ~/workdir/pr-wizard (the GitHub repo is sandudorogan/pr-wizard)
 ```
 
-The owner confirms cutover B first (plan.md §5). Until then, the checkout, the clone URL and the
-install backups (`~/.local/state/review-queue/backups`) keep the old name.
+The owner confirms cutover B first (plan.md §5). Until then, the checkout and the install backups
+(`~/.local/state/review-queue/backups`) keep the old name.
 
 ## Known gaps
 

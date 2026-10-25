@@ -55,8 +55,8 @@ Requirements: macOS 26, the Command Line Tools (`xcode-select --install`), Pytho
 Claude Code, Codex.
 
 ```sh
-git clone git@github.com:sandudorogan/review-queue.git ~/workdir/review-queue
-~/workdir/review-queue/install.py
+git clone git@github.com:sandudorogan/pr-wizard.git ~/workdir/pr-wizard
+~/workdir/pr-wizard/install.py
 ```
 
 ```text
@@ -75,7 +75,7 @@ it restarts the daemon (a restart kills passes in work, see `pr-wizard -l`) and 
   applies only the paths it owns. `--no-chezmoi` links straight into `$HOME`.
 - `--no-app` installs the daemon only.
 
-Each [release](https://github.com/sandudorogan/review-queue/releases) also carries the app as a `.dmg`. It is ad-hoc
+Each [release](https://github.com/sandudorogan/pr-wizard/releases) also carries the app as a `.dmg`. It is ad-hoc
 signed, so allow its first launch in System Settings → Privacy & Security → **Open Anyway**. The installer builds the
 same app from the checkout, with no such step.
 
