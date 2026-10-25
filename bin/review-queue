@@ -25,8 +25,8 @@ A push from it is the next review round.
 Labels opt a PR out: no-auto-review skips the reviewers (the fix lane then acts on feedback alone),
 no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
-IPR_REPO=owner/name runs it on another repo, checked out at ~/workdir/<name>: the fix lane alone, under
-its own state files and launchd label.
+One process serves every repo in REPOS: iprally/iprally gets both lanes, iprally/gitops the fix lane alone.
+--pr, --next, --wait and --prune act on --repo, else $IPR_REPO, else iprally/iprally.
 
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
@@ -44,19 +44,13 @@ HOME = os.path.expanduser("~")
 REVIEW_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "review")
 PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
 PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
-REPO = os.environ.get("IPR_REPO", "iprally/iprally")
-REPO_ROOT = os.environ.get("IPR_REPO_ROOT", f"{HOME}/workdir/{REPO.split('/')[1]}")
-MONOREPO = REPO == "iprally/iprally"
-TAG = "" if MONOREPO else f"-{REPO.split('/')[1]}"
-STATE = f"{HOME}/.local/state/review-queue{TAG}.json"
-FIXES = f"{HOME}/.local/state/review-queue{TAG}.fixes.json"
+MONOREPO = "iprally/iprally"
+REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally", "review": True},
+         "iprally/gitops": {"root": f"{HOME}/workdir/gitops", "review": False}}
+STATE_DIR = f"{HOME}/.local/state"
+STATE, FIXES, NEXT, LOCK, LOCKS, NOWS, PID = ".json", ".fixes.json", ".next", ".lock", ".locks", ".now.d", ".pid"
 LOG = f"{HOME}/Library/Logs/review-queue.log"
-LOCK = f"{HOME}/.local/state/review-queue{TAG}.lock"
-NOWS = f"{HOME}/.local/state/review-queue{TAG}.now.d"
-LOCKS = f"{HOME}/.local/state/review-queue{TAG}.locks"
-PID = f"{HOME}/.local/state/review-queue{TAG}.pid"
-NEXT = f"{HOME}/.local/state/review-queue{TAG}.next"
-LABEL = f"local.review-queue{TAG}"
+LABEL = "local.review-queue"
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
 NOTIFIER = f"{HOME}/.local/share/review-queue/Review Queue.app/Contents/MacOS/terminal-notifier"
 
@@ -87,6 +81,7 @@ CLEAN_NOTICE = ("Automatic review pipeline ran on `{sha}`. None of the Opus code
 FRAGMENT = """
 fragment pr on PullRequest {
   number title state isDraft headRefOid baseRefName additions deletions viewerDidAuthor mergeable
+  repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
   latestOpinionatedReviews(first: 20) { nodes { state viewerDidAuthor } }
   commits(last: 1) { nodes { commit { committedDate statusCheckRollup {
@@ -116,8 +111,28 @@ GUARD, GIT = threading.Lock(), threading.Lock()
 ACTIVE, NOTED = {}, {}
 
 
-def log(pr, msg):
-    line = f"{datetime.now():%F %T}  {TAG[1:]}#{pr:<6} {msg}"
+def tag(repo):
+    return "" if repo == MONOREPO else f"-{repo.split('/')[1]}"
+
+
+def path(repo, kind):
+    return f"{STATE_DIR}/review-queue{tag(repo)}{kind}"
+
+
+def root(repo):
+    return REPOS[repo]["root"]
+
+
+def child(repo):
+    return {"env": {**os.environ, "IPR_REPO": repo, "IPR_REPO_ROOT": root(repo)}, "cwd": root(repo)}
+
+
+def pr_key(pr):
+    return pr["repo"], pr["number"]
+
+
+def log(repo, pr, msg):
+    line = f"{datetime.now():%F %T}  {tag(repo)[1:]}#{pr:<6} {msg}"
     sys.stdout.write(line + "\n")
     sys.stdout.flush()
     if sys.stdout.isatty():
@@ -125,81 +140,97 @@ def log(pr, msg):
             fh.write(line + "\n")
 
 
-def url(pr):
-    return f"https://github.com/{REPO}/pull/{pr}"
+def say(msg):
+    log(MONOREPO, "-", msg)
+
+
+def url(repo, pr):
+    return f"https://github.com/{repo}/pull/{pr}"
 
 
 def escaped(message):
     return f"\\{message}" if message[:1] in "[({'\"" else message
 
 
-def ready_alert(pr, title):
-    review_notifier(pr, "-title", "Ready for your approval", "-subtitle", f"#{pr}",
-                    "-message", escaped(title), "-open", url(pr), "-sound", "default")
+def ready_alert(repo, pr, title):
+    review_notifier(repo, pr, "-title", "Ready for your approval", "-subtitle", f"#{pr}",
+                    "-message", escaped(title), "-open", url(repo, pr), "-sound", "default")
 
 
-def drop_ready_alert(pr):
-    review_notifier(pr, "-remove", f"review-queue-{pr}")
+def drop_ready_alert(repo, pr):
+    review_notifier(repo, pr, "-remove", f"review-queue{tag(repo)}-{pr}")
 
 
-def review_notifier(pr, *args):
-    out = subprocess.run([NOTIFIER, "-group", f"review-queue-{pr}", *args], capture_output=True, text=True)
+def review_notifier(repo, pr, *args):
+    out = subprocess.run([NOTIFIER, "-group", f"review-queue{tag(repo)}-{pr}", *args], capture_output=True, text=True)
     if out.returncode:
-        log(pr, f"Review Queue notifier failed: {(out.stderr or out.stdout).strip()}")
+        log(repo, pr, f"Review Queue notifier failed: {(out.stderr or out.stdout).strip()}")
 
 
-def sh(*args):
-    return subprocess.run(args, cwd=REPO_ROOT, capture_output=True, text=True,
+def sh(*args, repo=MONOREPO):
+    return subprocess.run(args, cwd=root(repo), capture_output=True, text=True,
                           timeout=600, check=True).stdout
 
 
-def load(path=STATE):
+def load(repo, kind=STATE):
     try:
-        return json.load(open(path))
+        return json.load(open(path(repo, kind)))
     except (OSError, ValueError):
         return {}
 
 
-def bumped():
+def bumped(repo):
     try:
-        return json.load(open(NEXT))
+        return json.load(open(path(repo, NEXT)))
     except (OSError, ValueError):
         return []
 
 
-def save_bumped(prs):
-    with open(f"{NEXT}.tmp", "w") as fh:
+def bumps():
+    return {repo: bumped(repo) for repo in REPOS}
+
+
+def save_bumped(repo, prs):
+    with open(f"{path(repo, NEXT)}.tmp", "w") as fh:
         json.dump(prs, fh)
-    os.replace(f"{NEXT}.tmp", NEXT)
+    os.replace(f"{path(repo, NEXT)}.tmp", path(repo, NEXT))
 
 
 def priority(pr, first):
     """Bumped PRs first, then mine, then the rest."""
-    return first.index(pr["number"]) if pr["number"] in first else len(first), not pr["viewerDidAuthor"]
+    mine = first.get(pr["repo"], [])
+    return pr["number"] not in mine, mine.index(pr["number"]) if pr["number"] in mine else 0, not pr["viewerDidAuthor"]
 
 
-def save(state, path=STATE):
-    with open(f"{path}.tmp", "w") as fh:
+def save(state, file):
+    with open(f"{file}.tmp", "w") as fh:
         json.dump(state, fh, indent=2)
-    os.replace(f"{path}.tmp", path)
+    os.replace(f"{file}.tmp", file)
 
 
-def queue(only, *flags):
+def tagged(pr, requested):
+    return dict(pr, repo=pr["repository"]["nameWithOwner"], requested=requested)
+
+
+def pr_of(repo, n):
+    owner, name = repo.split("/")
+    pr = json.loads(sh("gh", "api", "graphql", "-f", f"query={PR_QUERY}", "-f", f"owner={owner}",
+                       "-f", f"name={name}", "-F", f"number={n}", repo=repo))["data"]["repository"]["pullRequest"]
+    return [tagged(pr, True)] if pr["state"] == "OPEN" else []
+
+
+def queue(*flags):
     """My own PRs and review requests (drafts too), plus PRs I reviewed before, since a posted
-    review drops the request. `only` fetches that one PR; `flags` go to the queue's `gh api` call."""
-    if only:
-        owner, name = REPO.split("/")
-        pr = json.loads(sh("gh", "api", "graphql", "-f", f"query={PR_QUERY}", "-f", f"owner={owner}",
-                           "-f", f"name={name}", "-F", f"number={only}"))["data"]["repository"]["pullRequest"]
-        return [dict(pr, requested=True)] if pr["state"] == "OPEN" else []
-    scope = f"repo:{REPO} is:pr is:open"
+    review drops the request, in every repo of REPOS. `flags` go to the `gh api` call."""
+    scope = " ".join(f"repo:{repo}" for repo in REPOS) + " is:pr is:open"
     data = json.loads(sh("gh", "api", "graphql", *flags, "-f", f"query={QUEUE_QUERY}",
                          "-f", f"mine={scope} author:@me",
                          "-f", f"requested={scope} user-review-requested:@me",
                          "-f", f"reviewed={scope} reviewed-by:@me -author:@me"))["data"]
-    requested = {p["number"] for p in data["requested"]["nodes"]}
-    prs = {p["number"]: p for p in data["reviewed"]["nodes"] + data["requested"]["nodes"] + data["mine"]["nodes"]}
-    return [dict(p, requested=n in requested) for n, p in sorted(prs.items())]
+    found = lambda search: [tagged(p, False) for p in data[search]["nodes"]]
+    requested = {pr_key(p) for p in found("requested")}
+    prs = {pr_key(p): p for p in found("reviewed") + found("requested") + found("mine")}
+    return [dict(p, requested=k in requested) for k, p in sorted(prs.items())]
 
 
 def approved(pr):
@@ -214,7 +245,7 @@ def labeled(pr, label):
 
 def unreviewed(pr):
     """The review prompts carry the monorepo's conventions: another repo gets the fix lane alone."""
-    return not MONOREPO or labeled(pr, NO_REVIEW)
+    return not REPOS[pr["repo"]]["review"] or labeled(pr, NO_REVIEW)
 
 
 def colleague_approved(pr):
@@ -228,8 +259,9 @@ def baselined(pr, requested):
 
 def fingerprint(pr):
     """{path: hash of its +/- lines} over the PR's own diff — a merge of main or a rebase keeps it."""
-    sh("git", "fetch", "-q", "--no-tags", "origin", pr["baseRefName"], pr["headRefOid"])
-    diff = sh("git", "diff", "--no-color", "--no-ext-diff", f"origin/{pr['baseRefName']}...{pr['headRefOid']}")
+    sh("git", "fetch", "-q", "--no-tags", "origin", pr["baseRefName"], pr["headRefOid"], repo=pr["repo"])
+    diff = sh("git", "diff", "--no-color", "--no-ext-diff", f"origin/{pr['baseRefName']}...{pr['headRefOid']}",
+              repo=pr["repo"])
     files = {}
     for chunk in re.split(r"^diff --git ", diff, flags=re.M)[1:]:
         lines = chunk.splitlines(True)
@@ -244,30 +276,30 @@ def false_clean(res):
     return res.get("reason") == "no-findings" and (len(summary) < 40 or bool(FALSE_CLEAN.search(summary)))
 
 
-def run_reviewer(pr, reviewer):
+def run_reviewer(repo, pr, reviewer):
     force = []
     for i in range(ATTEMPTS):
         if i:
-            log(pr, f"{reviewer} retry in {BACKOFF[i - 1]} s")
+            log(repo, pr, f"{reviewer} retry in {BACKOFF[i - 1]} s")
             time.sleep(BACKOFF[i - 1])
-        log(pr, f"{reviewer} attempt {i + 1}/{ATTEMPTS} started{' (--force)' if force else ''}")
+        log(repo, pr, f"{reviewer} attempt {i + 1}/{ATTEMPTS} started{' (--force)' if force else ''}")
         start = time.monotonic()
         out = subprocess.run([sys.executable, PR_REVIEW, "run", "--pr", str(pr), "--reviewer", reviewer, *force],
-                             cwd=REPO_ROOT, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                             **child(repo), stdin=subprocess.DEVNULL, capture_output=True, text=True)
         try:
             res = json.loads(out.stdout)
         except ValueError:
             res = None
         if out.returncode == 0 and res and not false_clean(res):
             via = f" on {res['engine']}" if "usage limit" in out.stderr else ""
-            log(pr, f"{reviewer} done{via} in {time.monotonic() - start:.0f} s: {outcome(res)}")
+            log(repo, pr, f"{reviewer} done{via} in {time.monotonic() - start:.0f} s: {outcome(res)}")
             return res
         if "both at their usage limit" in out.stderr:
-            log(pr, f"{reviewer} stopped: claude and codex are both at their usage limit")
+            log(repo, pr, f"{reviewer} stopped: claude and codex are both at their usage limit")
             return LIMITED
         force = force or (["--force"] if res and false_clean(res) else [])
         why = (out.stderr.strip() or out.stdout.strip())[-300:].replace("\n", " ⏎ ")
-        log(pr, f"{reviewer} attempt {i + 1}/{ATTEMPTS} failed: {why}")
+        log(repo, pr, f"{reviewer} attempt {i + 1}/{ATTEMPTS} failed: {why}")
 
 
 def outcome(res):
@@ -276,9 +308,9 @@ def outcome(res):
     return f"{res.get('skipped') or res.get('reason')} — {(res.get('summary') or res.get('message') or '').strip()[:160]}"
 
 
-def review(pr):
+def review(repo, pr):
     with ThreadPoolExecutor(len(REVIEWERS)) as pool:
-        results = dict(zip(REVIEWERS, pool.map(lambda r: run_reviewer(pr, r), REVIEWERS)))
+        results = dict(zip(REVIEWERS, pool.map(lambda r: run_reviewer(repo, pr, r), REVIEWERS)))
     limited = [r for r, res in results.items() if res is LIMITED]
     if limited:
         return "limited", f"{', '.join(limited)} hit the usage limit of both engines"
@@ -289,12 +321,13 @@ def review(pr):
     return ("posted", ", ".join(flagged)) if flagged else ("clean", "no findings")
 
 
-def post_clean_notice(pr, sha):
+def post_clean_notice(repo, pr, sha):
     try:
-        sh("gh", "api", f"repos/{REPO}/issues/{pr}/comments", "-f", f"body={CLEAN_NOTICE.format(sha=sha[:12])}")
-        log(pr, "clean notice posted")
+        sh("gh", "api", f"repos/{repo}/issues/{pr}/comments", "-f", f"body={CLEAN_NOTICE.format(sha=sha[:12])}",
+           repo=repo)
+        log(repo, pr, "clean notice posted")
     except subprocess.CalledProcessError as e:
-        log(pr, f"clean notice failed: {e.stderr.strip()[-200:]}")
+        log(repo, pr, f"clean notice failed: {e.stderr.strip()[-200:]}")
 
 
 def decide(pr, seen, files, only):
@@ -318,38 +351,38 @@ def decide(pr, seen, files, only):
         return "too-big", f"{pr['additions']} added lines, review it by hand"
 
 
-def log_once(n, msg):
+def log_once(repo, n, msg):
     """Log a skip once per reason, not on every refresh."""
-    if NOTED.get(n) != msg:
-        NOTED[n] = msg
-        log(n, msg)
+    if NOTED.get((repo, n)) != msg:
+        NOTED[repo, n] = msg
+        log(repo, n, msg)
 
 
-def in_review(n, on, lane="review"):
+def in_review(repo, n, on, lane="review"):
     with GUARD:
         if on:
-            ACTIVE[n] = f"{lane} {datetime.now():%T}"
+            ACTIVE[repo, n] = f"{lane} {datetime.now():%T}"
         else:
-            del ACTIVE[n]
-        os.makedirs(NOWS, exist_ok=True)
-        with open(f"{NOWS}/{os.getpid()}.json", "w") as fh:
-            json.dump(ACTIVE, fh)
+            del ACTIVE[repo, n]
+        os.makedirs(path(repo, NOWS), exist_ok=True)
+        with open(f"{path(repo, NOWS)}/{os.getpid()}.json", "w") as fh:
+            json.dump({k: v for (r, k), v in ACTIVE.items() if r == repo}, fh)
 
 
-def record(key, entry, path=STATE):
+def record(repo, key, entry, kind=STATE):
     """Merge one PR's entry under a file lock: the daemon and a manual run may both write."""
-    with open(f"{path}.lock", "w") as lock:
+    with open(f"{path(repo, kind)}.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        state = load(path)
+        state = load(repo, kind)
         state[key] = entry
-        save(state, path)
+        save(state, path(repo, kind))
 
 
 @contextmanager
-def claimed(n):
+def claimed(repo, n):
     """True while this process holds PR n; a second run skips it instead of reviewing it twice."""
-    os.makedirs(LOCKS, exist_ok=True)
-    with open(f"{LOCKS}/{n}", "w") as fh:
+    os.makedirs(path(repo, LOCKS), exist_ok=True)
+    with open(f"{path(repo, LOCKS)}/{n}", "w") as fh:
         try:
             fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -360,51 +393,51 @@ def claimed(n):
 
 def handle(pr, first, only, dry_run):
     pr["requested"] = pr["requested"] or pr["number"] in first
-    n, key = pr["number"], str(pr["number"])
-    seen = load().get(key, {})
+    repo, n, key = pr["repo"], pr["number"], str(pr["number"])
+    seen = load(repo).get(key, {})
     if pr["requested"] and seen.get("status") == "baseline":
         seen = {}
     if approved(pr) and not only:
-        return log_once(n, "approved by me, not re-requested")
+        return log_once(repo, n, "approved by me, not re-requested")
     if unreviewed(pr) and not only:
-        return log_once(n, NO_REVIEW)
+        return log_once(repo, n, NO_REVIEW)
     if seen.get("sha") == pr["headRefOid"] and seen.get("status") != "limited" and not only:
-        return log_once(n, f"same head {pr['headRefOid'][:12]} ({seen['status']} {seen['at']})")
+        return log_once(repo, n, f"same head {pr['headRefOid'][:12]} ({seen['status']} {seen['at']})")
     try:
         with GIT:
             files = fingerprint(pr)
     except subprocess.CalledProcessError as e:
-        return log(n, f"git failed: {e.stderr.strip()[-200:]}")
+        return log(repo, n, f"git failed: {e.stderr.strip()[-200:]}")
     except subprocess.TimeoutExpired as e:
-        return log(n, f"git {e.cmd[1]} timed out after {e.timeout:.0f} s")
+        return log(repo, n, f"git {e.cmd[1]} timed out after {e.timeout:.0f} s")
 
     skip = decide(pr, seen, files, only)
     if dry_run:
-        return log(n, f"{skip[0]}: {skip[1]}" if skip else f"would review: {pr['title']}")
+        return log(repo, n, f"{skip[0]}: {skip[1]}" if skip else f"would review: {pr['title']}")
     if skip:
         status, note = skip
     else:
-        log(n, f"reviewing {pr['headRefOid'][:12]}: {pr['title']}")
-        drop_ready_alert(n)
-        in_review(n, True)
-        status, note = review(n)
-        in_review(n, False)
-    log(n, f"{status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
+        log(repo, n, f"reviewing {pr['headRefOid'][:12]}: {pr['title']}")
+        drop_ready_alert(repo, n)
+        in_review(repo, n, True)
+        status, note = review(repo, n)
+        in_review(repo, n, False)
+    log(repo, n, f"{status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     verdict = {"clean": "clean", "posted": "quality-only" if note == "quality" else "posted"}.get(
         status, seen.get("verdict") if status in ("unchanged", "trivial", "limited") else None)
     if status == "clean":
-        post_clean_notice(n, pr["headRefOid"])
+        post_clean_notice(repo, n, pr["headRefOid"])
     if status in ("clean", "posted") and verdict in READY and not pr["viewerDidAuthor"]:
-        ready_alert(n, pr["title"])
+        ready_alert(repo, n, pr["title"])
     absorbed = status in ("posted", "clean", "baseline", "unchanged", "trivial")
     rounds = 0 if status == "clean" else (0 if only else seen.get("rounds", 0)) + (status == "posted")
     hold = status == "clean" and pr["viewerDidAuthor"] if status in ("posted", "clean") else seen.get("hold", False)
-    record(key, {"sha": pr["headRefOid"], "status": status, "verdict": verdict, "note": note, "rounds": rounds,
-                 "hold": hold,
-                 "at": f"{datetime.now():%F %T}", "files": files if absorbed else seen.get("files", {})})
+    record(repo, key, {"sha": pr["headRefOid"], "status": status, "verdict": verdict, "note": note, "rounds": rounds,
+                       "hold": hold,
+                       "at": f"{datetime.now():%F %T}", "files": files if absorbed else seen.get("files", {})})
     if n in first and status != "limited":
         with GUARD:
-            save_bumped([x for x in bumped() if x != n])
+            save_bumped(repo, [x for x in bumped(repo) if x != n])
     if status == "posted" and pr["viewerDidAuthor"]:
         kick()
 
@@ -461,38 +494,38 @@ def fix_note(res, err):
 
 
 def fix(pr, first):
-    n, head = pr["number"], pr["headRefOid"]
-    log(n, f"fixing {head[:12]}: {pr['title']}")
-    in_review(n, True, "fix")
+    repo, n, head = pr["repo"], pr["number"], pr["headRefOid"]
+    log(repo, n, f"fixing {head[:12]}: {pr['title']}")
+    in_review(repo, n, True, "fix")
     try:
-        out = subprocess.run([sys.executable, PR_FIX, "run", "--pr", str(n)], capture_output=True, text=True,
-                             timeout=FIX_TIMEOUT)
+        out = subprocess.run([sys.executable, PR_FIX, "run", "--pr", str(n)], **child(repo), capture_output=True,
+                             text=True, timeout=FIX_TIMEOUT)
     finally:
-        in_review(n, False)
+        in_review(repo, n, False)
     try:
         res = json.loads(out.stdout)
     except ValueError:
         res = {}
     status, note = res.get("status", "error"), fix_note(res, out.stderr)
-    log(n, f"fix {status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
+    log(repo, n, f"fix {status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     if status == "limited":
         return
-    errors = load(FIXES).get(str(n), {}).get("errors", 0) + 1 if status in ("error", "tests-red") else 0
-    record(str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= FIX_ERRORS else None,
-                    "status": status, "note": note, "errors": errors, "at": f"{datetime.now():%F %T}"}, FIXES)
+    errors = load(repo, FIXES).get(str(n), {}).get("errors", 0) + 1 if status in ("error", "tests-red") else 0
+    record(repo, str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= FIX_ERRORS else None,
+                          "status": status, "note": note, "errors": errors, "at": f"{datetime.now():%F %T}"}, FIXES)
     if status == "pushed":
         kick()
 
 
 class Pending:
-    """The PRs from the latest queue fetch that no worker has taken yet."""
+    """The PRs from the latest queue fetch that no worker has taken yet, keyed by (repo, number)."""
 
     def __init__(self, prs=(), workers=WORKERS):
         self.prs, self.busy, self.cond, self.workers = list(prs), set(), threading.Condition(), workers
 
     def refill(self, prs):
         with self.cond:
-            self.prs = [pr for pr in prs if pr["number"] not in self.busy]
+            self.prs = [pr for pr in prs if pr_key(pr) not in self.busy]
             self.cond.notify_all()
 
     def take(self, wait):
@@ -501,15 +534,15 @@ class Pending:
                 if not wait:
                     return None
                 self.cond.wait()
-            first = bumped()
+            first = bumps()
             pr = min(self.prs, key=lambda p: priority(p, first))
             self.prs.remove(pr)
-            self.busy.add(pr["number"])
-            return pr, first
+            self.busy.add(pr_key(pr))
+            return pr, first[pr["repo"]]
 
-    def done(self, n):
+    def done(self, key):
         with self.cond:
-            self.busy.discard(n)
+            self.busy.discard(key)
 
     def idle(self):
         with self.cond:
@@ -518,17 +551,17 @@ class Pending:
 
 def work(pending, wait, job):
     while picked := pending.take(wait):
-        n = picked[0]["number"]
+        repo, n = key = pr_key(picked[0])
         try:
-            with claimed(n) as mine:
+            with claimed(repo, n) as mine:
                 if mine:
                     job(*picked)
                 else:
-                    log_once(n, "handled by another run")
+                    log_once(repo, n, "handled by another run")
         except Exception:
-            log(n, f"crashed: {traceback.format_exc().strip()[-300:]}".replace("\n", " ⏎ "))
+            log(repo, n, f"crashed: {traceback.format_exc().strip()[-300:]}".replace("\n", " ⏎ "))
         finally:
-            pending.done(n)
+            pending.done(key)
 
 
 def run(pending, wait, job):
@@ -542,28 +575,48 @@ def reviewer(only, dry_run):
 
 
 def tick(only, dry_run):
+    """`only` is (repo, number): review that PR now."""
     started = time.monotonic()
-    pending = Pending(queue(only))
-    log("-", f"tick started{' (dry run)' if dry_run else ''}: {len(pending.prs)} PR(s) in queue")
+    pending = Pending(pr_of(*only) if only else queue())
+    say(f"tick started{' (dry run)' if dry_run else ''}: {len(pending.prs)} PR(s) in queue")
     if only and not pending.prs:
-        log(only, "not an open PR")
+        log(*only, "not an open PR")
     run(pending, False, reviewer(only, dry_run))
-    if os.path.exists(f"{NOWS}/{os.getpid()}.json"):
-        os.remove(f"{NOWS}/{os.getpid()}.json")
-    log("-", f"tick done in {time.monotonic() - started:.0f} s")
+    for repo in REPOS:
+        if os.path.exists(f"{path(repo, NOWS)}/{os.getpid()}.json"):
+            os.remove(f"{path(repo, NOWS)}/{os.getpid()}.json")
+    say(f"tick done in {time.monotonic() - started:.0f} s")
+
+
+def lanes(repo):
+    return "review+fix" if REPOS[repo]["review"] else "fix"
+
+
+def serving(held):
+    """The repos this daemon works on. A repo that had its own daemon before stays off while that one still
+    holds its lock; `held` keeps the locks taken so far."""
+    for repo in REPOS.keys() - held.keys() - {MONOREPO}:
+        lock = open(path(repo, LOCK), "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            held[repo] = lock
+        except BlockingIOError:
+            lock.close()
+            log_once(repo, "-", f"skipped: an old {repo} daemon holds {path(repo, LOCK)}")
+    return {MONOREPO, *held}
 
 
 def daemon():
     """Workers review nonstop. The queue data behind them refreshes every REFRESH s, every IDLE_REFRESH s
     while a worker has nothing to take, and at once on SIGUSR1."""
-    lock = open(LOCK, "w")
+    lock = open(path(MONOREPO, LOCK), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        return log("-", "daemon already running")
-    with open(PID, "w") as fh:
+        return say("daemon already running")
+    with open(path(MONOREPO, PID), "w") as fh:
         fh.write(str(os.getpid()))
-    pending, fixes, refresh_now = Pending(), Pending(workers=FIX_WORKERS), threading.Event()
+    pending, fixes, refresh_now, held = Pending(), Pending(workers=FIX_WORKERS), threading.Event(), {}
     signal.signal(signal.SIGUSR1, lambda *_: refresh_now.set())
 
     def refresh():
@@ -571,15 +624,16 @@ def daemon():
         while True:
             started = time.monotonic()
             try:
-                prs = queue(None)
+                served = serving(held)
+                prs = [pr for pr in queue() if pr["repo"] in served]
                 pending.refill(prs)
-                state, fixed = load(), load(FIXES)
-                fixes.refill([pr for pr in prs if fixable(pr, state, fixed)])
+                state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
+                fixes.refill([pr for pr in prs if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
                 if not idle:
-                    log("-", f"queue refreshed: {len(prs)} PR(s), {len(pending.busy)} in review, "
-                             f"{len(fixes.prs) + len(fixes.busy)} to fix")
+                    say(f"queue refreshed: {len(prs)} PR(s), {len(pending.busy)} in review, "
+                         f"{len(fixes.prs) + len(fixes.busy)} to fix")
             except Exception as e:
-                log("-", f"queue refresh failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
+                say(f"queue refresh failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
             idle = False
             while not refresh_now.wait(IDLE_REFRESH):
                 if time.monotonic() - started >= REFRESH:
@@ -589,8 +643,9 @@ def daemon():
                     break
             refresh_now.clear()
 
-    log("-", f"daemon started: {WORKERS} review and {FIX_WORKERS} fix workers, queue refresh every "
-             f"{REFRESH // 60} min, every {IDLE_REFRESH} s while a review worker is idle")
+    say(f"daemon started: {', '.join(f'{repo} {lanes(repo)}' for repo in REPOS)}")
+    say(f"{WORKERS} review and {FIX_WORKERS} fix workers, queue refresh every "
+         f"{REFRESH // 60} min, every {IDLE_REFRESH} s while a review worker is idle")
     threading.Thread(target=refresh, daemon=True).start()
     threading.Thread(target=run, args=(fixes, True, fix), daemon=True).start()
     run(pending, True, reviewer(None, False))
@@ -599,7 +654,7 @@ def daemon():
 def kick():
     """Ask the daemon for a queue refresh now; False when no daemon runs."""
     try:
-        os.kill(int(open(PID).read()), signal.SIGUSR1)
+        os.kill(int(open(path(MONOREPO, PID)).read()), signal.SIGUSR1)
         return True
     except (OSError, ValueError):
         return False
@@ -610,33 +665,33 @@ def wake():
         subprocess.run(["launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"], check=True)
 
 
-def heads(numbers):
-    """{pr: {number, state, headRefOid, viewerDidAuthor, labels}} in one GraphQL call."""
-    owner, name = REPO.split("/")
+def heads(repo, numbers):
+    """{pr: {repo, number, state, headRefOid, viewerDidAuthor, labels}} in one GraphQL call."""
+    owner, name = repo.split("/")
     fields = " ".join(f"p{n}: pullRequest(number: {n}) {{ number state headRefOid viewerDidAuthor "
                       f"labels(first: 20) {{ nodes {{ name }} }} }}" for n in numbers)
     query = f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {fields} }} }}"
-    repo = json.loads(sh("gh", "api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}",
-                         "-f", f"name={name}"))["data"]["repository"]
-    return {n: repo[f"p{n}"] for n in numbers}
+    found = json.loads(sh("gh", "api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}",
+                          "-f", f"name={name}", repo=repo))["data"]["repository"]
+    return {n: dict(found[f"p{n}"], repo=repo) for n in numbers}
 
 
-def wait(numbers, timeout):
+def wait(repo, numbers, timeout):
     """Bumps the PRs whose current head has no result yet, then blocks until one of them settles and
     prints [{pr, head, status, fix?, ...}] for every listed PR that has. Settled = the reviewers are done
     with the head and, on my PR they posted on, a fix pass ran without pushing (its result is `fix`).
     Closed or merged counts as settled, a no-auto-review PR too. A held PR is not bumped, since a bump is
     a review request: it comes back as `held`."""
-    state = load()
-    pending = [n for n, pr in heads(numbers).items()
+    state = load(repo)
+    pending = [n for n, pr in heads(repo, numbers).items()
                if state.get(str(n), {}).get("sha") != pr["headRefOid"] and not state.get(str(n), {}).get("hold")
                and not unreviewed(pr)]
-    save_bumped(pending + [x for x in bumped() if x not in pending])
+    save_bumped(repo, pending + [x for x in bumped(repo) if x not in pending])
     wake()
     deadline = time.monotonic() + timeout
     while True:
-        state, fixes, now = load(), load(FIXES), reviewing()
-        prs = heads(numbers)
+        state, fixes, now = load(repo), load(repo, FIXES), reviewing(repo)
+        prs = heads(repo, numbers)
         skipped = {n for n, pr in prs.items() if unreviewed(pr)}
         reviewed = {n for n, pr in prs.items() if state.get(str(n), {}).get("sha") == pr["headRefOid"]} - skipped
         owed = {n for n in reviewed if fixing(prs[n], state, fixes)}
@@ -655,13 +710,13 @@ def wait(numbers, timeout):
         time.sleep(WAIT_POLL)
 
 
-def reviewing():
-    """{pr: start time} of the PRs that live runs review now."""
+def reviewing(repo):
+    """{pr: start time} of the repo's PRs that live runs review now."""
     prs = {}
-    for path in glob(f"{NOWS}/*.json"):
+    for live in glob(f"{path(repo, NOWS)}/*.json"):
         try:
-            os.kill(int(os.path.basename(path)[:-5]), 0)
-            prs |= {int(n): at for n, at in json.load(open(path)).items()}
+            os.kill(int(os.path.basename(live)[:-5]), 0)
+            prs |= {int(n): at for n, at in json.load(open(live)).items()}
         except (OSError, ValueError):
             pass
     return prs
@@ -693,12 +748,12 @@ def row(pr, seen, now, first, fixed={}):
     return 1, "queued", f"pushed {pushed:%a %H:%M}"
 
 
-def bump(n):
-    state, now, prs = load(), reviewing(), queue(None)
-    pr = next((p for p in prs if p["number"] == n and not approved(p)), None)
+def bump(repo, n):
+    state, now, prs = load(repo), reviewing(repo), queue()
+    pr = next((p for p in prs if pr_key(p) == (repo, n) and not approved(p)), None)
     group, status, _ = row(pr, state.get(str(n), {}), now, [n]) if pr else (None, None, None)
     if group == 1:
-        save_bumped([n] + [x for x in bumped() if x != n])
+        save_bumped(repo, [n] + [x for x in bumped(repo) if x != n])
         kick()
     else:
         print(f"#{n}: {'not in the queue' if not pr else 'already in review' if group == 0 else f'nothing new to review ({status})'}")
@@ -706,30 +761,34 @@ def bump(n):
 
 
 def show(prs=None):
-    state, fixed, tty, now, first = load(), load(FIXES), sys.stdout.isatty(), reviewing(), bumped()
-    listed = ((*row(pr, state.get(str(pr["number"]), {}), now, first, fixed.get(str(pr["number"]), {})), pr)
-              for pr in prs or queue(None, "--cache", LIST_CACHE))
+    tty, first = sys.stdout.isatty(), bumps()
+    state, fixed = {r: load(r) for r in REPOS}, {r: load(r, FIXES) for r in REPOS}
+    now = {r: reviewing(r) for r in REPOS}
+    listed = ((*row(pr, state[pr["repo"]].get(str(pr["number"]), {}), now[pr["repo"]], first[pr["repo"]],
+                    fixed[pr["repo"]].get(str(pr["number"]), {})), pr)
+              for pr in prs or queue("--cache", LIST_CACHE))
     rows = sorted((r for r in listed if r[0] == 0 or not approved(r[3])),
-                  key=lambda r: (r[0], priority(r[3], first), r[3]["number"] < max(now, default=0), r[3]["number"]))
+                  key=lambda r: (r[0], priority(r[3], first), r[3]["number"] < max(now[r[3]["repo"]], default=0),
+                                 r[3]["number"]))
     rank = 0
     for group, status, detail, pr in rows:
         rank += group == 1
         mark = {0: "▶", 1: str(rank), 3: "✓"}.get(group, "")
-        n = pr["number"]
-        link = f"\033]8;;{url(n)}\033\\#{n}\033]8;;\033\\" if tty else f"#{n}"
+        name = f"{tag(pr['repo'])[1:]}#{pr['number']}"
+        link = f"\033]8;;{url(*pr_key(pr))}\033\\{name}\033]8;;\033\\" if tty else name
         print(f"{mark:>2}  {link}  {status:<9}  {detail:<20}  {'[draft] ' * pr['isDraft']}{pr['title']}")
 
 
-def worktrees():
+def worktrees(repo):
     """[(path, branch, head)] of every linked worktree; branch is None when detached."""
     trees = []
-    for block in sh("git", "worktree", "list", "--porcelain").strip().split("\n\n")[1:]:
+    for block in sh("git", "worktree", "list", "--porcelain", repo=repo).strip().split("\n\n")[1:]:
         fields = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
         trees.append((fields["worktree"], fields.get("branch", "").removeprefix("refs/heads/") or None, fields["HEAD"]))
     return trees
 
 
-def worktree_prs(trees):
+def worktree_prs(repo, trees):
     """{path: [PR]}: the PRs whose head is the worktree's branch, else the PR that its name carries."""
     variables, fields = [], []
     for i, (path, branch, _) in enumerate(trees):
@@ -739,18 +798,18 @@ def worktree_prs(trees):
         if m := PR_NUMBER.search(f"{branch} {os.path.basename(path)}"):
             variables.append((f"n{i}", "Int", m[1]))
             fields.append(f"n{i}: pullRequest(number: $n{i}) {{ ...done }}")
-    owner, name = REPO.split("/")
+    owner, name = repo.split("/")
     query = (f"query($owner: String!, $name: String!{''.join(f', ${v}: {t}!' for v, t, _ in variables)}) "
              f"{{ repository(owner: $owner, name: $name) {{ {' '.join(fields)} }} }}" + WORKTREE_FRAGMENT)
     flags = [f for v, t, value in variables for f in ("-F" if t == "Int" else "-f", f"{v}={value}")]
     out = subprocess.run(["gh", "api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}",
-                          *flags], cwd=REPO_ROOT, capture_output=True, text=True, timeout=600)
+                          *flags], cwd=root(repo), capture_output=True, text=True, timeout=600)
     body = json.loads(out.stdout)
     if "data" not in body:
-        log("-", f"prune skipped: {out.stderr.strip()[-200:]}")
+        log(repo, "-", f"prune skipped: {out.stderr.strip()[-200:]}")
         sys.exit(1)
-    repo = body["data"]["repository"]
-    prs = lambda i: (repo.get(f"h{i}") or {}).get("nodes") or [p for p in [repo.get(f"n{i}")] if p]
+    found = body["data"]["repository"]
+    prs = lambda i: (found.get(f"h{i}") or {}).get("nodes") or [p for p in [found.get(f"n{i}")] if p]
     return {path: [dict(p, requested=any(r["requestedReviewer"].get("isViewer") for r in p["reviewRequests"]["nodes"]))
                    for p in prs(i)] for i, (path, *_) in enumerate(trees)}
 
@@ -761,16 +820,16 @@ def finished(prs):
     return bool(live) and all(p["state"] == "MERGED" or approved(p) for p in live)
 
 
-def git_ok(*args):
-    return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, timeout=600).returncode == 0
+def git_ok(repo, *args):
+    return subprocess.run(["git", *args], cwd=root(repo), capture_output=True, timeout=600).returncode == 0
 
 
-def pushed(head, pr):
+def pushed(repo, head, pr):
     """The worktree holds no commit beyond what the PR's head already has."""
     sha = pr["headRefOid"]
-    if not git_ok("cat-file", "-e", f"{sha}^{{commit}}"):
-        git_ok("fetch", "-q", "--no-tags", "origin", sha)
-    return git_ok("merge-base", "--is-ancestor", head, sha)
+    if not git_ok(repo, "cat-file", "-e", f"{sha}^{{commit}}"):
+        git_ok(repo, "fetch", "-q", "--no-tags", "origin", sha)
+    return git_ok(repo, "merge-base", "--is-ancestor", head, sha)
 
 
 def cwds():
@@ -779,33 +838,33 @@ def cwds():
     return [line[1:] for line in out.stdout.splitlines() if line.startswith("n")]
 
 
-def blocker(path, head, prs, busy):
+def blocker(repo, path, head, prs, busy):
     if any(d == path or d.startswith(f"{path}/") for d in busy):
         return "in use"
-    if sh("git", "-C", path, "status", "--porcelain").strip():
+    if sh("git", "-C", path, "status", "--porcelain", repo=repo).strip():
         return "local changes"
-    if not any(pushed(head, pr) for pr in prs):
+    if not any(pushed(repo, head, pr) for pr in prs):
         return "unpushed commits"
 
 
-def prune(dry_run):
+def prune(repo, dry_run):
     """Removes the worktrees of PRs that merged or that I approved: nobody needs them locally anymore."""
-    trees = worktrees()
-    prs, busy = worktree_prs(trees), cwds()
+    trees = worktrees(repo)
+    prs, busy = worktree_prs(repo, trees), cwds()
     for path, _, head in trees:
         if not finished(prs[path]):
             continue
         n = prs[path][0]["number"]
         why = "merged" if all(p["state"] != "OPEN" for p in prs[path]) else "approved by me"
-        if keep := blocker(path, head, prs[path], busy):
+        if keep := blocker(repo, path, head, prs[path], busy):
             status = f"kept, {keep}"
         elif dry_run:
             status = "would be removed"
         else:
-            status = "removed" if git_ok("worktree", "remove", path) else "remove failed"
+            status = "removed" if git_ok(repo, "worktree", "remove", path) else "remove failed"
         if dry_run or not keep:
-            log(n, f"worktree {status} ({why}): {path}")
-    git_ok("worktree", "prune")
+            log(repo, n, f"worktree {status} ({why}): {path}")
+    git_ok(repo, "worktree", "prune")
 
 
 def main():
@@ -820,21 +879,24 @@ def main():
     ap.add_argument("--bg", action="store_true", help="refresh the daemon's queue now, or start the daemon")
     ap.add_argument("--daemon", action="store_true", help="review nonstop, refreshing the queue every 5 min")
     ap.add_argument("--prune", action="store_true", help="remove the worktrees of PRs that merged or that I approved")
+    ap.add_argument("--repo", choices=REPOS, help="the repo of --pr, --next, --wait and --prune (default $IPR_REPO, "
+                                                  f"else {MONOREPO})")
     a = ap.parse_args()
+    repo = a.repo or os.environ.get("IPR_REPO", MONOREPO)
     if a.list:
         return show()
     if a.next:
-        return bump(a.next)
+        return bump(repo, a.next)
     if a.wait:
-        return wait(a.wait, a.timeout)
+        return wait(repo, a.wait, a.timeout)
     if a.daemon:
         return daemon()
     if a.prune:
-        return prune(a.dry_run)
+        return prune(repo, a.dry_run)
     if a.bg:
         wake()
         return print(f"queue refresh requested — tail -f {LOG}")
-    tick(a.pr, a.dry_run)
+    tick((repo, a.pr) if a.pr else None, a.dry_run)
 
 
 if __name__ == "__main__":

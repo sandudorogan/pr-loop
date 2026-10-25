@@ -6,7 +6,7 @@ Do not rely on memory files for this repository. When you learn something durabl
 ## What it is
 
 A macOS launchd daemon that reviews and fixes GitHub PRs for one owner (`gh` user).
-Today each process serves one repo. `IPR_REPO` picks the repo (default `iprally/iprally`). This is the current state, not the design: see Ground truth.
+One process serves every repo in `REPOS` (`bin/review-queue`): `iprally/iprally` gets both lanes, `iprally/gitops` the fix lane only.
 
 ```text
                  one GraphQL call every 5 min (60 s when a worker idles, now on SIGUSR1)
@@ -27,7 +27,8 @@ Today each process serves one repo. `IPR_REPO` picks the repo (default `iprally/
 
 - Review lane: my PRs, PRs that request my review, PRs I reviewed before. Monorepo only.
 - Fix lane: my PRs only. Input = unresolved threads, review bodies on the head, failed Actions jobs, base conflict.
-- Current state, not the design: `IPR_REPO=iprally/gitops` runs a second daemon with the fix lane only (`unreviewed()` is true there). Ground truth replaces it. Do not copy this pattern.
+- Every PR dict carries `repo`. Lanes, locks and state key on `(repo, number)`: PR numbers of two repos overlap.
+- Children run with `IPR_REPO` and `IPR_REPO_ROOT` set to the PR's repo, `cwd` = its root. The daemon ignores `IPR_REPO`.
 
 ## Ground truth (never change)
 
@@ -40,7 +41,6 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 - The commands a worker runs for one pass are child processes of that pass: `pr_review.py`, `pr_fix.py`, `claude -p`, `codex exec`. They are not daemons.
 - Do not add a second launchd job, a per-repo process, or a per-repo socket.
 - To support a new repo, add it to the one daemon.
-- Known violation: today `IPR_REPO=iprally/gitops` starts a second daemon. The PR Wizard overhaul removes it. Until then, do not add more.
 
 ## Files
 
@@ -83,7 +83,8 @@ The live service runs the code in the **main checkout** (`~/workdir/review-queue
 | `~/.claude/skills/delegator/briefs/<N or branch>.md` | agent-delegator | task brief; branch name with `/` → `+` |
 | `~/Library/Logs/review-queue.log` | all | one shared log; gitops lines read `gitops#N` |
 
-Current state, replaced by Ground truth: the gitops instance tags every state path with `-gitops` (`review-queue-gitops.*`, `pr-fix-gitops/`).
+State paths of a repo other than iprally carry a `-<name>` tag (`review-queue-gitops.*`, `pr-fix-gitops/`).
+The daemon also holds `review-queue-gitops.lock` and skips gitops while an old gitops daemon holds it.
 Review worktrees: `<repo>/.claude/worktrees/.review-<N>` (one per PR, shared by its reviewers).
 Fix worktrees: the PR branch's existing worktree, else `<repo>/.claude/worktrees/<branch / → +>`.
 
@@ -132,7 +133,7 @@ Commit style: `~/.gitmessage` (type prefix, 50-char imperative subject, body say
 
 ```sh
 review-queue -l                          # ▶ in work, 1..n review order, ✓ ready
-IPR_REPO=iprally/gitops review-queue -l  # the gitops instance (current state, to be removed)
+review-queue --repo iprally/gitops --wait 42  # --pr/--next/--wait/--prune on gitops (else $IPR_REPO, else iprally)
 review-queue --wait 16400                # block until settled at the current head, print JSON
 review-queue --next 16400                # bump; counts as a review request
 review-queue --pr 16400                  # review now, past every gate and label

@@ -29,6 +29,11 @@ class RunnerPaths(unittest.TestCase):
         for template in (ROOT / "launchd").glob("*.tmpl"):
             data = plistlib.loads(template.read_text().replace("{{ .chezmoi.homeDir }}", str(Path.home())).encode())
             self.assertEqual(data["ProgramArguments"][0], str(Path.home() / ".local/bin/review-queue"))
+            self.assertNotIn("IPR_REPO", data.get("EnvironmentVariables", {}))
+
+    def test_one_daemon_label(self):
+        labels = {plistlib.loads(t.read_bytes())["Label"] for t in (ROOT / "launchd").glob("*.tmpl")}
+        self.assertEqual(labels - {"local.review-queue-prune"}, {"local.review-queue"})
 
 
 if __name__ == "__main__":

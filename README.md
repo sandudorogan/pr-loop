@@ -57,7 +57,8 @@ review-queue --prune       # remove worktrees of merged or approved PRs
 ```
 
 Labels opt a PR out: `no-auto-review` skips the reviewers, `no-auto-fix` skips the fix lane.
-`IPR_REPO=owner/name` runs the queue on another repo (fix lane only), with its own state.
+One daemon serves `iprally/iprally` (review + fix) and `iprally/gitops` (fix only). `--repo` picks the repo of
+`--pr`, `--next`, `--wait` and `--prune` (default `$IPR_REPO`, else `iprally/iprally`).
 
 The queue posts reviews, replies and commits with your GitHub credentials.
 Log: `~/Library/Logs/review-queue.log`. State: `~/.local/state/review-queue*` and `~/.local/state/pr-fix*`.
