@@ -249,10 +249,10 @@ def extract_json(text):
             return json.loads(block)
         except json.JSONDecodeError:
             continue
-    start = text.find("{")
+    decoder, start = json.JSONDecoder(), text.find("{")
     while start != -1:
         try:
-            return json.loads(text[start:])
+            return decoder.raw_decode(text, start)[0]
         except json.JSONDecodeError:
             start = text.find("{", start + 1)
     die("reviewer returned no parsable JSON object")

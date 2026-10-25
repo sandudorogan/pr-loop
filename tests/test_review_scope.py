@@ -213,6 +213,10 @@ class ExtractJson(unittest.TestCase):
     def test_a_stray_brace_before_the_object_is_skipped(self):
         self.assertEqual(prr.extract_json('see {this} first {"a": 1}'), {"a": 1})
 
+    def test_trailing_prose_after_an_unfenced_object_is_ignored(self):
+        self.assertEqual(prr.extract_json('text {"a":1} trailing'), {"a": 1})
+        self.assertEqual(prr.extract_json('{"a": {"b": 1}}\n\nHope that helps {really}'), {"a": {"b": 1}})
+
     def test_no_json_exits_with_an_error(self):
         with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as ctx:
             prr.extract_json("nothing here")
