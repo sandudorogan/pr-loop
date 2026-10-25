@@ -371,6 +371,8 @@ def reviewer_result(res):
 
 def review(repo, pr, sha):
     ids = reviewers(repo)
+    if not ids:
+        return "skipped", "no reviewer enabled"
     with ThreadPoolExecutor(len(ids)) as pool:
         results = dict(zip(ids, pool.map(lambda r: run_reviewer(repo, pr, r), ids)))
     for reviewer, res in results.items():

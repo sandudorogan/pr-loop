@@ -177,6 +177,12 @@ class Reviewers(Configured):
             self.assertEqual(rq.review(MONOREPO, 5, HEAD), ("clean", "no findings"))
         self.assertEqual(sorted(ran), ["opus", "quality"])
 
+    def test_no_enabled_reviewer_skips_instead_of_raising(self):
+        self.write({"review": {"enabled": False, "reviewers": [reviewer(r, enabled=False) for r in ("opus", "codex", "quality")]}})
+        with patch.object(rq, "run_reviewer") as run:
+            self.assertEqual(rq.review(MONOREPO, 5, HEAD), ("skipped", "no reviewer enabled"))
+        run.assert_not_called()
+
     def test_one_engine_at_its_limit_is_limited(self):
         out = CompletedProcess([], 1, "", "error: codex is at its usage limit\n")
         db.run_start(MONOREPO, 5, "review", reviewers=[])
