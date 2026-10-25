@@ -198,7 +198,8 @@ import Testing
         let config = try await client.prConfig(gitops)
         _ = try await client.patchPRConfig(gitops, ["fix": ["enabled": false]], baseRev: config.rev)
         _ = try await client.deletePRConfig(gitops)
-        #expect(await transport.requests.map(\.method) == [.get, .patch, .delete])
+        _ = try await client.putPRConfig(gitops, ["fix": ["model": .null]], baseRev: config.rev)
+        #expect(await transport.requests.map(\.method) == [.get, .patch, .delete, .put])
         #expect(Set(await transport.requests.map(\.path)) == ["/v1/prs/iprally/gitops/412/config"])
         #expect(
             try await transport.requests[1].body.map(JSONValue.init(parsing:)) == [

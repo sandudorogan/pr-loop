@@ -32,8 +32,13 @@ import Observation
         await load(pr)
     }
 
+    /// A null is the built-in default picked over the project's value. A merge patch would delete the key and
+    /// inherit the project's value instead, so a null goes as a PUT of the whole override.
     public func set(_ path: String, to value: JSONValue) async {
-        await patch([path: value])
+        guard value == .null else { return await patch([path: value]) }
+        guard let pr, let config else { return }
+        let override = (config.override ?? .null).setting(.null, at: OverrideResolver.path(path))
+        await write(pr) { try await self.daemon.putPRConfig(pr, override, baseRev: config.rev) }
     }
 
     public func setReviewers(_ reviewers: [ReviewerConfig]) async {

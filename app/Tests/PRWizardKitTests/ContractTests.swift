@@ -130,6 +130,8 @@ struct ContractTests {
         #expect(loaded.layers.pr.contains("review.reviewers"))
         let patched = try await daemon.patchPRConfig(seeded, ["fix": ["enabled": false]], baseRev: loaded.rev)
         #expect(patched.layers.pr.contains("fix.enabled"))
+        let put = try await daemon.putPRConfig(seeded, ["fix": ["model": .null]], baseRev: patched.rev)
+        #expect(put.override == ["fix": ["model": .null]])
         let dropped = try await daemon.deletePRConfig(seeded)
         #expect(dropped.override == nil)
         #expect(dropped.layers.pr.isEmpty)

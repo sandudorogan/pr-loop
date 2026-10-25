@@ -157,16 +157,27 @@ def pr_config(rt, query, body, owner, name, n):
     return pr_page(rt, f"{owner}/{name}", int(n))
 
 
-def patch_pr_config(rt, query, body, owner, name, n):
-    """api.md §3.15: a merge patch over the PR's override, validated as the merged effective config."""
-    repo, n, base = f"{owner}/{name}", int(n), base_rev(body, "patch")
+def write_pr_config(rt, body, owner, name, n, key, merged):
+    """PUT and PATCH: `merged(override, body[key])`, checked against `base_rev`, validated as the merged effective
+    config, stored. Only PUT can keep a null: it is the "use the built-in default" choice over a project value."""
+    repo, n, base = f"{owner}/{name}", int(n), base_rev(body, key)
     with WRITE:
         page = pr_page(rt, repo, n)
         checked(base, page["rev"], "override")
-        doc = config.merge_patch(page["override"] or {}, body["patch"])
+        doc = merged(page["override"] or {}, body[key])
         valid(config.validate(doc, "pr", base=config.effective(rt.config()["config"], repo)))
         rt.put_pr_override(repo, n, doc or None)
         return pr_page(rt, repo, n)
+
+
+def put_pr_config(rt, query, body, owner, name, n):
+    """api.md §3.15: the whole override."""
+    return write_pr_config(rt, body, owner, name, n, "override", lambda current, doc: doc)
+
+
+def patch_pr_config(rt, query, body, owner, name, n):
+    """api.md §3.15: an RFC 7396 merge patch over the override."""
+    return write_pr_config(rt, body, owner, name, n, "patch", config.merge_patch)
 
 
 def drop_pr_config(rt, query, body, owner, name, n):
@@ -229,7 +240,7 @@ ROUTES = {
     "/v1/next": {"POST": bump},
     f"{PR}/review": {"POST": act("review")},
     f"{PR}/fix": {"POST": act("fix")},
-    f"{PR}/config": {"GET": pr_config, "PATCH": patch_pr_config, "DELETE": drop_pr_config},
+    f"{PR}/config": {"GET": pr_config, "PUT": put_pr_config, "PATCH": patch_pr_config, "DELETE": drop_pr_config},
     f"{PR}/pause": {"POST": hold(True)},
     f"{PR}/resume": {"POST": hold(False)},
     "/v1/pause": {"POST": lambda rt, query, body: {"paused": rt.pause(True)}},

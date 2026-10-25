@@ -16,6 +16,7 @@ actor ScriptedDaemon: DaemonAPI {
         case patchConfig(JSONValue, baseRev: String)
         case putConfig(JSONValue, baseRev: String)
         case prConfig(PRRef)
+        case putPRConfig(PRRef, JSONValue, baseRev: String)
         case patchPRConfig(PRRef, JSONValue, baseRev: String)
         case deletePRConfig(PRRef)
     }
@@ -111,6 +112,11 @@ actor ScriptedDaemon: DaemonAPI {
 
     func prConfig(_ pr: PRRef) async throws -> PRConfig {
         calls.append(.prConfig(pr))
+        return try Self.next(&prConfigs)
+    }
+
+    func putPRConfig(_ pr: PRRef, _ override: JSONValue, baseRev: String) async throws -> PRConfig {
+        calls.append(.putPRConfig(pr, override, baseRev: baseRev))
         return try Self.next(&prConfigs)
     }
 

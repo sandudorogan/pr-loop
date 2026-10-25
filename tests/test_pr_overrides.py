@@ -68,6 +68,21 @@ class Api(Writes):
         self.assertIsNone(self.patch_({"patch": {"review": None}})[1]["override"])
         self.assertIsNone(db.pr_override(MONOREPO, 10))
 
+    def test_put_keeps_a_null_over_the_project_model(self):
+        self.call("PATCH", "/v1/config", {"patch": {"projects": {MONOREPO: {"fix": {"model": "gpt-5"}}}}})
+        self.assertEqual(self.patch_({"patch": {"fix": {"model": None}}})[1]["effective"]["fix"]["model"], "gpt-5")
+        status, body = self.call("PUT", self.url(), {"override": {"fix": {"model": None}}})
+        self.assertEqual((status, body["layers"]["pr"], body["effective"]["fix"]["model"]), (200, ["fix.model"], None))
+        self.assertEqual(db.pr_override(MONOREPO, 10)["config"], {"fix": {"model": None}})
+
+    def test_put_replaces_the_whole_override(self):
+        self.patch_({"patch": {"review": {"enabled": False}}})
+        body = self.call("PUT", self.url(), {"override": {"fix": {"enabled": False}}})[1]
+        self.assertEqual(body["override"], {"fix": {"enabled": False}})
+        self.assertIsNone(self.call("PUT", self.url(), {"override": {}})[1]["override"])
+        status, body = self.call("PUT", self.url(), {"base_rev": "0" * 12, "override": {}})
+        self.assertEqual((status, body["error"]["code"]), (412, "stale_config"))
+
     def test_labels_force_their_lane_off(self):
         body = self.patch_({"patch": {"fix": {"enabled": True}}}, 17)[1]
         self.assertEqual((body["labels"], body["effective"]["fix"]["enabled"]), (["no-auto-fix"], False))
@@ -95,8 +110,8 @@ class Api(Writes):
 
     def test_unknown_prs_are_404(self):
         for path, code in ((self.url(1, "acme/nope"), "unknown_repo"), (self.url(11), "not_in_queue")):
-            for method in ("GET", "PATCH", "DELETE"):
-                status, body = self.call(method, path, {"patch": {}} if method == "PATCH" else None)
+            for method, body in (("GET", None), ("PUT", {"override": {}}), ("PATCH", {"patch": {}}), ("DELETE", None)):
+                status, body = self.call(method, path, body)
                 self.assertEqual((status, body["error"]["code"]), (404, code), (method, path))
 
     def test_review_now_follows_the_pr_review_lane(self):

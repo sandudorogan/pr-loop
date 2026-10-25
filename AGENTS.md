@@ -180,7 +180,7 @@ POST   refresh · next · pause · resume
 POST   prs/<o>/<n>/<N>/review         review now, past every gate and label, not past review.enabled false
 POST   prs/<o>/<n>/<N>/fix            re-arm: fixes.key = NULL, errors = 0, then refresh
 POST   prs/<o>/<n>/<N>/pause · resume one PR: no new pass in either lane, a running pass finishes
-GET · PATCH · DELETE   prs/<o>/<n>/<N>/config      the PR override and its effective config
+GET · PUT · PATCH · DELETE   prs/<o>/<n>/<N>/config   the PR override and its effective config
 ```
 
 **Events.** The daemon has no UI. It records `ready_for_approval` (a colleague's PR reviewed READY) and `ready_withdrawn`

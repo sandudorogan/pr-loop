@@ -81,6 +81,11 @@ public struct DaemonClient: DaemonAPI {
         try await send(HTTPRequest(.get, "\(path(of: pr))/config"), ordered: true)
     }
 
+    public func putPRConfig(_ pr: PRRef, _ override: JSONValue, baseRev: String) async throws -> PRConfig {
+        let body: JSONValue = .object(["base_rev": .string(baseRev), "override": override])
+        return try await send(HTTPRequest(.put, "\(path(of: pr))/config", body: body.data), ordered: true)
+    }
+
     public func patchPRConfig(_ pr: PRRef, _ patch: JSONValue, baseRev: String) async throws -> PRConfig {
         let body: JSONValue = .object(["base_rev": .string(baseRev), "patch": patch])
         return try await send(HTTPRequest(.patch, "\(path(of: pr))/config", body: body.data), ordered: true)

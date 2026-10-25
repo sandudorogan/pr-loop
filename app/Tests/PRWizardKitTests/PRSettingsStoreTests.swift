@@ -30,6 +30,17 @@ import Testing
         #expect(store.config?.rev == "aaaaaaaaaaaa")
     }
 
+    @Test("a null picks the built-in default over the project: a PUT of the override that keeps the null")
+    func explicitNull() async throws {
+        let (store, daemon) = try await store(.success(try PRConfigs.config()))
+        let reviewers = try #require(store.config?.override?[["review", "reviewers"]])
+        await store.set("fix.model", to: .null)
+        #expect(
+            await daemon.calls.last
+                == .putPRConfig(
+                    pr, ["review": ["reviewers": reviewers], "fix": ["model": .null]], baseRev: "2e8fe284ec8f"))
+    }
+
     @Test("Use Default patches each path to null")
     func useDefault() async throws {
         let (store, daemon) = try await store(.success(try PRConfigs.cleared()))
