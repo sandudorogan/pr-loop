@@ -1,63 +1,70 @@
 # Review queue
 
-Personal PR review and fix service. MIT licensed.
-The queue runs Claude Code and Codex reviewers, then fixes actionable feedback on authored PRs.
-Its current defaults target `iprally/iprally` in `~/workdir/iprally`.
-The prompts and fix checks also contain IPRally conventions.
-A second service runs the fix lane alone on `iprally/gitops` (`IPR_REPO=iprally/gitops`).
+A macOS daemon that reviews and fixes your GitHub PRs with Claude Code and Codex. MIT licensed.
+
+It watches your own PRs and the PRs that request your review.
+Three reviewers post findings as inline comments.
+On your own PRs, headless Codex then fixes the feedback, red CI and base conflicts, and pushes.
+The push starts the next review round.
 
 ```text
-GitHub PR -> review-queue -> Claude + Codex + quality reviews
-                        -> fix authored PRs -> push -> next review round
-
-bin/                 queue command
-review/              review and fix runners, schemas, prompts
-claude/              Claude Code PR watch skill and scanner
-launchd/             macOS service templates
+  your PR head ──▶ review ×3 ──settled──▶ fix ──pushed──▶ new head ─┐
+       ▲          opus · codex · quality   │ nothing to push → ready │
+       └───────────────────────────────────┴─────────────────────────┘
 ```
+
+| Reviewer | Engine | Looks for |
+| --- | --- | --- |
+| `opus` | Claude Opus | bugs and risk; checks the change against the task brief when one exists |
+| `codex` | Codex (read-only) | adversarial review of the same diff |
+| `quality` | Claude Haiku | breaches of the repo's documented conventions |
+
+When one engine hits its usage limit, the reviewer runs on the other.
+A round reviews only the commits since the last round.
+After 8 rounds in a row with findings, the PR waits for a human.
+
+The defaults target `iprally/iprally` in `~/workdir/iprally`, and the prompts and the fix lane's test gate carry its conventions.
+See [docs/overhaul.md](docs/overhaul.md) for every repo-specific part.
 
 ## Install
 
-Clone this repository into `~/workdir/review-queue`.
-Python 3.10 or later, `gh`, `git`, Claude Code and Codex are required.
-Keep the existing notification application at `~/.local/share/review-queue/Review Queue.app`.
+Requirements: macOS, Python 3.10+, `gh` (logged in), `git`, Claude Code, Codex.
 
 ```sh
+git clone git@github.com:sandudorogan/review-queue.git ~/workdir/review-queue
+cd ~/workdir/review-queue
 python3 install.py --dry-run
-python3 install.py --chezmoi-source ~/.local/share/chezmoi
-review-queue --help
+python3 install.py --chezmoi-source ~/.local/share/chezmoi   # omit the flag without chezmoi
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.review-queue.plist
 ```
 
-Omit `--chezmoi-source` if you do not use chezmoi.
-The installer backs up replaced files under `~/.local/state/review-queue/backups/`.
-It links the command and the old `~/.claude/skills/delegator/` runner paths to this repository.
-It renders the launchd templates into the ignored `.local/` directory and links the installed plists there.
-With chezmoi, it updates the source first and applies only this repository's paths.
-It does not start or restart the service.
+The installer symlinks the command, the runners and the launchd plists into `$HOME`.
+It backs up what it replaces under `~/.local/state/review-queue/backups/`. It does not start the service.
 
-Install [agent-delegator](https://github.com/sandudorogan/agent-delegator) separately for the orchestration agents.
-The review command can also run without those agents.
-The PR watch skill in `claude/` requires Claude Code and the delegator's `pr-fixer` agent.
+The "ready" notification uses a copy of `terminal-notifier` at `~/.local/share/review-queue/Review Queue.app`.
+The task briefs come from [agent-delegator](https://github.com/sandudorogan/agent-delegator), which also uses the PR watch skill in `claude/`.
+The queue runs without either.
 
 ## Use
 
 ```sh
-review-queue --list
-review-queue --dry-run
-review-queue --pr 16400
-review-queue --wait 16400
+review-queue -l            # the queue: ▶ in work, 1..n review order, ✓ ready to approve
+review-queue --pr 16400    # review one PR now
+review-queue --next 16400  # move a PR to the front
+review-queue --wait 16400  # block until the PR settles at its head, print JSON
+review-queue -n            # dry run: print each PR's gate decision
+review-queue --prune       # remove worktrees of merged or approved PRs
 ```
 
-The dry run prints queue decisions without running reviewers.
-Review and fix commands can publish GitHub feedback and push changes using your existing credentials.
-Run `review-queue --help` for the full command list.
-The existing launchd service continues to use `~/.local/bin/review-queue`.
+Labels opt a PR out: `no-auto-review` skips the reviewers, `no-auto-fix` skips the fix lane.
+`IPR_REPO=owner/name` runs the queue on another repo (fix lane only), with its own state.
 
-Task briefs and `.clean-reviews.json` stay under `~/.claude/skills/delegator/`.
-Queue and fix state stay under `~/.local/state/`. Logs stay under `~/Library/Logs/`.
-These files remain outside Git. Authentication stays in the existing CLI stores.
+The queue posts reviews, replies and commits with your GitHub credentials.
+Log: `~/Library/Logs/review-queue.log`. State: `~/.local/state/review-queue*` and `~/.local/state/pr-fix*`.
 
-## Check
+## Develop
+
+Read [AGENTS.md](AGENTS.md) first: layout, state files, contracts, workflow and gotchas.
 
 ```sh
 python3 -m unittest discover -s tests -v
