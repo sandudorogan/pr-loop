@@ -5,10 +5,11 @@ nonisolated struct UserNotificationsNotifier: Notifier {
     private var center: UNUserNotificationCenter { .current() }
 
     func authorization() async -> NotificationAuthorization {
-        switch await center.notificationSettings().authorizationStatus {
+        let settings = await center.notificationSettings()
+        return switch settings.authorizationStatus {
         case .notDetermined: .notDetermined
         case .denied: .denied
-        default: .authorized
+        default: settings.alertStyle == .alert ? .authorized : .temporary
         }
     }
 

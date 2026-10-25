@@ -23,6 +23,14 @@ struct GeneralPane: View {
                     } label: {
                         Label("Notifications are off for PR Wizard in System Settings.", systemImage: "flag.fill")
                     }
+                } else if notifications.authorization == .temporary {
+                    LabeledContent {
+                        Button("Open…") { openNotificationSettings() }
+                    } label: {
+                        Label(
+                            "Ready alerts go away on their own. Set PR Wizard to Persistent in System Settings.",
+                            systemImage: "flag.fill")
+                    }
                 }
             }
             Section("Daemon") {

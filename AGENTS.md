@@ -191,6 +191,8 @@ GET · PATCH · DELETE   prs/<o>/<n>/<N>/config      the PR override and its eff
 Lanes, Reviewers, Fixer, with a scope dropdown: All repos, then each project), the menu bar extra and the "Ready for your
 approval" notification. It is a client only: it talks to the daemon over `api.sock`, and "Start Daemon" kickstarts the
 label in `launchd-label` (default `local.pr-wizard`). `python3 -m pr_wizard.api --fake` serves it without the live daemon.
+The ready alert must stay until the owner dismisses it: `NSUserNotificationAlertStyle = alert` makes Persistent the
+default on first registration, and General shows a fix-it row while System Settings has PR Wizard on Temporary.
 
 ## Contracts that other code depends on
 

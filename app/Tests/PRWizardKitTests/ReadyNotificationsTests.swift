@@ -105,6 +105,16 @@ import Testing
         #expect(store.authorization == status)
     }
 
+    @Test("a temporary alert style still posts")
+    func temporary() async throws {
+        let daemon = ScriptedDaemon(
+            events: [.success(try Events.page("e.1")), .success(try Events.page("e.2", [Events.ready(2)]))])
+        let notifier = FakeNotifier(.temporary)
+        let store = await run(daemon, notifier, MemoryCursor("e.1"))
+        #expect(await notifier.posts.count == 1)
+        #expect(store.authorization == .temporary)
+    }
+
     @Test("not determined with the toggle on asks once")
     func requestOnce() async {
         let notifier = FakeNotifier(.notDetermined, granted: .notDetermined)

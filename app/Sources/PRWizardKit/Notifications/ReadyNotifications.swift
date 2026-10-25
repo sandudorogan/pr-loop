@@ -52,7 +52,7 @@ import Observation
         let ops = unposted.map(NotificationOp.post) + update.ops
         unposted = []
         authorization = await notifier.authorization()
-        let isPosting = isEnabled() && authorization == .authorized
+        let isPosting = isEnabled() && authorization.allowsPosting
         for op in ops {
             switch op {
             case .post(let notification) where isPosting && !posted.contains(notification.id):
