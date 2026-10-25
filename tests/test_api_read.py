@@ -141,6 +141,17 @@ class Server(unittest.TestCase):
         self.assertGreaterEqual(took, 1)
         self.assertLess(self.timed("/v1/queue?since=other&wait=10")[1], 1)
 
+    def test_a_client_that_hangs_up_mid_poll_is_no_error(self):
+        rev = self.get("/v1/queue")[2]["rev"]
+        with patch.object(self.server, "handle_error") as handle_error:
+            with socket.socket(socket.AF_UNIX) as s:
+                s.connect(self.sock)
+                s.sendall(f"GET /v1/queue?since={rev}&wait=10 HTTP/1.1\r\nContent-Length: 0\r\n\r\n".encode())
+                time.sleep(0.2)
+            db.drop_next(MONOREPO, 12)
+            time.sleep(0.3)
+        handle_error.assert_not_called()
+
     def test_a_live_server_keeps_its_socket(self):
         with self.assertRaises(SystemExit):
             api.bind(self.rt, self.sock)

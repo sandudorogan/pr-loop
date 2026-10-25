@@ -125,8 +125,11 @@ class Handler(BaseHTTPRequestHandler):
         for name, value in {**(headers or {}), "Content-Type": "application/json; charset=utf-8",
                             "Content-Length": str(len(data)), "Connection": "close"}.items():
             self.send_header(name, value)
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.end_headers()
+            self.wfile.write(data)
+        except BrokenPipeError:
+            pass
         self.close_connection = True
 
     def send_error(self, code, message=None, explain=None):
