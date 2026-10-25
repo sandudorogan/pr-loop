@@ -26,7 +26,8 @@ Labels opt a PR out: no-auto-review skips the reviewers (the fix lane then acts 
 no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
 One process serves every repo in REPOS: iprally/iprally gets both lanes, iprally/gitops the fix lane alone.
---pr, --next, --wait and --prune act on --repo, else $IPR_REPO, else iprally/iprally.
+--pr, --next and --wait act on --repo, else $IPR_REPO, else iprally/iprally.
+The daemon prunes the worktrees of every repo at start and every 30 min; --prune does one pass (--repo: that repo only).
 
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
@@ -60,6 +61,7 @@ FIX_WORKERS = 3
 FIX_TIMEOUT = 4 * 3600
 FIX_ERRORS = 3
 REFRESH = 300
+PRUNE_EVERY = 1800
 IDLE_REFRESH = 60
 LIST_CACHE = "30s"
 ATTEMPTS = 3
@@ -648,6 +650,7 @@ def daemon():
          f"{REFRESH // 60} min, every {IDLE_REFRESH} s while a review worker is idle")
     threading.Thread(target=refresh, daemon=True).start()
     threading.Thread(target=run, args=(fixes, True, fix), daemon=True).start()
+    start_pruner()
     run(pending, True, reviewer(None, False))
 
 
@@ -867,6 +870,30 @@ def prune(repo, dry_run):
     git_ok(repo, "worktree", "prune")
 
 
+def prune_all(repos, dry_run):
+    """One prune pass over `repos`. A repo that fails is logged and the next one still runs; True when any failed."""
+    failed = False
+    for repo in repos:
+        try:
+            prune(repo, dry_run)
+        except SystemExit:
+            failed = True
+        except Exception as e:
+            failed = True
+            log(repo, "-", f"prune failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
+    return failed
+
+
+def prune_forever(sleep=time.sleep):
+    while True:
+        prune_all(REPOS, False)
+        sleep(PRUNE_EVERY)
+
+
+def start_pruner():
+    threading.Thread(target=prune_forever, daemon=True).start()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pr", type=int, help="review this PR now, even if its own diff is unchanged")
@@ -878,9 +905,10 @@ def main():
     ap.add_argument("--timeout", type=int, default=7200, help="seconds --wait blocks before it prints the pending state")
     ap.add_argument("--bg", action="store_true", help="refresh the daemon's queue now, or start the daemon")
     ap.add_argument("--daemon", action="store_true", help="review nonstop, refreshing the queue every 5 min")
-    ap.add_argument("--prune", action="store_true", help="remove the worktrees of PRs that merged or that I approved")
-    ap.add_argument("--repo", choices=REPOS, help="the repo of --pr, --next, --wait and --prune (default $IPR_REPO, "
-                                                  f"else {MONOREPO})")
+    ap.add_argument("--prune", action="store_true",
+                    help="remove the worktrees of PRs that merged or that I approved, in every repo")
+    ap.add_argument("--repo", choices=REPOS, help="the repo of --pr, --next and --wait (default $IPR_REPO, "
+                                                  f"else {MONOREPO}); --prune: only this repo")
     a = ap.parse_args()
     repo = a.repo or os.environ.get("IPR_REPO", MONOREPO)
     if a.list:
@@ -892,7 +920,7 @@ def main():
     if a.daemon:
         return daemon()
     if a.prune:
-        return prune(repo, a.dry_run)
+        sys.exit(prune_all([a.repo] if a.repo else REPOS, a.dry_run))
     if a.bg:
         wake()
         return print(f"queue refresh requested — tail -f {LOG}")

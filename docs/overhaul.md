@@ -81,7 +81,6 @@ The daemon calls both scripts as subprocesses and reads their stdout JSON.
 - Briefs resolve by bare PR number, so a gitops PR can pick up a monorepo brief with the same number.
 - `.clean-reviews.json` writes without a lock. A lost entry costs one extra review.
 - `fix_note` for `tests-red` hides Codex's summary of the cause.
-- No gitops prune job.
 - One log file for both instances.
 
 ## Test gaps

@@ -9,7 +9,6 @@
     ".claude/skills/pr-review-loop": "claude/skills/pr-review-loop"
   },
   "templates": {
-    "Library/LaunchAgents/local.review-queue-prune.plist": "launchd/local.review-queue-prune.plist.tmpl",
     "Library/LaunchAgents/local.review-queue.plist": "launchd/local.review-queue.plist.tmpl"
   }
 }

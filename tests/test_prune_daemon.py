@@ -1,0 +1,83 @@
+import importlib.machinery
+import importlib.util
+import io
+import contextlib
+from pathlib import Path
+import subprocess
+import unittest
+from unittest.mock import MagicMock, call, patch
+
+ROOT = Path(__file__).resolve().parents[1]
+loader = importlib.machinery.SourceFileLoader("review_queue", str(ROOT / "bin/review-queue"))
+spec = importlib.util.spec_from_loader("review_queue", loader)
+rq = importlib.util.module_from_spec(spec)
+loader.exec_module(rq)
+
+
+class Stop(Exception):
+    pass
+
+
+class PruneInDaemon(unittest.TestCase):
+    def logged(self, repos, prune):
+        out = io.StringIO()
+        with patch.object(rq, "prune", prune), contextlib.redirect_stdout(out):
+            failed = rq.prune_all(repos, False)
+        return failed, out.getvalue()
+
+    def test_pruner_is_a_daemon_thread_on_the_loop(self):
+        with patch.object(rq.threading, "Thread") as thread:
+            rq.start_pruner()
+        thread.assert_called_once_with(target=rq.prune_forever, daemon=True)
+        thread.return_value.start.assert_called_once_with()
+
+    def test_the_daemon_starts_the_pruner(self):
+        self.assertIn("start_pruner()", Path(ROOT / "bin/review-queue").read_text().split("def daemon()")[1])
+
+    def test_loop_prunes_every_repo_at_start_then_every_interval(self):
+        sleep, prune = MagicMock(side_effect=[None, Stop]), MagicMock()
+        with patch.object(rq, "prune", prune), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(Stop):
+                rq.prune_forever(sleep)
+        self.assertEqual(rq.PRUNE_EVERY, 1800)
+        self.assertEqual(sleep.call_args_list, [call(1800), call(1800)])
+        self.assertEqual(prune.call_args_list, [call(r, False) for r in rq.REPOS] * 2)
+
+    def test_every_repo_is_covered(self):
+        prune = MagicMock()
+        self.assertFalse(self.logged(rq.REPOS, prune)[0])
+        self.assertEqual([c.args[0] for c in prune.call_args_list], list(rq.REPOS))
+        self.assertEqual(list(rq.REPOS), ["iprally/iprally", "iprally/gitops"])
+
+    def test_a_raising_prune_is_logged_and_the_next_repo_still_runs(self):
+        def prune(repo, dry_run):
+            if repo == rq.MONOREPO:
+                raise subprocess.CalledProcessError(1, "git", stderr="boom\n")
+        failed, out = self.logged(rq.REPOS, MagicMock(side_effect=prune))
+        self.assertTrue(failed)
+        self.assertIn("prune failed: boom", out)
+
+    def test_an_exit_inside_prune_does_not_leave_the_loop(self):
+        failed, _ = self.logged(rq.REPOS, MagicMock(side_effect=[SystemExit(1), None]))
+        self.assertTrue(failed)
+
+    def test_loop_survives_a_raising_prune(self):
+        sleep = MagicMock(side_effect=[None, Stop])
+        with patch.object(rq, "prune", MagicMock(side_effect=RuntimeError("x"))), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            with self.assertRaises(Stop):
+                rq.prune_forever(sleep)
+        self.assertEqual(out.getvalue().count("prune failed: x"), 2 * len(rq.REPOS))
+
+    def test_cli_prune_without_repo_loops_every_repo_and_with_repo_one(self):
+        for argv, repos in ((["--prune"], list(rq.REPOS)), (["--prune", "--repo", "iprally/gitops"], ["iprally/gitops"])):
+            with patch.object(rq, "prune_all", return_value=False) as prune_all, \
+                    patch.object(rq.sys, "argv", ["review-queue", *argv]), self.assertRaises(SystemExit) as exit:
+                rq.main()
+            self.assertEqual([list(prune_all.call_args.args[0]), prune_all.call_args.args[1]], [repos, False])
+            prune_all.assert_called_once()
+            self.assertFalse(exit.exception.code)
+
+
+if __name__ == "__main__":
+    unittest.main()

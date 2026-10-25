@@ -53,12 +53,12 @@ review-queue --pr 16400    # review one PR now
 review-queue --next 16400  # move a PR to the front
 review-queue --wait 16400  # block until the PR settles at its head, print JSON
 review-queue -n            # dry run: print each PR's gate decision
-review-queue --prune       # remove worktrees of merged or approved PRs
+review-queue --prune       # remove worktrees of merged or approved PRs, every repo (the daemon does it every 30 min)
 ```
 
 Labels opt a PR out: `no-auto-review` skips the reviewers, `no-auto-fix` skips the fix lane.
 One daemon serves `iprally/iprally` (review + fix) and `iprally/gitops` (fix only). `--repo` picks the repo of
-`--pr`, `--next`, `--wait` and `--prune` (default `$IPR_REPO`, else `iprally/iprally`).
+`--pr`, `--next` and `--wait` (default `$IPR_REPO`, else `iprally/iprally`), and limits `--prune` to that repo.
 
 The queue posts reviews, replies and commits with your GitHub credentials.
 Log: `~/Library/Logs/review-queue.log`. State: `~/.local/state/review-queue*` and `~/.local/state/pr-fix*`.

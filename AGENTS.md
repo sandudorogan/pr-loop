@@ -138,7 +138,7 @@ review-queue --wait 16400                # block until settled at the current he
 review-queue --next 16400                # bump; counts as a review request
 review-queue --pr 16400                  # review now, past every gate and label
 review-queue --bg                        # SIGUSR1 refresh, or start the daemon
-review-queue --prune -n                  # which worktrees the prune job would remove
+review-queue --prune -n                  # which worktrees the daemon would prune (every repo)
 tail -f ~/Library/Logs/review-queue.log
 ```
 

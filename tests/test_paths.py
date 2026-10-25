@@ -31,9 +31,13 @@ class RunnerPaths(unittest.TestCase):
             self.assertEqual(data["ProgramArguments"][0], str(Path.home() / ".local/bin/review-queue"))
             self.assertNotIn("IPR_REPO", data.get("EnvironmentVariables", {}))
 
-    def test_one_daemon_label(self):
-        labels = {plistlib.loads(t.read_bytes())["Label"] for t in (ROOT / "launchd").glob("*.tmpl")}
-        self.assertEqual(labels - {"local.review-queue-prune"}, {"local.review-queue"})
+    def test_the_daemon_is_the_only_launchd_job(self):
+        plists = [plistlib.loads(t.read_bytes()) for t in (ROOT / "launchd").glob("*.tmpl")]
+        self.assertEqual([p["Label"] for p in plists], ["local.review-queue"])
+        self.assertEqual(plists[0]["ProcessType"], "Standard")
+        self.assertIn("/usr/sbin", plists[0]["EnvironmentVariables"]["PATH"].split(":"))
+        templates = json.loads((ROOT / "links.json").read_text())["templates"]
+        self.assertEqual(list(templates.values()), ["launchd/local.review-queue.plist.tmpl"])
 
 
 if __name__ == "__main__":
