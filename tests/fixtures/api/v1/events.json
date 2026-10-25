@@ -1,0 +1,14 @@
+{
+  "cursor": "k3f9a2.58",
+  "reset": false,
+  "events": [
+    {"id": "ready_for_approval:iprally/iprally#17166@9f8e7d6c5b4a", "seq": 57, "type": "ready_for_approval",
+     "key": "iprally/iprally#17166", "repo": "iprally/iprally", "number": 17166,
+     "title": "refactor(ui): one sub per hop in the filters", "url": "https://github.com/iprally/iprally/pull/17166",
+     "author": "colleague", "head": "9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5", "verdict": "quality-only", "at": "2026-10-24T17:40:02+03:00"},
+    {"id": "ready_withdrawn:iprally/iprally#17120@1b2c3d4e5f60", "seq": 58, "type": "ready_withdrawn",
+     "key": "iprally/iprally#17120", "repo": "iprally/iprally", "number": 17120,
+     "title": "feat(ui): sticky table header", "url": "https://github.com/iprally/iprally/pull/17120",
+     "author": "colleague", "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e", "verdict": null, "at": "2026-10-25T12:02:00+03:00"}
+  ]
+}

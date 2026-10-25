@@ -1,0 +1,3 @@
+{"error": {"code": "invalid_config", "message": "2 problems in the config", "details": [
+  {"path": "review.workers", "message": "must be an integer from 1 to 8"},
+  {"path": "projects[\"iprally/gitops\"].fix.workers", "message": "must be an integer from 1 to 8"}]}}

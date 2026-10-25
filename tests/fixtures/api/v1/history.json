@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {"key": "iprally/iprally#17120", "repo": "iprally/iprally", "number": 17120,
+     "title": "feat(ui): sticky table header", "url": "https://github.com/iprally/iprally/pull/17120",
+     "author": "colleague", "mine": false, "state": "merged", "outcome": "ready",
+     "rounds": 2, "fixes_pushed": 0, "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e",
+     "first_at": "2026-10-23T09:12:00+03:00", "at": "2026-10-24T15:40:00+03:00",
+     "closed_at": "2026-10-24T16:05:00+03:00",
+     "findings": {
+       "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e", "current": true, "round": 2, "at_floor": 0,
+       "conventions": ["AGENTS.md", "CLAUDE.md", "ui/AGENTS.md", "ui/CLAUDE.md"],
+       "reviewers": [
+         {"id": "opus", "label": "Claude Opus 5.5", "result": "clean", "engine": "claude",
+          "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0}, "at_floor": 0, "top": [], "url": null,
+          "at": "2026-10-24T15:38:00+03:00"},
+         {"id": "codex", "label": "Codex", "result": "clean", "engine": "codex",
+          "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0}, "at_floor": 0, "top": [], "url": null,
+          "at": "2026-10-24T15:39:10+03:00"},
+         {"id": "quality", "label": "Claude Haiku 5.5 · quality self-review", "result": "notes-only", "engine": "claude",
+          "counts": {"critical": 0, "high": 0, "medium": 0, "low": 1}, "at_floor": 0,
+          "top": [{"severity": "low", "title": "Header style duplicates the table theme", "file": "ui/src/cljs/iprally_ui/table/views.cljs", "line": 30}],
+          "url": "https://github.com/iprally/iprally/pull/17120#pullrequestreview-2150", "at": "2026-10-24T15:40:00+03:00"}
+       ],
+       "top": [
+         {"severity": "low", "title": "Header style duplicates the table theme", "file": "ui/src/cljs/iprally_ui/table/views.cljs", "line": 30,
+          "reviewer": "quality", "url": "https://github.com/iprally/iprally/pull/17120#pullrequestreview-2150"}
+       ]
+     }}
+  ]
+}

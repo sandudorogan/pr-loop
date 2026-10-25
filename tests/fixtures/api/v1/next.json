@@ -1,0 +1,7 @@
+{
+  "next": ["iprally/iprally#17201", "iprally/iprally#16950"],
+  "results": [
+    {"key": "iprally/iprally#17201", "bumped": true, "reason": null},
+    {"key": "iprally/iprally#17190", "bumped": false, "reason": "active"}
+  ]
+}
