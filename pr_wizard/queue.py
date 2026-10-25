@@ -40,7 +40,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from fnmatch import fnmatch
 
-from pr_wizard import db, names, snapshot
+from pr_wizard import __version__, api, config, db, names, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
                               REPOS, STATE, env_repo, path, root, tag)
 
@@ -586,6 +586,58 @@ def serving(held):
     return {MONOREPO, *held}
 
 
+class Runtime:
+    """What the API serves: the last queue fetch, its refresh status, and the changes long-polls wait on."""
+
+    def __init__(self):
+        self.prs, self.fetched_at, self.refresh = [], None, {"last_at": None, "last_error": None}
+        self.started, self.started_at, self.changes = time.time(), db.now(), api.Changes()
+        self.commit = subprocess.run(["git", "-C", names.ROOT, "rev-parse", "--short", "HEAD"],
+                                     capture_output=True, text=True).stdout.strip() or None
+
+    def refreshed(self, prs=None, error=None):
+        at = db.now()
+        if error is None:
+            self.prs, self.fetched_at = prs, at
+        self.refresh = {"last_at": at, "last_error": error}
+        self.changes.touch()
+
+    def snapshot(self):
+        return snapshot.build(self.prs, snapshot.read(), {"generated_at": db.now(), "fetched_at": self.fetched_at,
+                                                          "paused": False, "refresh": self.refresh})
+
+    def info(self):
+        snap, loaded = self.snapshot(), config.load()
+        return {"name": "pr-wizard", "version": __version__, "commit": self.commit, "api": 1, "pid": os.getpid(),
+                "started_at": self.started_at, "uptime_s": int(time.time() - self.started), "label": LABEL,
+                "paused": snap["paused"], "projects": snap["projects"], "lanes": snap["lanes"],
+                "refresh": {"interval_s": REFRESH, "idle_s": IDLE_REFRESH, **snap["refresh"]},
+                "config": {"path": loaded.path, "real_path": loaded.real_path, "rev": loaded.rev, "error": loaded.error},
+                "paths": {"socket": names.SOCKET, "state": names.WIZARD, "db": db.DB, "log": LOG}}
+
+    def config(self):
+        loaded, projects = config.load(), self.snapshot()["projects"]
+        return {"rev": loaded.rev, "path": loaded.path, "real_path": loaded.real_path, "source": loaded.source,
+                "error": loaded.error, "config": loaded.config, "defaults": config.DEFAULTS,
+                "effective": {p["repo"]: {"root": p["checkout"] and p["checkout"]["path"],
+                                          **config.effective(loaded.config, p["repo"])} for p in projects},
+                "choices": config.choices()}
+
+
+def serve(rt):
+    """The API thread on the one socket, in the 0700 state dir. SIGTERM unlinks the socket and exits at once: running passes do not hold it."""
+    os.makedirs(names.WIZARD, exist_ok=True)
+    os.chmod(names.WIZARD, 0o700)
+    server = api.bind(rt, names.SOCKET)
+    signal.signal(signal.SIGTERM, lambda *_: (os.unlink(names.SOCKET), os._exit(143)))
+    names.write_label()
+    db.COMMITS.append(rt.changes.touch)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=api.watch, args=(rt.changes, threading.Event()), daemon=True).start()
+    say(f"api on {names.SOCKET}")
+    return server
+
+
 def daemon():
     """Workers review nonstop. The queue data behind them refreshes every REFRESH s, every IDLE_REFRESH s
     while a worker has nothing to take, and at once on SIGUSR1."""
@@ -597,6 +649,8 @@ def daemon():
     with open(path(MONOREPO, PID), "w") as fh:
         fh.write(str(os.getpid()))
     db.sweep_runs()
+    rt = Runtime()
+    serve(rt)
     pending, fixes, refresh_now, held = Pending(), Pending(workers=FIX_WORKERS), threading.Event(), {}
     signal.signal(signal.SIGUSR1, lambda *_: refresh_now.set())
 
@@ -610,11 +664,14 @@ def daemon():
                 pending.refill(prs)
                 state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
                 fixes.refill([pr for pr in prs if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
+                rt.refreshed(prs)
                 if not idle:
                     say(f"queue refreshed: {len(prs)} PR(s), {len(pending.busy)} in review, "
                          f"{len(fixes.prs) + len(fixes.busy)} to fix")
             except Exception as e:
-                say(f"queue refresh failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
+                error = (getattr(e, 'stderr', None) or str(e)).strip()[-200:]
+                say(f"queue refresh failed: {error}")
+                rt.refreshed(error=error)
             idle = False
             while not refresh_now.wait(IDLE_REFRESH):
                 if time.monotonic() - started >= REFRESH:

@@ -4,7 +4,8 @@ from datetime import datetime
 from glob import glob
 
 HOME = os.path.expanduser("~")
-REVIEW_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "review")
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+REVIEW_DIR = os.path.join(ROOT, "review")
 PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
 PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
 
@@ -19,11 +20,18 @@ STATE, FIXES, NEXT, LOCK, LOCKS, NOWS, PID = ".json", ".fixes.json", ".next", ".
 WIZARD = f"{STATE_DIR}/pr-wizard"
 DB = f"{WIZARD}/state.db"
 SCRATCH = f"{WIZARD}/scratch"
+SOCKET = f"{WIZARD}/api.sock"
+LABEL_FILE = f"{WIZARD}/launchd-label"
 LOG = f"{HOME}/Library/Logs/review-queue.log"
 NOTIFIER = f"{HOME}/.local/share/review-queue/Review Queue.app/Contents/MacOS/terminal-notifier"
 DELEGATOR = f"{HOME}/.claude/skills/delegator"
 BRIEFS = f"{DELEGATOR}/briefs"
 CLEAN_CACHE = f"{DELEGATOR}/.clean-reviews.json"
+
+
+def write_label():
+    with open(LABEL_FILE, "w") as fh:
+        fh.write(f"{LABEL}\n")
 
 
 def tag(repo):

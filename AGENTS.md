@@ -47,6 +47,8 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | Path | Role |
 | --- | --- |
 | `pr_wizard/queue.py` | Daemon, CLI, queue fetch, gates, both lanes, `--wait`, `-l`, `--prune` |
+| `pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures |
+| `pr_wizard/fake.py` | The static runtime behind `--fake` |
 | `pr_wizard/names.py` | Repos, labels and every state, log and skill path. The queue, both scripts and `db.py` read them here |
 | `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.queue.main()`. `bin/review-queue` is a symlink to it |
 | `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
@@ -59,7 +61,7 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | `install.py`, `links.json` | Symlink the repo into `$HOME`; render plists into `.local/` |
 | `docs/overhaul.md` | Coupling, invariants and known gaps to read before a large change |
 | `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
-| `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; the Python API tests will assert against them |
+| `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; `tests/test_api_read.py` asserts the server against them |
 
 Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless the overhaul decides otherwise.
 The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, no dependencies.
@@ -87,6 +89,8 @@ The live service runs the code in the **main checkout** (`~/workdir/review-queue
 | `~/.local/state/review-queue.{lock,pid}` | daemon | single-daemon flock, pid for SIGUSR1 |
 | `~/.local/state/pr-wizard/locks/<owner>/<name>/<N>` | both lanes | per-PR flock across processes (`<N>.fix`: a pr_fix.py run) |
 | `~/.local/state/pr-wizard/slot.{0,1}.lock` | pr_fix.py | 2 Karma runs machine-wide |
+| `~/.local/state/pr-wizard/api.sock` | daemon | control API socket, `0600` in a `0700` dir; SIGTERM unlinks it, a stale one goes at start |
+| `~/.local/state/pr-wizard/launchd-label` | daemon | the label to `launchctl kickstart`, written at every start |
 | `~/.local/state/pr-wizard/scratch/<N>-*` | pr_fix.py | Codex scratch dirs |
 | `~/.claude/skills/delegator/briefs/<N or branch>.md` | agent-delegator | task brief; branch name with `/` → `+` |
 | `~/Library/Logs/review-queue.log` | all | one shared log; gitops lines read `gitops#N` |
@@ -152,6 +156,7 @@ review-queue --pr 16400                  # review now, past every gate and label
 review-queue --bg                        # SIGUSR1 refresh, or start the daemon
 review-queue --prune -n                  # which worktrees the daemon would prune (every repo)
 tail -f ~/Library/Logs/review-queue.log
+curl -s --unix-socket ~/.local/state/pr-wizard/api.sock http://x/v1/queue   # GET info, queue, config, prompts/<name>
 ```
 
 Re-arm a parked fix pass (fix status stuck after `FIX_ERRORS` = 3):

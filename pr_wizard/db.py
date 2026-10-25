@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS migration_log (seq INTEGER PRIMARY KEY, old_path TEXT
 UPGRADES = [lambda c: [c.execute(s) for s in SCHEMA.split(";\n") if s.strip()]]
 
 _local = threading.local()
+COMMITS = []
 
 
 def now():
@@ -139,6 +140,8 @@ def tx(path=None):
         raise
     finally:
         _local.depth = 0
+    for committed in COMMITS:
+        committed()
 
 
 def _one(sql, *args):
