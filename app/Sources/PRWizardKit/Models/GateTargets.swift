@@ -4,7 +4,7 @@ public struct GateTargets: Codable, Hashable, Sendable {
     public var exists: Bool?
     public var item: [String: String]?
     public var valid: String?
-    public var unknown: [String: JSONValue]
+    public var unknown: JSONObject
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case map, keep, exists, item, valid

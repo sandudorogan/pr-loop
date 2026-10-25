@@ -1,12 +1,19 @@
 import Foundation
 
 extension JSONValue {
+    /// The tree of `value`, its keys in the order `encode(to:)` writes them.
     public init(encoding value: some Encodable) throws {
-        self = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
+        let node = EncodingNode()
+        try value.encode(to: ValueEncoder(node: node))
+        self = node.value
     }
 
-    public func decoded<Value: Decodable>(_ type: Value.Type) throws -> Value {
-        try JSONDecoder().decode(type, from: JSONEncoder().encode(self))
+    /// Decodes `self` into `type`. Types that keep an object's key order read it from the source tree.
+    public func decoded<Value: Decodable>(_ type: Value.Type, using decoder: JSONDecoder = JSONDecoder()) throws
+        -> Value
+    {
+        decoder.userInfo[.sourceTree] = self
+        return try decoder.decode(type, from: data)
     }
 
     public subscript(path: [String]) -> JSONValue? {
@@ -31,7 +38,7 @@ extension JSONValue {
 
     func setting(_ value: JSONValue?, at path: [String]) -> JSONValue {
         guard let key = path.first else { return value ?? .null }
-        var object = if case .object(let object) = self { object } else { [String: JSONValue]() }
+        var object = if case .object(let object) = self { object } else { JSONObject() }
         object[key] =
             path.count == 1 ? value : (object[key] ?? .object([:])).setting(value, at: Array(path.dropFirst()))
         return .object(object)

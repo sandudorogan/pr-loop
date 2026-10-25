@@ -9,7 +9,7 @@ public struct ReviewerConfig: Codable, Hashable, Identifiable, Sendable {
     public var isAdvisory: Bool
     public var claude: ClaudeSettings
     public var codex: ModelSetting
-    public var unknown: [String: JSONValue]
+    public var unknown: JSONObject
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case id, label, prompt, engine, claude, codex

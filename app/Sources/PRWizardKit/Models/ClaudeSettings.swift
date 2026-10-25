@@ -2,7 +2,7 @@ public struct ClaudeSettings: Codable, Hashable, Sendable {
     public var model: String?
     public var effort: String?
     public var incremental: ModelSetting?
-    public var unknown: [String: JSONValue]
+    public var unknown: JSONObject
 
     static let empty = ClaudeSettings(model: nil, effort: nil, incremental: nil, unknown: [:])
 

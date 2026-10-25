@@ -13,7 +13,7 @@ public struct GateConfig: Codable, Hashable, Sendable {
     public var usesSlot: Bool?
     public var protect: [String]?
     public var note: String?
-    public var unknown: [String: JSONValue]
+    public var unknown: JSONObject
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case name, kind, when, run, cwd, prelude, requires, needs, targets, setup, protect, note

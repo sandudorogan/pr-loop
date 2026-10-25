@@ -26,17 +26,17 @@ public struct DaemonClient: DaemonAPI {
     }
 
     public func config() async throws -> ConfigEnvelope {
-        try await send(HTTPRequest(.get, "/v1/config"))
+        try await send(HTTPRequest(.get, "/v1/config"), ordered: true)
     }
 
     public func patchConfig(_ patch: JSONValue, baseRev: String) async throws -> ConfigEnvelope {
         let body: JSONValue = .object(["base_rev": .string(baseRev), "patch": patch])
-        return try await send(HTTPRequest(.patch, "/v1/config", body: JSONEncoder().encode(body)))
+        return try await send(HTTPRequest(.patch, "/v1/config", body: body.data), ordered: true)
     }
 
     public func putConfig(_ config: JSONValue, baseRev: String) async throws -> ConfigEnvelope {
         let body: JSONValue = .object(["base_rev": .string(baseRev), "config": config])
-        return try await send(HTTPRequest(.put, "/v1/config", body: JSONEncoder().encode(body)))
+        return try await send(HTTPRequest(.put, "/v1/config", body: body.data), ordered: true)
     }
 
     public func prompt(named name: String) async throws -> Prompt {
@@ -72,19 +72,25 @@ public struct DaemonClient: DaemonAPI {
         return state.isPaused
     }
 
-    private func send<Value: Decodable>(_ request: HTTPRequest, timeout: Duration = timeout) async throws -> Value {
+    private func send<Value: Decodable>(
+        _ request: HTTPRequest, timeout: Duration = timeout, ordered: Bool = false
+    ) async throws -> Value {
         let response = try await transport.send(request, timeout: timeout)
         guard response.isSuccess else {
             let body = try decode(APIErrorBody.self, from: response.body).error
             throw APIError.http(
                 status: response.status, code: body.code, message: body.message, details: body.details ?? [])
         }
-        return try decode(Value.self, from: response.body)
+        return try decode(Value.self, from: response.body, ordered: ordered)
     }
 
-    private func decode<Value: Decodable>(_ type: Value.Type, from data: Data) throws(APIError) -> Value {
+    private func decode<Value: Decodable>(_ type: Value.Type, from data: Data, ordered: Bool = false) throws(APIError)
+        -> Value
+    {
         do {
-            return try JSONDecoder.daemon.decode(type, from: data)
+            return ordered
+                ? try JSONValue(parsing: data).decoded(type, using: .daemon)
+                : try JSONDecoder.daemon.decode(type, from: data)
         } catch {
             throw .decoding(String(describing: error))
         }

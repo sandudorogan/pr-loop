@@ -4,9 +4,13 @@ public enum JSONValue: Codable, Hashable, Sendable {
     case number(Double)
     case string(String)
     case array([JSONValue])
-    case object([String: JSONValue])
+    case object(JSONObject)
 
     public init(from decoder: any Decoder) throws {
+        if let source = decoder.sourceValue {
+            self = source
+            return
+        }
         let container = try decoder.singleValueContainer()
         if container.decodeNil() {
             self = .null
@@ -19,7 +23,7 @@ public enum JSONValue: Codable, Hashable, Sendable {
         } else if let value = try? container.decode([JSONValue].self) {
             self = .array(value)
         } else {
-            self = .object(try container.decode([String: JSONValue].self))
+            self = .object(try container.decode(JSONObject.self))
         }
     }
 

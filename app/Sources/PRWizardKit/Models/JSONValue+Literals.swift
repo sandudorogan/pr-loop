@@ -7,6 +7,6 @@ extension JSONValue: ExpressibleByBooleanLiteral, ExpressibleByIntegerLiteral, E
 extension JSONValue: ExpressibleByArrayLiteral, ExpressibleByDictionaryLiteral {
     public init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
     public init(dictionaryLiteral elements: (String, JSONValue)...) {
-        self = .object(Dictionary(uniqueKeysWithValues: elements))
+        self = .object(JSONObject(elements))
     }
 }

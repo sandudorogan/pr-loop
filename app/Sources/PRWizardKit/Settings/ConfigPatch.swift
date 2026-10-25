@@ -9,6 +9,6 @@ public enum ConfigPatch {
             guard let old = base[key] else { return (key, value) }
             return diff(old, value).map { (key, $0) }
         }
-        return .object(Dictionary(uniqueKeysWithValues: dropped + changed))
+        return .object(JSONObject(dropped + changed))
     }
 }

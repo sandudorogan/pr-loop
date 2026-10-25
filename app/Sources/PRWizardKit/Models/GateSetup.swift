@@ -1,7 +1,7 @@
 public struct GateSetup: Codable, Hashable, Sendable {
     public var name: String
     public var run: String
-    public var unknown: [String: JSONValue]
+    public var unknown: JSONObject
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case name, run

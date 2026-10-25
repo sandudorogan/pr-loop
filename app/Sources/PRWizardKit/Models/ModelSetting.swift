@@ -1,7 +1,7 @@
 public struct ModelSetting: Codable, Hashable, Sendable {
     public var model: String?
     public var effort: String?
-    public var unknown: [String: JSONValue]
+    public var unknown: JSONObject
 
     static let empty = ModelSetting(model: nil, effort: nil, unknown: [:])
 
