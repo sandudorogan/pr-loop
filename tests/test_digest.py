@@ -52,6 +52,15 @@ class Digest(unittest.TestCase):
         self.assertEqual(empty["digest"]["at_floor"], 0)
         self.assertEqual((some["stop"], some["digest"]["counts"]["low"]), (True, 1))
 
+    def test_unparsed_engine_output_posts_instead_of_raising(self):
+        sc = {"base_sha": None, "head": A, "base_branch": "main", "round": 1}
+        fs = [finding("info", title="i"), finding("High", title="h"), finding("medium", confidence=None, title="n")]
+        with patch.object(prr, "commentable_lines", return_value={}):
+            res = prr.post(5, "opus", {"findings": fs, "summary": "s"}, sc, dry_run=True)
+        self.assertEqual(res["digest"]["counts"], {"critical": 0, "high": 1, "medium": 1, "low": 1})
+        self.assertEqual((res["digest"]["at_floor"], res["stop"]), (1, False))
+        self.assertEqual([t["title"] for t in res["digest"]["top"]], ["h", "n", "i"])
+
 
 class Stored(unittest.TestCase):
     def setUp(self):

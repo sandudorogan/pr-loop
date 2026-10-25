@@ -374,6 +374,14 @@ def inline_body(f, label, mk):
     return "\n".join(parts)
 
 
+def normalised(findings):
+    """Engine output is not schema-checked: fold severity to a known level (unknown reads as low) and a missing confidence to 0."""
+    def severity(f):
+        s = str(f.get("severity")).lower()
+        return s if s in SEVERITIES else "low"
+    return [{**f, "severity": severity(f), "confidence": float(f.get("confidence") or 0)} for f in findings]
+
+
 def to_fix(findings, rnd):
     """The findings a fixer must act on. From LATE_ROUND on only high and critical ones count."""
     floor = LATE_SEVERITIES if rnd >= LATE_ROUND else INLINE_SEVERITIES
@@ -432,7 +440,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
     label = REVIEWERS[reviewer]["label"]
     if engine and engine != REVIEWERS[reviewer]["engine"]:
         label += f" · run on {ENGINE_LABELS[engine]}"
-    findings = data.get("findings") or []
+    findings = normalised(data.get("findings") or [])
     fyi = not to_fix(findings, sc["round"])
     dig = digest(findings, sc["round"])
     mk = marker(reviewer, sc["round"], sc["head"]) + (f"\n{FYI_MARKER}" if fyi else "")
