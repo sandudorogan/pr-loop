@@ -6,11 +6,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.string(forKey: AppStorageKey.socket) ?? DaemonLocation.socket.path(percentEncoded: false)
     let store: QueueStore
     let history: HistoryStore
+    let settings: SettingsStore
 
     override init() {
         let daemon = DaemonClient(transport: UnixSocketTransport(path: socket))
         store = QueueStore(daemon: daemon)
         history = HistoryStore(daemon: daemon)
+        settings = SettingsStore(daemon: daemon)
         super.init()
     }
 
