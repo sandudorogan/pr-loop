@@ -42,7 +42,14 @@ struct QueueWindow: View {
                 showSettings: { showSettings(selection) }, focusFilter: { NSApp.keyWindow?.focusToolbarField() })
         )
         .environment(peek)
-        .frame(minWidth: 820, minHeight: 400)
+        .frame(minWidth: minWidth, minHeight: 400)
+    }
+
+    /// SwiftUI drops a minimum on the detail column (it runs under the sidebar), so the window
+    /// carries it: the sidebar (220 plus its 8 pt inset), the table and the docked inspector column. Opening the
+    /// inspector in a narrower window grows the window, and the table never scrolls sideways.
+    private var minWidth: CGFloat {
+        max(820, 228 + QueueTable.minWidth + (showsInspector ? 320 : 0))
     }
 
     @ViewBuilder private var detail: some View {

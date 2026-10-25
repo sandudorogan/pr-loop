@@ -3,6 +3,9 @@ import PRWizardKit
 import SwiftUI
 
 struct QueueTable: View {
+    /// The narrowest detail column that shows every column at its minimum without a horizontal scroller.
+    static let minWidth: CGFloat = 566
+
     let sections: [QueueSection]
     let showsProject: Bool
     @Binding var selection: Set<QueueItem.ID>
@@ -14,12 +17,11 @@ struct QueueTable: View {
     var body: some View {
         Table(of: QueueItem.self, selection: $selection, columnCustomization: $columns) {
             TableColumn("") { MarkCell(item: $0) }.width(24).customizationID("mark")
-            TableColumn("PR") { Text(verbatim: "#\($0.number)").monospacedDigit() }.width(min: 56, ideal: 72)
-                .customizationID(
-                    "pr")
+            TableColumn("PR") { Text(verbatim: "#\($0.number)").monospacedDigit() }.width(min: 52, ideal: 72)
+                .customizationID("pr")
             if showsProject {
                 TableColumn("Project") { Text(ProjectSummary.shortName(of: $0.repo)).lineLimit(1) }
-                    .width(min: 60, ideal: 80).customizationID("project")
+                    .width(min: 48, ideal: 80).customizationID("project")
             }
             TableColumn("Title") { item in
                 HStack(spacing: 4) {
@@ -28,9 +30,9 @@ struct QueueTable: View {
                 }
                 .hoverPeek(item.id, FindingsPopover(item: item), peek: peek)
             }
-            .width(min: 160).customizationID("title")
+            .width(min: 120).customizationID("title")
             TableColumn("Author") { Text($0.isMine ? "you" : $0.author).lineLimit(1) }
-                .width(min: 60, ideal: 100).customizationID("author")
+                .width(min: 48, ideal: 100).customizationID("author")
             TableColumn("Status") { item in
                 HStack(spacing: 4) {
                     StatusBadge(status: item.status)
@@ -41,7 +43,7 @@ struct QueueTable: View {
                 }
                 .hoverPeek(item.id, FindingsPopover(item: item), isAnchor: true, peek: peek)
             }
-            .width(min: 90, ideal: 150).customizationID("status")
+            .width(min: 80, ideal: 150).customizationID("status")
             TableColumn("Detail") { item in
                 Group {
                     if let active = item.active {
@@ -52,7 +54,7 @@ struct QueueTable: View {
                 }
                 .foregroundStyle(.secondary)
             }
-            .width(min: 80, ideal: 180).customizationID("detail")
+            .width(min: 60, ideal: 180).customizationID("detail")
         } rows: {
             ForEach(sections) { section in
                 Section(section.title) { ForEach(section.items) { TableRow($0) } }
