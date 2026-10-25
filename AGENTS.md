@@ -137,6 +137,7 @@ The daemon and each UI are separate trees. They share only the API contract.
 | `docs/` | The design: architecture, the API contract (`api.md`, cited by § in the code), the app, decisions, open items |
 | `ui/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
 | `contract/api/v1/` | Control API responses. The Swift tests decode them; `daemon/tests/test_api_read.py` asserts the server against them |
+| `.github/workflows/test.yml` | Every push and PR: the daemon suite, then the app's tests, lint and contract test |
 | `.github/workflows/release.yml` | A `v*` tag push: app test + lint, `ui/script/package`, `ui/script/notes`, `gh release create` with the dmg, zip and `SHA256SUMS` |
 
 Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless a new entry in `docs/decisions.md` changes it.
