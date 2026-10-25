@@ -112,6 +112,7 @@ iprally's cljfmt and Karma live in its built-in override. A project with no gate
 | `docs/overhaul.md` | What the overhaul changed, the invariants, and the gaps that remain |
 | `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
 | `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; `tests/test_api_read.py` asserts the server against them |
+| `.github/workflows/release.yml` | A `v*` tag push: app test + lint, `app/script/package`, `app/script/notes`, `gh release create` with the dmg, zip and `SHA256SUMS` |
 
 Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless the overhaul decides otherwise.
 The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, no dependencies.
@@ -232,9 +233,12 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
    `script/contract` runs `ContractTests` (the real client) against `python3 -m pr_wizard.api --fake` on a temp socket; run it after any change to a wire shape, either side.
    `script/install` quits the installed copy and puts a fresh bundle at `/Applications/PR Wizard.app` (`~/Applications` is root-owned here).
    `script/icon` renders `wand.and.stars` into `Resources/AppIcon.icns`; commit the result. "Open at login" survives a reinstall.
+   `VERSION=X.Y.Z script/package` → `build/PR-Wizard-X.Y.Z.{dmg,zip}` + `build/SHA256SUMS`; without `VERSION` the app reads `1.0.<commit count>`.
+   `script/notes vX.Y.Z` prints the release body: install steps + commits since the previous tag.
    Never plain `swift test`: under the Command Line Tools it runs 0 tests and exits 0.
 3. Dry-run what you can: `pr-wizard -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`.
 4. Push straight to `main` (`git push origin HEAD:main`). Open no PRs here. Then `git -C ~/workdir/review-queue pull --ff-only`.
+   Release the app: `git tag vX.Y.Z && git push origin vX.Y.Z`. CI builds and publishes it; tag only a commit on `main`.
 5. Restart only for daemon code (`pr_wizard/*.py`). Check `pr-wizard -l` for ▶ rows first: a restart kills in-flight passes.
    `launchctl kickstart -k gui/$(id -u)/local.pr-wizard`
    `pr_review.py`, `pr_fix.py`, prompts and the config load fresh per run: no restart.

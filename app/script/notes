@@ -1,0 +1,18 @@
+#!/bin/zsh -e
+tag=$1
+prev=$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)
+cat <<MD
+## Install
+
+1. Open \`PR-Wizard-${tag#v}.dmg\` and drag **PR Wizard** to **Applications**.
+2. The app is ad-hoc signed, not notarized. On first launch macOS blocks it:
+   System Settings → Privacy & Security → **Open Anyway**, or
+   \`xattr -dr com.apple.quarantine "/Applications/PR Wizard.app"\`.
+3. The app is a client of the \`pr-wizard\` daemon. Install the daemon from the source: see the README.
+
+Requires macOS 26 on Apple silicon. Check the download with \`shasum -a 256 -c SHA256SUMS\`.
+
+## Changes
+
+$([[ -n $prev ]] && git log --no-merges --pretty='- %s (%h)' "$prev..$tag" || echo 'First release.')
+MD

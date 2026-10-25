@@ -65,7 +65,21 @@ The installer symlinks the commands, the runners, the launchd plist and the conf
 With chezmoi, it writes the default config into the source once and applies only the paths it owns.
 It backs up what it replaces under `~/.local/state/review-queue/backups/`. It does not start the service.
 
-The app (Command Line Tools only, no Xcode): `cd app && script/install` puts `PR Wizard.app` in `/Applications`.
+### The app
+
+Download `PR-Wizard-<version>.dmg` from [Releases](https://github.com/sandudorogan/review-queue/releases)
+and drag **PR Wizard** to **Applications**. It needs macOS 26 on Apple silicon, and the daemon above.
+
+The app is ad-hoc signed, not notarized, so macOS blocks the first launch. Allow it once:
+System Settings → Privacy & Security → **Open Anyway**, or
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/PR Wizard.app"
+```
+
+Each release also carries a `.zip` of the same app and `SHA256SUMS` (`shasum -a 256 -c SHA256SUMS`).
+
+From the source (Command Line Tools only, no Xcode): `cd app && script/install` puts `PR Wizard.app` in `/Applications`.
 
 The task briefs come from [agent-delegator](https://github.com/sandudorogan/agent-delegator), which also uses the PR watch skill in `claude/`.
 PR Wizard runs without either.
@@ -96,3 +110,25 @@ Read [AGENTS.md](AGENTS.md) first: layout, state, contracts, workflow and gotcha
 python3 -m unittest discover -s tests -v
 cd app && script/test && script/lint
 ```
+
+### Release
+
+A `v*` tag publishes a GitHub release:
+
+```text
+ git push origin v1.2.0 ──▶ .github/workflows/release.yml (macos-26)
+                              app/script/test · lint
+                              VERSION=1.2.0 app/script/package ──▶ PR-Wizard-1.2.0.dmg   app + Applications link
+                                                                  PR-Wizard-1.2.0.zip
+                                                                  SHA256SUMS
+                              app/script/notes v1.2.0 ──▶ install steps + commits since the last tag
+                              gh release create v1.2.0
+```
+
+```sh
+git tag v1.2.0 && git push origin v1.2.0
+cd app && VERSION=1.2.0 script/package    # the same files locally, in app/build/
+```
+
+The tag sets the app's version (`CFBundleShortVersionString`). The commit count sets its build number.
+A local build without `VERSION` reads `1.0.<commit count>`.
