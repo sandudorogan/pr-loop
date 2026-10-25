@@ -29,7 +29,9 @@ struct QueueCommands: Commands {
                     .disabled(focus == nil)
             }
         }
-        CommandMenu("Pull Request") { PullRequestMenu(items: focus?.items ?? [], store: store, peek: peek) }
+        CommandMenu("Pull Request") {
+            PullRequestMenu(items: focus?.items ?? [], store: store, peek: peek, showSettings: focus?.showSettings)
+        }
         CommandMenu("Daemon") {
             let isPaused = store.snapshot?.isPaused == true
             Button(isPaused ? "Resume" : "Pause") { Task { await store.setPaused(!isPaused) } }

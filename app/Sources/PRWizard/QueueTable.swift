@@ -7,6 +7,7 @@ struct QueueTable: View {
     let showsProject: Bool
     @Binding var selection: Set<QueueItem.ID>
     @Binding var columns: TableColumnCustomization<QueueItem>
+    let showSettings: (QueueItem.ID) -> Void
     @Environment(QueueStore.self) private var store
     @Environment(PeekModel.self) private var peek
 
@@ -31,9 +32,16 @@ struct QueueTable: View {
             TableColumn("Author") { Text($0.isMine ? "you" : $0.author).lineLimit(1) }
                 .width(min: 60, ideal: 100).customizationID("author")
             TableColumn("Status") { item in
-                StatusBadge(status: item.status).hoverPeek(item.id, FindingsPopover(item: item), isAnchor: true)
+                HStack(spacing: 4) {
+                    StatusBadge(status: item.status)
+                    if let help = item.overrideHelp {
+                        Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary).help(help)
+                            .accessibilityLabel(help)
+                    }
+                }
+                .hoverPeek(item.id, FindingsPopover(item: item), isAnchor: true)
             }
-            .width(min: 90, ideal: 130).customizationID("status")
+            .width(min: 90, ideal: 150).customizationID("status")
             TableColumn("Detail") { item in
                 Group {
                     if let active = item.active {
@@ -51,7 +59,9 @@ struct QueueTable: View {
             }
         }
         .contextMenu(forSelectionType: QueueItem.ID.self) { keys in
-            PullRequestMenu(items: items(keys), store: store, peek: peekFocus(keys))
+            PullRequestMenu(
+                items: items(keys), store: store, peek: peekFocus(keys),
+                showSettings: keys.first.map { key in { showSettings(key) } })
         } primaryAction: { keys in
             for item in items(keys) { NSWorkspace.shared.open(item.url) }
         }

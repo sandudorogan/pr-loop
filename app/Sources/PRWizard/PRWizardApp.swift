@@ -10,6 +10,8 @@ struct PRWizardApp: App {
             QueueWindow(socket: delegate.socket)
                 .environment(delegate.store)
                 .environment(delegate.history)
+                .environment(delegate.settings)
+                .environment(delegate.prSettings)
         }
         .defaultSize(width: 1180, height: 640)
         .commands { QueueCommands(store: delegate.store) }

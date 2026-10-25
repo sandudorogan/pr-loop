@@ -7,9 +7,9 @@ struct PRInspector: View {
     }
 
     let items: [QueueItem]
+    @Binding var tab: Tab
     @Environment(QueueStore.self) private var store
     @Environment(PeekModel.self) private var peek
-    @SceneStorage("inspectorTab") private var tab = Tab.status
 
     var body: some View {
         if items.count == 1, let item = items.first {
@@ -23,10 +23,7 @@ struct PRInspector: View {
                 .padding(8)
                 switch tab {
                 case .status: status(InspectorModel(item))
-                case .settings:
-                    ContentUnavailableView(
-                        "PR Settings", systemImage: "slider.horizontal.3",
-                        description: Text("Per-PR overrides are not available yet."))
+                case .settings: PRSettingsTab(item: item)
                 }
             }
         } else {
@@ -46,7 +43,9 @@ struct PRInspector: View {
                 LabeledContent("Lines") { Text(model.lines).monospacedDigit() }
                 LabeledContent("Labels", value: model.labels)
                 Menu("Actions") {
-                    PullRequestMenu(items: [item], store: store, peek: PeekFocus(model: peek, id: item.id))
+                    PullRequestMenu(
+                        items: [item], store: store, peek: PeekFocus(model: peek, id: item.id),
+                        showSettings: { tab = .settings })
                 }
             } header: {
                 Text(model.title)

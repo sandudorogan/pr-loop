@@ -7,6 +7,7 @@ struct QueueWindow: View {
     @SceneStorage("sidebar") private var sidebar = SidebarSelection.all
     @SceneStorage("columns") private var columns = TableColumnCustomization<QueueItem>()
     @SceneStorage("inspector") private var showsInspector = false
+    @SceneStorage("inspectorTab") private var inspectorTab = PRInspector.Tab.status
     @State private var selection = Set<QueueItem.ID>()
     @State private var search = ""
     @State private var peek = PeekModel()
@@ -20,7 +21,7 @@ struct QueueWindow: View {
         } detail: {
             detail
                 .inspector(isPresented: $showsInspector) {
-                    PRInspector(items: selected)
+                    PRInspector(items: selected, tab: $inspectorTab)
                         .inspectorColumnWidth(min: 260, ideal: 320)
                 }
                 .safeAreaInset(edge: .bottom) { banner }
@@ -30,7 +31,10 @@ struct QueueWindow: View {
         .searchable(text: $search, placement: .toolbar, prompt: "Filter")
         .toolbar { QueueToolbar(store: store, repo: sidebar.repo, showsInspector: $showsInspector) }
         .focusedSceneValue(
-            \.queueFocus, QueueFocus(items: selected, sidebar: $sidebar, showsInspector: $showsInspector)
+            \.queueFocus,
+            QueueFocus(
+                items: selected, sidebar: $sidebar, showsInspector: $showsInspector,
+                showSettings: { showSettings(selection) })
         )
         .environment(peek)
         .frame(minWidth: 820, minHeight: 400)
@@ -40,8 +44,11 @@ struct QueueWindow: View {
         if sections.isEmpty {
             EmptyStateView(filter: filter, socket: socket, sidebar: $sidebar)
         } else {
-            QueueTable(sections: sections, showsProject: sidebar == .all, selection: $selection, columns: $columns)
-                .opacity(store.phase.isDisconnected ? 0.5 : 1)
+            QueueTable(
+                sections: sections, showsProject: sidebar == .all, selection: $selection, columns: $columns,
+                showSettings: { showSettings([$0]) }
+            )
+            .opacity(store.phase.isDisconnected ? 0.5 : 1)
         }
     }
 
@@ -53,6 +60,12 @@ struct QueueWindow: View {
                 .frame(maxWidth: .infinity)
                 .background(.bar)
         }
+    }
+
+    private func showSettings(_ keys: Set<QueueItem.ID>) {
+        selection = keys
+        showsInspector = true
+        inspectorTab = .settings
     }
 
     private var selected: [QueueItem] {

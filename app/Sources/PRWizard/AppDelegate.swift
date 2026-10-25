@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let store: QueueStore
     let history: HistoryStore
     let settings: SettingsStore
+    let prSettings: PRSettingsStore
     let notifications: ReadyNotifications
 
     override init() {
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         store = QueueStore(daemon: daemon)
         history = HistoryStore(daemon: daemon)
         settings = SettingsStore(daemon: daemon)
+        prSettings = PRSettingsStore(daemon: daemon)
         notifications = ReadyNotifications(
             daemon: daemon, notifier: UserNotificationsNotifier(), cursor: DefaultsEventCursor(),
             isEnabled: { UserDefaults.standard.bool(forKey: AppStorageKey.notifiesReady) })

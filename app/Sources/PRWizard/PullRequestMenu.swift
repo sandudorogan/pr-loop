@@ -6,6 +6,7 @@ struct PullRequestMenu: View {
     let items: [QueueItem]
     let store: QueueStore
     let peek: PeekFocus?
+    var showSettings: (() -> Void)?
 
     var body: some View {
         let projects = store.snapshot?.projects ?? []
@@ -29,6 +30,9 @@ struct PullRequestMenu: View {
         Button("Show Findings") { peek?.toggle() }
             .keyboardShortcut("y")
             .disabled(peek?.id == nil)
+        Button("PR Settings…") { showSettings?() }
+            .keyboardShortcut(",", modifiers: [.command, .shift])
+            .disabled(items.count != 1 || showSettings == nil)
         Button("Copy Head SHA") { copy(items.map(\.head)) }
             .disabled(items.isEmpty)
     }

@@ -6,6 +6,7 @@ struct OverrideMarker: View {
         case inherited
         case inheritedFrom(String)
         case overridden
+        case label(String)
     }
 
     let kind: Kind
@@ -17,6 +18,13 @@ struct OverrideMarker: View {
             Text("Default").font(.caption).foregroundStyle(.secondary)
         case .inheritedFrom(let repo):
             Text(verbatim: "Inherited from \(repo)").font(.caption).foregroundStyle(.secondary)
+        case .label(let label):
+            Label {
+                Text(verbatim: "Label \(label) on GitHub")
+            } icon: {
+                Image(systemName: "tag")
+            }
+            .font(.caption).foregroundStyle(.secondary)
         case .overridden:
             HStack(spacing: 4) {
                 Text("Overridden").font(.caption).padding(.horizontal, 6).padding(.vertical, 1)
