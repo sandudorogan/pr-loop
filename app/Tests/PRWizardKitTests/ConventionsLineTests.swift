@@ -47,6 +47,23 @@ import Testing
         #expect(line.sentence == sentence)
     }
 
+    @Test(
+        "skills without files read as a sentence that names the skills, which the daemon still runs",
+        arguments: [
+            (["adr"], "Follows 1 skill: adr"),
+            (["add-phosphor-icon", "adr", "quality"], "Follows 3 skills: add-phosphor-icon, adr, quality"),
+            (["a", "b", "c", "d", "e"], "Follows 5 skills: a, b, c, …"),
+        ])
+    func skillsOnly(skills: [String], sentence: String) throws {
+        let patch: [String: JSONValue] = [
+            "conventions": ["ref": "origin/main", "files": [], "skills": .array(skills.map(JSONValue.string))]
+        ]
+        let line = try #require(
+            ConventionsLine(.project("sandudorogan/dataspex"), project: try Snapshots.project(2, patch)))
+        #expect(line.rows.isEmpty)
+        #expect(line.sentence == sentence)
+    }
+
     @Test("no checkout, no line")
     func noCheckout() throws {
         let repo = "clojure/clojurescript-site"

@@ -32,8 +32,11 @@ public struct ConventionsLine: Hashable, Sendable {
         }
         guard let conventions = project?.conventions else { return nil }
         guard !conventions.files.isEmpty else {
-            let sentence = (["Follows nothing documented."] + Self.skips(skipped)).joined(separator: " ")
-            self.init(rows: [], ref: nil, sentence: sentence)
+            let follows =
+                conventions.skills.isEmpty
+                ? ["Follows nothing documented."] + Self.skips(skipped)
+                : [Self.skillsSentence(conventions.skills, limit: limit)]
+            self.init(rows: [], ref: nil, sentence: follows.joined(separator: " "))
             return
         }
         let rows = [Row(.files, conventions.files, limit: limit), Row(.skills, conventions.skills, limit: limit)]
@@ -44,6 +47,12 @@ public struct ConventionsLine: Hashable, Sendable {
         self.rows = rows
         self.ref = ref
         self.sentence = sentence
+    }
+
+    private static func skillsSentence(_ skills: [String], limit: Int) -> String {
+        let shown = skills.prefix(limit).joined(separator: ", ")
+        return
+            "Follows \(skills.count) skill\(skills.count == 1 ? "" : "s"): \(shown)\(skills.count > limit ? ", …" : "")"
     }
 
     private static func skips(_ ids: [String]) -> [String] {
