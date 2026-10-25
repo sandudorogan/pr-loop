@@ -28,7 +28,7 @@ struct QueueTable: View {
                     if item.isDraft { Text("[Draft]").foregroundStyle(.secondary) }
                     Text(item.title).lineLimit(1)
                 }
-                .hoverPeek(item.id, FindingsPopover(item: item), peek: peek)
+                .findingsPeek(item.id, FindingsPopover(item: item), peek: peek)
             }
             .width(min: 120).customizationID("title")
             TableColumn("Author") { Text($0.isMine ? "you" : $0.author).lineLimit(1) }
@@ -41,7 +41,7 @@ struct QueueTable: View {
                             .accessibilityLabel(help)
                     }
                 }
-                .hoverPeek(item.id, FindingsPopover(item: item), isAnchor: true, peek: peek)
+                .findingsPeek(item.id, FindingsPopover(item: item), isAnchor: true, peek: peek)
             }
             .width(min: 80, ideal: 150).customizationID("status")
             TableColumn("Detail") { item in

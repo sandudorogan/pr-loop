@@ -2,7 +2,8 @@ import AppKit
 import PRWizardKit
 import SwiftUI
 
-struct HoverPeek: ViewModifier {
+/// The findings popover of a row, toggled by Space or ⌘Y, plus the VoiceOver findings of the cell.
+struct FindingsPeek: ViewModifier {
     let id: String
     let popover: FindingsPopover?
     let isAnchor: Bool
@@ -14,8 +15,6 @@ struct HoverPeek: ViewModifier {
             let speech = popover.findings.map(FindingsSpeech.init)
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(.rect)
-                .onHover(perform: hover)
                 .accessibilityCustomContent(AccessibilityCustomContentKey("Findings"), speech.map { Text($0.findings) })
                 .accessibilityCustomContent(
                     AccessibilityCustomContentKey("At fix floor"), speech.map { Text($0.atFloor) }
@@ -25,7 +24,6 @@ struct HoverPeek: ViewModifier {
                 )
                 .popover(isPresented: isAnchor ? isShown : .constant(false), arrowEdge: .trailing) {
                     popover
-                        .onHover(perform: hover)
                         .onAppear {
                             scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [peek] in
                                 peek.dismiss()
@@ -39,10 +37,6 @@ struct HoverPeek: ViewModifier {
         }
     }
 
-    private func hover(_ isInside: Bool) {
-        isInside ? peek.enter(id) : peek.exit(id)
-    }
-
     private var isShown: Binding<Bool> {
         Binding {
             peek.shownID == id
@@ -53,7 +47,7 @@ struct HoverPeek: ViewModifier {
 }
 
 extension View {
-    func hoverPeek(_ id: String, _ popover: FindingsPopover?, isAnchor: Bool = false, peek: PeekModel) -> some View {
-        modifier(HoverPeek(id: id, popover: popover, isAnchor: isAnchor, peek: peek))
+    func findingsPeek(_ id: String, _ popover: FindingsPopover?, isAnchor: Bool = false, peek: PeekModel) -> some View {
+        modifier(FindingsPeek(id: id, popover: popover, isAnchor: isAnchor, peek: peek))
     }
 }
