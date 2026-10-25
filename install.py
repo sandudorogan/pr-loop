@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""Install repository files at their existing paths through symlinks."""
+"""Install PR Wizard: check the tools, link the repo into $HOME, start the daemon, build and open the app."""
 import argparse
 import importlib.util
 import json
 import os
 from pathlib import Path
+import plistlib
+import shutil
 import subprocess
+import sys
+import time
 from datetime import datetime
 from xml.sax.saxutils import escape
 
 
 CONFIG_SOURCE = ".pr-wizard/config.json"
+APP = "/Applications/PR Wizard.app"
+TOOLS = {"python3": "brew install python", "git": "xcode-select --install", "gh": "brew install gh",
+         "claude": "https://claude.com/claude-code", "codex": "npm install -g @openai/codex"}
 
 
 def default_config():
@@ -18,6 +25,62 @@ def default_config():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return json.dumps(module.DEFAULTS, indent=2) + "\n"
+
+
+def render(template, home):
+    return template.replace("{{ .chezmoi.homeDir }}", escape(str(home)))
+
+
+def problems(path, app):
+    """What blocks the daemon or the app. The daemon finds every tool on `path`, its plist PATH, not the shell's."""
+    found = {tool: shutil.which(tool, path=path) for tool in TOOLS}
+    for tool, hint in TOOLS.items():
+        elsewhere = None if found[tool] else shutil.which(tool)
+        if elsewhere:
+            yield f"{tool} is off the daemon PATH: mkdir -p ~/.local/bin && ln -s {elsewhere} ~/.local/bin/"
+        elif not found[tool]:
+            yield f"{tool} is missing: {hint}"
+    version = "import sys; sys.exit(sys.version_info < (3, 10))"
+    if found["python3"] and subprocess.run([found["python3"], "-c", version]).returncode:
+        yield f"{found['python3']} is older than 3.10: brew install python"
+    if found["gh"] and subprocess.run([found["gh"], "auth", "status"], capture_output=True).returncode:
+        yield "gh is not logged in: gh auth login"
+    if not app:
+        return
+    if subprocess.run(["xcode-select", "-p"], capture_output=True).returncode:
+        yield "the app needs the Command Line Tools: xcode-select --install (or --no-app)"
+    macos = subprocess.run(["sw_vers", "-productVersion"], capture_output=True, text=True).stdout.strip()
+    if int(macos.split(".")[0]) < 26:
+        yield f"the app needs macOS 26, this is {macos}: run with --no-app"
+
+
+def chezmoi_source():
+    if not shutil.which("chezmoi"):
+        return None
+    source = subprocess.run(["chezmoi", "source-path"], capture_output=True, text=True).stdout.strip()
+    return Path(source) if source and Path(source).is_dir() else None
+
+
+def start(plist, label, dry_run):
+    """Bootstrap the daemon, or boot it out first when loaded, so a changed plist and new code both take effect."""
+    domain = f"gui/{os.getuid()}"
+    service = f"{domain}/{label}"
+    loaded = lambda: subprocess.run(["launchctl", "print", service], capture_output=True).returncode == 0
+    print(f"{'Restart' if loaded() else 'Start'} {service}")
+    if dry_run:
+        return
+    if loaded():
+        subprocess.run(["launchctl", "bootout", service], check=True)
+        while loaded():
+            time.sleep(0.2)
+    subprocess.run(["launchctl", "bootstrap", domain, str(plist)], check=True)
+
+
+def install_app(root, dry_run):
+    print(f"Build {APP}, then open it")
+    if not dry_run:
+        subprocess.run([str(root / "app/script/install")], check=True)
+        subprocess.run(["open", APP], check=True)
 
 
 def chezmoi_name(relative):
@@ -50,7 +113,7 @@ def install(root, home, chezmoi=None, dry_run=False):
         for target, source in templates.items():
             rendered = links[home / target]
             rendered.parent.mkdir(parents=True, exist_ok=True)
-            rendered.write_text((root / source).read_text().replace("{{ .chezmoi.homeDir }}", escape(str(home))))
+            rendered.write_text(render((root / source).read_text(), home))
 
     for target, source in links.items():
         print(f"Link {target} -> {source}")
@@ -105,7 +168,23 @@ def install(root, home, chezmoi=None, dry_run=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, default=Path.home(), help="destination home directory")
-    parser.add_argument("--chezmoi-source", type=Path, help="update this source and apply only the owned paths")
-    parser.add_argument("--dry-run", action="store_true", help="print links without changing files")
+    parser.add_argument("--chezmoi-source", type=Path, help="chezmoi source to update (default: `chezmoi source-path`)")
+    parser.add_argument("--no-chezmoi", action="store_true", help="link straight into $HOME even with chezmoi set up")
+    parser.add_argument("--no-app", action="store_true", help="skip building and opening PR Wizard.app")
+    parser.add_argument("--dry-run", action="store_true", help="print each step without changing anything")
     args = parser.parse_args()
-    install(Path(__file__).resolve().parent, args.home, args.chezmoi_source, args.dry_run)
+    root = Path(__file__).resolve().parent
+    target, template = next(iter(json.loads((root / "links.json").read_text())["templates"].items()))
+    daemon = plistlib.loads(render((root / template).read_text(), args.home).encode())
+    blockers = list(problems(daemon["EnvironmentVariables"]["PATH"], not args.no_app))
+    if blockers:
+        sys.exit("Fix these, then run install.py again:\n" + "\n".join(f"  - {b}" for b in blockers))
+    chezmoi = None if args.no_chezmoi else args.chezmoi_source or chezmoi_source()
+    if chezmoi:
+        print(f"Chezmoi source {chezmoi}")
+    install(root, args.home, chezmoi, args.dry_run)
+    start(args.home / target, daemon["Label"], args.dry_run)
+    if not args.no_app:
+        install_app(root, args.dry_run)
+    if not shutil.which("pr-wizard"):
+        print("Add ~/.local/bin to your shell PATH to run pr-wizard")

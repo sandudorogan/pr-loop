@@ -129,5 +129,43 @@ class ConfigInstallation(unittest.TestCase):
         self.assertTrue(self.target.is_symlink())
 
 
+class Requirements(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.daemon, self.shell = Path(temp.name) / "daemon", Path(temp.name) / "shell"
+        self.daemon.mkdir()
+        self.shell.mkdir()
+
+    def tools(self, shell=(), failing=()):
+        for tool in installer.TOOLS:
+            path = (self.shell if tool in shell else self.daemon) / tool
+            path.write_text(f"#!/bin/sh\nexit {int(tool in failing)}\n")
+            path.chmod(0o755)
+
+    def problems(self):
+        with patch.dict(os.environ, {"PATH": str(self.shell)}):
+            return list(installer.problems(str(self.daemon), app=False))
+
+    def test_every_tool_on_the_daemon_path_passes(self):
+        self.tools()
+        self.assertEqual(self.problems(), [])
+
+    def test_a_tool_on_the_shell_path_only_names_the_link(self):
+        self.tools(shell=["codex"])
+        self.assertEqual(self.problems(),
+                         [f"codex is off the daemon PATH: mkdir -p ~/.local/bin && ln -s {self.shell}/codex ~/.local/bin/"])
+
+    def test_a_missing_tool_names_its_install(self):
+        self.tools()
+        (self.daemon / "claude").unlink()
+        self.assertEqual(self.problems(), ["claude is missing: https://claude.com/claude-code"])
+
+    def test_old_python_and_logged_out_gh(self):
+        self.tools(failing=["python3", "gh"])
+        self.assertEqual(self.problems(), [f"{self.daemon}/python3 is older than 3.10: brew install python",
+                                           "gh is not logged in: gh auth login"])
+
+
 if __name__ == "__main__":
     unittest.main()

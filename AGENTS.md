@@ -108,7 +108,7 @@ iprally's cljfmt and Karma live in its built-in override. A project with no gate
 | `review/*-schema.json` | JSON schemas the engines must return |
 | `claude/skills/pr-review-loop/` | Claude Code PR watch skill + `scan.py` (used by agent-delegator) |
 | `launchd/local.pr-wizard.plist.tmpl` | The one service template, `{{ .chezmoi.homeDir }}` placeholder |
-| `install.py`, `links.json` | Symlink the repo into `$HOME`, render the plist into `.local/`, link the config (`--chezmoi-source`) |
+| `install.py`, `links.json` | The one install step: check the tools on the plist PATH, symlink the repo into `$HOME`, render the plist into `.local/`, link the config (chezmoi from `chezmoi source-path`), bootstrap or restart the daemon, `app/script/install` + open (`--no-app`, `--no-chezmoi`, `--dry-run`) |
 | `docs/overhaul.md` | What the overhaul changed, the invariants, and the gaps that remain |
 | `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
 | `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; `tests/test_api_read.py` asserts the server against them |
@@ -242,9 +242,7 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
 5. Restart only for daemon code (`pr_wizard/*.py`). Check `pr-wizard -l` for ▶ rows first: a restart kills in-flight passes.
    `launchctl kickstart -k gui/$(id -u)/local.pr-wizard`
    `pr_review.py`, `pr_fix.py`, prompts and the config load fresh per run: no restart.
-6. Plist template change: `python3 install.py --chezmoi-source ~/.local/share/chezmoi`, then
-   `launchctl bootout gui/$(id -u)/local.pr-wizard` and
-   `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.pr-wizard.plist`.
+6. Plist template or `links.json` change: `~/workdir/review-queue/install.py --no-app` (boots the daemon out, then in).
 
 Commit style: `~/.gitmessage` (type prefix, 50-char imperative subject, body says what broke and why this fix).
 

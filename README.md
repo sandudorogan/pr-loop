@@ -51,35 +51,33 @@ After 8 rounds in a row with findings, the PR waits for a human.
 
 ## Install
 
-Requirements: macOS, Python 3.10+, `gh` (logged in), `git`, Claude Code, Codex.
+Requirements: macOS 26, the Command Line Tools (`xcode-select --install`), Python 3.10+, `gh` (logged in),
+Claude Code, Codex.
 
 ```sh
 git clone git@github.com:sandudorogan/review-queue.git ~/workdir/review-queue
-cd ~/workdir/review-queue
-python3 install.py --dry-run
-python3 install.py --chezmoi-source ~/.local/share/chezmoi   # omit the flag without chezmoi
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.pr-wizard.plist
+~/workdir/review-queue/install.py
 ```
 
-The installer symlinks the commands, the runners, the launchd plist and the config into `$HOME`.
-With chezmoi, it writes the default config into the source once and applies only the paths it owns.
-It backs up what it replaces under `~/.local/state/review-queue/backups/`. It does not start the service.
-
-### The app
-
-Download `PR-Wizard-<version>.dmg` from [Releases](https://github.com/sandudorogan/review-queue/releases)
-and drag **PR Wizard** to **Applications**. It needs macOS 26 on Apple silicon, and the daemon above.
-
-The app is ad-hoc signed, not notarized, so macOS blocks the first launch. Allow it once:
-System Settings → Privacy & Security → **Open Anyway**, or
-
-```sh
-xattr -dr com.apple.quarantine "/Applications/PR Wizard.app"
+```text
+ install.py
+   1 check   python3 ≥ 3.10 · git · gh logged in · claude · codex      on the daemon's PATH, not your shell's
+   2 link    commands, runners, launchd plist, config → $HOME          replaced files → ~/.local/state/review-queue/backups/
+   3 start   launchd local.pr-wizard                                   restart when it already runs
+   4 app     build PR Wizard.app → /Applications, open it
 ```
 
-Each release also carries a `.zip` of the same app and `SHA256SUMS` (`shasum -a 256 -c SHA256SUMS`).
+Step 1 stops on any gap and prints the command that fixes it. Run the installer again after a `git pull`:
+it restarts the daemon (a restart kills passes in work, see `pr-wizard -l`) and rebuilds the app.
 
-From the source (Command Line Tools only, no Xcode): `cd app && script/install` puts `PR Wizard.app` in `/Applications`.
+- `--dry-run` prints each step and changes nothing.
+- With chezmoi set up (`chezmoi source-path`), the installer writes the default config into the source once and
+  applies only the paths it owns. `--no-chezmoi` links straight into `$HOME`.
+- `--no-app` installs the daemon only.
+
+Each [release](https://github.com/sandudorogan/review-queue/releases) also carries the app as a `.dmg`. It is ad-hoc
+signed, so allow its first launch in System Settings → Privacy & Security → **Open Anyway**. The installer builds the
+same app from the checkout, with no such step.
 
 The task briefs come from [agent-delegator](https://github.com/sandudorogan/agent-delegator), which also uses the PR watch skill in `claude/`.
 PR Wizard runs without either.

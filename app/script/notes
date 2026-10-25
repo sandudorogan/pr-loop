@@ -8,7 +8,7 @@ cat <<MD
 2. The app is ad-hoc signed, not notarized. On first launch macOS blocks it:
    System Settings → Privacy & Security → **Open Anyway**, or
    \`xattr -dr com.apple.quarantine "/Applications/PR Wizard.app"\`.
-3. The app is a client of the \`pr-wizard\` daemon. Install the daemon from the source: see the README.
+3. The app is a client of the \`pr-wizard\` daemon. \`install.py\` in the source installs both: see the README.
 
 Requires macOS 26 on Apple silicon. Check the download with \`shasum -a 256 -c SHA256SUMS\`.
 
