@@ -196,6 +196,25 @@ signal.pause()
         self.assertFalse(os.path.exists(f"{state}/api.sock"))
         child.stdout.close()
 
+    def test_sigterm_exits_even_when_the_socket_is_already_gone(self):
+        state = f"{self.dir}/pr-wizard"
+        os.makedirs(state, mode=0o755)
+        child = subprocess.Popen([sys.executable, "-c", f"""
+import signal, sys
+sys.path.insert(0, {str(ROOT)!r})
+from pr_wizard import db, fake, names, queue
+names.WIZARD, names.SOCKET, names.LABEL_FILE = {state!r}, {state + '/api.sock'!r}, {state + '/launchd-label'!r}
+db.DB = {state + '/state.db'!r}
+queue.serve(fake.Runtime())
+signal.pause()
+"""], stdout=subprocess.PIPE, text=True)
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        self.assertIn("api on", child.stdout.readline())
+        os.unlink(f"{state}/api.sock")
+        child.send_signal(signal.SIGTERM)
+        self.assertEqual(child.wait(10), 143)
+        child.stdout.close()
+
 
 if __name__ == "__main__":
     unittest.main()

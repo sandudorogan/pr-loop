@@ -40,6 +40,7 @@ from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from fnmatch import fnmatch
+from pathlib import Path
 
 from pr_wizard import __version__, api, config, db, names, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
@@ -861,7 +862,7 @@ def serve(rt):
     os.makedirs(names.WIZARD, exist_ok=True)
     os.chmod(names.WIZARD, 0o700)
     server = api.bind(rt, names.SOCKET)
-    signal.signal(signal.SIGTERM, lambda *_: (os.unlink(names.SOCKET), os._exit(143)))
+    signal.signal(signal.SIGTERM, lambda *_: (Path(names.SOCKET).unlink(missing_ok=True), os._exit(143)))
     names.write_label()
     db.COMMITS.append(rt.changes.touch)
     threading.Thread(target=server.serve_forever, daemon=True).start()
