@@ -81,6 +81,7 @@ def build(prs, state, runtime):
     """Pure: the fetched PRs, `read()` rows and the runtime {generated_at, fetched_at, paused, refresh} as the §3.2
     snapshot."""
     repos, runs, cfg, roots = state["repos"], state["runs"], state["config"], state["roots"]
+    prs = [pr for pr in prs if pr["repo"] in repos]
     on = {repo: config.effective(cfg, repo) for repo in roots}
     first = {repo: rows["next"] for repo, rows in repos.items()}
     active = {repo: [n for r, n in runs if r == repo] for repo in repos}

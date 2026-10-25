@@ -194,6 +194,14 @@ class Snapshot(unittest.TestCase):
                          (True, True))
         self.assertEqual(items["iprally/iprally#13"]["author"], "ghost")
 
+    def test_prs_of_a_repo_dropped_from_the_config_are_left_out(self):
+        state = snapshot.read()
+        state["repos"].pop(GITOPS)
+        state["roots"].pop(GITOPS)
+        snap = snapshot.build(self.prs, state, RUNTIME)
+        self.assertEqual({i["repo"] for i in snap["items"]}, {MONOREPO})
+        self.assertEqual([p["repo"] for p in snap["projects"]], [MONOREPO])
+
     def test_rev_ignores_generated_at_and_follows_the_state(self):
         a, b = self.snap(), self.snap()
         self.assertEqual(a["rev"], b["rev"])
