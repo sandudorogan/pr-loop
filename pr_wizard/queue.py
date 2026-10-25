@@ -476,8 +476,10 @@ def handle(pr, first, only, dry_run):
         if seen.get("verdict") in READY and not pr["viewerDidAuthor"]:
             announce("ready_withdrawn", pr)
         in_review(repo, n, True)
-        status, note = review(repo, n, pr["headRefOid"])
-        in_review(repo, n, False)
+        try:
+            status, note = review(repo, n, pr["headRefOid"])
+        finally:
+            in_review(repo, n, False)
     log(repo, n, f"{status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     advisory = {r["id"] for r in effective(repo)["review"]["reviewers"] if r.get("advisory")}
     verdict = {"clean": "clean", "posted": "quality-only" if set(note.split(", ")) <= advisory else "posted"}.get(

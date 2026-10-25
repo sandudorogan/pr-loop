@@ -206,6 +206,17 @@ class Verdict(Configured):
         self.assertEqual(self.handle(("posted", "quality")), "posted")
         self.assertEqual(self.handle(("posted", "opus, codex")), "posted")
 
+    def test_a_raising_review_still_ends_the_run_row(self):
+        seen = {"sha": OTHER, "status": "posted", "verdict": "posted", "rounds": 1, "hold": False,
+                "at": "2026-10-25 09:00:00", "files": {"a.py": "1"}}
+        with patch.object(rq, "load", return_value={"1": seen}), patch.object(rq, "fingerprint", return_value={"a.py": "2"}), \
+                patch.object(rq, "review", side_effect=RuntimeError("boom")), patch.object(rq, "drop_ready_alert"), \
+                patch.object(rq, "announce"), patch.object(rq, "in_review") as in_review, \
+                patch.object(rq, "log_once"), patch.object(rq, "log"):
+            with self.assertRaises(RuntimeError):
+                rq.handle(pr(mine=False, requested=True), [], None, False)
+        self.assertEqual([c.args for c in in_review.call_args_list], [(MONOREPO, 1, True), (MONOREPO, 1, False)])
+
 
 class FixNote(Configured):
     def test_a_red_gate_names_itself(self):
