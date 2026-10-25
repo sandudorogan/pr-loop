@@ -14,6 +14,9 @@ actor ScriptedDaemon: DaemonAPI {
         case config
         case patchConfig(JSONValue, baseRev: String)
         case putConfig(JSONValue, baseRev: String)
+        case prConfig(PRRef)
+        case patchPRConfig(PRRef, JSONValue, baseRev: String)
+        case deletePRConfig(PRRef)
     }
 
     private struct Unscripted: Error {}
@@ -24,6 +27,7 @@ actor ScriptedDaemon: DaemonAPI {
     private var configs: [Result<ConfigEnvelope, any Error>]
     private var patches: [Result<ConfigEnvelope, any Error>]
     private var pages: [Result<EventPage, any Error>]
+    private var prConfigs: [Result<PRConfig, any Error>]
     private var errors: [Call: any Error] = [:]
     private let gate: Gate?
     private(set) var calls: [Call] = []
@@ -32,7 +36,7 @@ actor ScriptedDaemon: DaemonAPI {
         info: [Result<DaemonInfo, any Error>] = [], queue: [Result<QueueSnapshot, any Error>] = [],
         history: [Result<[HistoryEntry], any Error>] = [], config: [Result<ConfigEnvelope, any Error>] = [],
         patch: [Result<ConfigEnvelope, any Error>] = [], events: [Result<EventPage, any Error>] = [],
-        gate: Gate? = nil
+        prConfig: [Result<PRConfig, any Error>] = [], gate: Gate? = nil
     ) {
         infos = info
         snapshots = queue
@@ -40,6 +44,7 @@ actor ScriptedDaemon: DaemonAPI {
         configs = config
         patches = patch
         pages = events
+        prConfigs = prConfig
         self.gate = gate
     }
 
@@ -93,6 +98,21 @@ actor ScriptedDaemon: DaemonAPI {
     func setPaused(_ paused: Bool) async throws -> Bool {
         try await act(.setPaused(paused))
         return paused
+    }
+
+    func prConfig(_ pr: PRRef) async throws -> PRConfig {
+        calls.append(.prConfig(pr))
+        return try Self.next(&prConfigs)
+    }
+
+    func patchPRConfig(_ pr: PRRef, _ patch: JSONValue, baseRev: String) async throws -> PRConfig {
+        calls.append(.patchPRConfig(pr, patch, baseRev: baseRev))
+        return try Self.next(&prConfigs)
+    }
+
+    func deletePRConfig(_ pr: PRRef) async throws -> PRConfig {
+        calls.append(.deletePRConfig(pr))
+        return try Self.next(&prConfigs)
     }
 
     private func act(_ call: Call) async throws {

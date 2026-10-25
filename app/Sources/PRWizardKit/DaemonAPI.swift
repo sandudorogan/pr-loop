@@ -12,4 +12,7 @@ public protocol DaemonAPI: Sendable {
     func review(_ pr: PRRef) async throws
     func fix(_ pr: PRRef) async throws
     func setPaused(_ paused: Bool) async throws -> Bool
+    func prConfig(_ pr: PRRef) async throws -> PRConfig
+    func patchPRConfig(_ pr: PRRef, _ patch: JSONValue, baseRev: String) async throws -> PRConfig
+    func deletePRConfig(_ pr: PRRef) async throws -> PRConfig
 }

@@ -183,4 +183,35 @@ import Testing
             return
         }
     }
+
+    @Test("the PR config routes carry the ref in the path, and PATCH sends its base rev")
+    func prConfig() async throws {
+        let transport = try FakeTransport(fixture: "pr-config.json")
+        let client = DaemonClient(transport: transport)
+        let config = try await client.prConfig(gitops)
+        _ = try await client.patchPRConfig(gitops, ["fix": ["enabled": false]], baseRev: config.rev)
+        _ = try await client.deletePRConfig(gitops)
+        #expect(await transport.requests.map(\.method) == [.get, .patch, .delete])
+        #expect(Set(await transport.requests.map(\.path)) == ["/v1/prs/iprally/gitops/412/config"])
+        #expect(
+            try await transport.requests[1].body.map(JSONValue.init(parsing:)) == [
+                "base_rev": "2e8fe284ec8f", "patch": ["fix": ["enabled": false]],
+            ])
+        #expect(config.layers.pr == ["review.reviewers"])
+        #expect(config.effective.review.reviewers.map(\.id) == ["opus"])
+    }
+
+    @Test("a PR that left the queue is a 404 not_in_queue")
+    func prNotInQueue() async throws {
+        let body =
+            #"{"error": {"code": "not_in_queue", "message": "iprally/gitops#412 is not in the last queue fetch"}}"#
+        let transport = FakeTransport(status: 404, body: Data(body.utf8))
+        let error = await #expect(throws: APIError.self) {
+            try await DaemonClient(transport: transport).prConfig(gitops)
+        }
+        guard case .http(404, "not_in_queue", _, _) = error else {
+            Issue.record("\(String(describing: error))")
+            return
+        }
+    }
 }

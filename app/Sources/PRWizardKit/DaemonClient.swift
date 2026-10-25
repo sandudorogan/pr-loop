@@ -72,6 +72,19 @@ public struct DaemonClient: DaemonAPI {
         return state.isPaused
     }
 
+    public func prConfig(_ pr: PRRef) async throws -> PRConfig {
+        try await send(HTTPRequest(.get, "\(path(of: pr))/config"), ordered: true)
+    }
+
+    public func patchPRConfig(_ pr: PRRef, _ patch: JSONValue, baseRev: String) async throws -> PRConfig {
+        let body: JSONValue = .object(["base_rev": .string(baseRev), "patch": patch])
+        return try await send(HTTPRequest(.patch, "\(path(of: pr))/config", body: body.data), ordered: true)
+    }
+
+    public func deletePRConfig(_ pr: PRRef) async throws -> PRConfig {
+        try await send(HTTPRequest(.delete, "\(path(of: pr))/config"), ordered: true)
+    }
+
     private func send<Value: Decodable>(
         _ request: HTTPRequest, timeout: Duration = timeout, ordered: Bool = false
     ) async throws -> Value {
