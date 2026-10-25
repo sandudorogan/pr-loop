@@ -2,6 +2,9 @@ public protocol DaemonAPI: Sendable {
     func info() async throws -> DaemonInfo
     func queue(since rev: String?, wait: Duration) async throws -> QueueSnapshot
     func events(since cursor: String?, wait: Duration) async throws -> EventPage
+    func config() async throws -> ConfigEnvelope
+    func patchConfig(_ patch: JSONValue, baseRev: String) async throws -> ConfigEnvelope
+    func prompt(named name: String) async throws -> Prompt
     func history(repo: String?, limit: Int) async throws -> [HistoryEntry]
     func refresh() async throws
     func moveToFront(_ prs: [PRRef]) async throws -> NextResult

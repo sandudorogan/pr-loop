@@ -1,0 +1,277 @@
+{
+  "rev": "5c663cb8963c", "path": "/Users/sandu.dorogan/.config/pr-wizard/config.json",
+  "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-wizard/config.json", "source": "file", "error": null,
+  "config": {
+    "version": 1, "detect": {"roots": ["~/workdir"]}, "lanes": {"separate": false},
+    "projects": {
+      "iprally/iprally": {
+        "fix": {
+          "gates": [
+            {
+              "name": "cljfmt", "kind": "format", "when": ["*.clj", "*.cljs", "*.cljc", "*.edn"], "requires": "cljfmt",
+              "run": "cljfmt fix {files}"
+            },
+            {
+              "name": "Karma", "kind": "test", "when": ["ui/src/cljs/*.cljs", "ui/test/*_test.cljs"], "cwd": "ui",
+              "prelude": ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null", "needs": ["ui/node_modules"],
+              "targets": {
+                "map": [["^ui/src/cljs/(.+)\\.cljs$", "ui/test/\\1_test.cljs"]], "keep": "^ui/test/(.+_test)\\.cljs$",
+                "exists": true, "item": {"/": ".", "_": "-"}, "valid": "^[\\w.-]+$"
+              },
+              "setup": {
+                "name": "shadow-cljs compile karma-test",
+                "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+              },
+              "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
+              "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
+              "note": "Do not run tests that need a JVM or a browser (lein, Karma): they abort in this sandbox. The caller runs the Karma namespaces you touch after you finish and sends any failure back to you."
+            }
+          ]
+        }
+      },
+      "iprally/gitops": {"review": {"enabled": false}}
+    },
+    "review": {
+      "enabled": true, "workers": 3, "rounds": 8, "max_added": 4000,
+      "trivial": ["*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg"], "timeout_s": 2700,
+      "reviewers": [
+        {
+          "id": "opus", "enabled": true, "label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "fallback": true,
+          "needs_conventions": false, "advisory": false,
+          "claude": {"model": "opus", "effort": "high", "incremental": {"model": "opus", "effort": "medium"}},
+          "codex": {"model": null, "effort": null}
+        },
+        {
+          "id": "codex", "enabled": true, "label": "Codex", "prompt": "codex.md", "engine": "codex", "fallback": true,
+          "needs_conventions": false, "advisory": false, "claude": {"model": "opus", "effort": null, "incremental": null},
+          "codex": {"model": null, "effort": null}
+        },
+        {
+          "id": "quality", "enabled": true, "label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md",
+          "engine": "claude", "fallback": true, "needs_conventions": true, "advisory": true,
+          "claude": {"model": "haiku", "effort": "xhigh", "incremental": null}, "codex": {"model": null, "effort": null}
+        }
+      ]
+    },
+    "fix": {
+      "enabled": true, "workers": 3, "engine": "codex", "model": null, "effort": null, "prompt": "fix.md",
+      "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
+      "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
+    },
+    "refresh": {"interval_s": 300, "idle_s": 60}
+  },
+  "defaults": {
+    "version": 1, "detect": {"roots": ["~/workdir"]}, "lanes": {"separate": false},
+    "projects": {
+      "iprally/iprally": {
+        "fix": {
+          "gates": [
+            {
+              "name": "cljfmt", "kind": "format", "when": ["*.clj", "*.cljs", "*.cljc", "*.edn"], "requires": "cljfmt",
+              "run": "cljfmt fix {files}"
+            },
+            {
+              "name": "Karma", "kind": "test", "when": ["ui/src/cljs/*.cljs", "ui/test/*_test.cljs"], "cwd": "ui",
+              "prelude": ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null", "needs": ["ui/node_modules"],
+              "targets": {
+                "map": [["^ui/src/cljs/(.+)\\.cljs$", "ui/test/\\1_test.cljs"]], "keep": "^ui/test/(.+_test)\\.cljs$",
+                "exists": true, "item": {"/": ".", "_": "-"}, "valid": "^[\\w.-]+$"
+              },
+              "setup": {
+                "name": "shadow-cljs compile karma-test",
+                "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+              },
+              "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
+              "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
+              "note": "Do not run tests that need a JVM or a browser (lein, Karma): they abort in this sandbox. The caller runs the Karma namespaces you touch after you finish and sends any failure back to you."
+            }
+          ]
+        }
+      },
+      "iprally/gitops": {"review": {"enabled": false}}
+    },
+    "review": {
+      "enabled": true, "workers": 3, "rounds": 8, "max_added": 4000,
+      "trivial": ["*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg"], "timeout_s": 2700,
+      "reviewers": [
+        {
+          "id": "opus", "enabled": true, "label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "fallback": true,
+          "needs_conventions": false, "advisory": false,
+          "claude": {"model": "opus", "effort": "high", "incremental": {"model": "opus", "effort": "medium"}},
+          "codex": {"model": null, "effort": null}
+        },
+        {
+          "id": "codex", "enabled": true, "label": "Codex", "prompt": "codex.md", "engine": "codex", "fallback": true,
+          "needs_conventions": false, "advisory": false, "claude": {"model": "opus", "effort": null, "incremental": null},
+          "codex": {"model": null, "effort": null}
+        },
+        {
+          "id": "quality", "enabled": true, "label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md",
+          "engine": "claude", "fallback": true, "needs_conventions": true, "advisory": true,
+          "claude": {"model": "haiku", "effort": "xhigh", "incremental": null}, "codex": {"model": null, "effort": null}
+        }
+      ]
+    },
+    "fix": {
+      "enabled": true, "workers": 3, "engine": "codex", "model": null, "effort": null, "prompt": "fix.md",
+      "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
+      "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
+    },
+    "refresh": {"interval_s": 300, "idle_s": 60}
+  },
+  "effective": {
+    "iprally/iprally": {
+      "root": "/Users/sandu.dorogan/workdir/iprally",
+      "review": {
+        "enabled": true, "workers": 3, "rounds": 8, "max_added": 4000,
+        "trivial": ["*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg"], "timeout_s": 2700,
+        "reviewers": [
+          {
+            "id": "opus", "enabled": true, "label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "fallback": true,
+            "needs_conventions": false, "advisory": false,
+            "claude": {"model": "opus", "effort": "high", "incremental": {"model": "opus", "effort": "medium"}},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "codex", "enabled": true, "label": "Codex", "prompt": "codex.md", "engine": "codex", "fallback": true,
+            "needs_conventions": false, "advisory": false, "claude": {"model": "opus", "effort": null, "incremental": null},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "quality", "enabled": true, "label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md",
+            "engine": "claude", "fallback": true, "needs_conventions": true, "advisory": true,
+            "claude": {"model": "haiku", "effort": "xhigh", "incremental": null}, "codex": {"model": null, "effort": null}
+          }
+        ]
+      },
+      "fix": {
+        "enabled": true, "workers": 3, "engine": "codex", "model": null, "effort": null, "prompt": "fix.md",
+        "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
+        "ci_tries": 3, "ci_apps": ["github-actions"],
+        "gates": [
+          {
+            "name": "cljfmt", "kind": "format", "when": ["*.clj", "*.cljs", "*.cljc", "*.edn"], "requires": "cljfmt",
+            "run": "cljfmt fix {files}"
+          },
+          {
+            "name": "Karma", "kind": "test", "when": ["ui/src/cljs/*.cljs", "ui/test/*_test.cljs"], "cwd": "ui",
+            "prelude": ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null", "needs": ["ui/node_modules"],
+            "targets": {
+              "map": [["^ui/src/cljs/(.+)\\.cljs$", "ui/test/\\1_test.cljs"]], "keep": "^ui/test/(.+_test)\\.cljs$",
+              "exists": true, "item": {"/": ".", "_": "-"}, "valid": "^[\\w.-]+$"
+            },
+            "setup": {
+              "name": "shadow-cljs compile karma-test",
+              "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+            },
+            "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
+            "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
+            "note": "Do not run tests that need a JVM or a browser (lein, Karma): they abort in this sandbox. The caller runs the Karma namespaces you touch after you finish and sends any failure back to you."
+          }
+        ]
+      }
+    },
+    "iprally/gitops": {
+      "root": "/Users/sandu.dorogan/workdir/gitops",
+      "review": {
+        "enabled": false, "workers": 3, "rounds": 8, "max_added": 4000,
+        "trivial": ["*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg"], "timeout_s": 2700,
+        "reviewers": [
+          {
+            "id": "opus", "enabled": true, "label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "fallback": true,
+            "needs_conventions": false, "advisory": false,
+            "claude": {"model": "opus", "effort": "high", "incremental": {"model": "opus", "effort": "medium"}},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "codex", "enabled": true, "label": "Codex", "prompt": "codex.md", "engine": "codex", "fallback": true,
+            "needs_conventions": false, "advisory": false, "claude": {"model": "opus", "effort": null, "incremental": null},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "quality", "enabled": true, "label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md",
+            "engine": "claude", "fallback": true, "needs_conventions": true, "advisory": true,
+            "claude": {"model": "haiku", "effort": "xhigh", "incremental": null}, "codex": {"model": null, "effort": null}
+          }
+        ]
+      },
+      "fix": {
+        "enabled": true, "workers": 3, "engine": "codex", "model": null, "effort": null, "prompt": "fix.md",
+        "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
+        "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
+      }
+    },
+    "sandudorogan/dataspex": {
+      "root": "/Users/sandu.dorogan/workdir/dataspex",
+      "review": {
+        "enabled": true, "workers": 3, "rounds": 8, "max_added": 4000,
+        "trivial": ["*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg"], "timeout_s": 2700,
+        "reviewers": [
+          {
+            "id": "opus", "enabled": true, "label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "fallback": true,
+            "needs_conventions": false, "advisory": false,
+            "claude": {"model": "opus", "effort": "high", "incremental": {"model": "opus", "effort": "medium"}},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "codex", "enabled": true, "label": "Codex", "prompt": "codex.md", "engine": "codex", "fallback": true,
+            "needs_conventions": false, "advisory": false, "claude": {"model": "opus", "effort": null, "incremental": null},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "quality", "enabled": true, "label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md",
+            "engine": "claude", "fallback": true, "needs_conventions": true, "advisory": true,
+            "claude": {"model": "haiku", "effort": "xhigh", "incremental": null}, "codex": {"model": null, "effort": null}
+          }
+        ]
+      },
+      "fix": {
+        "enabled": true, "workers": 3, "engine": "codex", "model": null, "effort": null, "prompt": "fix.md",
+        "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
+        "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
+      }
+    },
+    "clojure/clojurescript-site": {
+      "root": null,
+      "review": {
+        "enabled": true, "workers": 3, "rounds": 8, "max_added": 4000,
+        "trivial": ["*.lock", "*lock.json", "*.lockb", "*.md", "*.png", "*.jpg", "*.svg"], "timeout_s": 2700,
+        "reviewers": [
+          {
+            "id": "opus", "enabled": true, "label": "Claude Opus 5.5", "prompt": "opus.md", "engine": "claude", "fallback": true,
+            "needs_conventions": false, "advisory": false,
+            "claude": {"model": "opus", "effort": "high", "incremental": {"model": "opus", "effort": "medium"}},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "codex", "enabled": true, "label": "Codex", "prompt": "codex.md", "engine": "codex", "fallback": true,
+            "needs_conventions": false, "advisory": false, "claude": {"model": "opus", "effort": null, "incremental": null},
+            "codex": {"model": null, "effort": null}
+          },
+          {
+            "id": "quality", "enabled": true, "label": "Claude Haiku 5.5 · quality self-review", "prompt": "quality.md",
+            "engine": "claude", "fallback": true, "needs_conventions": true, "advisory": true,
+            "claude": {"model": "haiku", "effort": "xhigh", "incremental": null}, "codex": {"model": null, "effort": null}
+          }
+        ]
+      },
+      "fix": {
+        "enabled": true, "workers": 3, "engine": "codex", "model": null, "effort": null, "prompt": "fix.md",
+        "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
+        "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
+      }
+    }
+  },
+  "choices": {
+    "engines": ["claude", "codex"], "fix_engines": ["codex"], "gate_kinds": ["format", "test"],
+    "claude_efforts": ["low", "medium", "high", "xhigh", "max"],
+    "codex_efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "claude_models": ["opus", "sonnet", "haiku"],
+    "codex_default": {"model": "gpt-6.1-sol", "effort": "high"},
+    "codex_models": [
+      {"model": "gpt-6-astra", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "default_effort": "medium"},
+      {"model": "gpt-5.6-sol", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "default_effort": "medium"},
+      {"model": "gpt-5.6-luna", "efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "medium"}
+    ],
+    "prompts": ["codex.md", "fix.md", "merge.md", "opus.md", "quality.md"]
+  }
+}
