@@ -1,0 +1,216 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>PR Wizard demo cards</title>
+<style>
+:root{--bg:#121216;--panel:#1c1c22;--line:#2e2e37;--text:#f3f3f6;--muted:#9b9ba8;--violet:#b197fc;--blue:#6b9bff;--green:#4cc38a;--orange:#f5a524}
+*{box-sizing:border-box;margin:0}
+html,body{width:1920px;height:1080px;overflow:hidden}
+body{background:radial-gradient(1200px 700px at 20% 0%,#1d1a2e 0%,transparent 60%),radial-gradient(900px 600px at 100% 100%,#14202a 0%,transparent 60%),var(--bg);
+ color:var(--text);font:400 38px/1.4 -apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+section{display:none;position:absolute;inset:0;padding:90px 140px;flex-direction:column;justify-content:center}
+section:target{display:flex}
+h1{font:700 76px/1.1 -apple-system,"SF Pro Display",system-ui;letter-spacing:-.02em;margin-bottom:14px}
+.kicker{font:600 26px/1 ui-monospace,"SF Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--violet);margin-bottom:22px}
+.lede{color:var(--muted);font-size:36px;margin-bottom:56px}
+ul{list-style:none;padding:0}
+li{position:relative;padding-left:46px;margin-bottom:22px}
+li:before{content:"";position:absolute;left:8px;top:.55em;width:14px;height:14px;border-radius:4px;background:var(--violet)}
+b{font-weight:600}
+code,.mono{font-family:ui-monospace,"SF Mono",monospace;font-size:.86em}
+code{background:#2a2a33;border-radius:8px;padding:2px 10px}
+.box{background:var(--panel);border:1.5px solid var(--line);border-radius:18px;padding:22px 28px}
+.row{display:flex;align-items:center;gap:22px}
+.arrow{color:var(--muted);font-size:40px}
+.tag{font:500 27px/1.3 -apple-system,system-ui,sans-serif;color:var(--muted)}
+.blue{color:var(--blue)}.green{color:var(--green)}.orange{color:var(--orange)}.violet{color:var(--violet)}
+/* title */
+#title{align-items:center;text-align:center}
+#title img{width:260px;height:260px;margin-bottom:34px;filter:drop-shadow(0 30px 60px #0008)}
+#title h1{font-size:120px}
+#title .lede{font-size:44px;margin:10px 0 40px;color:#d6d6de}
+.pills{display:flex;gap:16px}
+.pill{border:1.5px solid var(--line);background:var(--panel);border-radius:999px;padding:10px 26px;font-size:26px;color:var(--muted)}
+/* loop */
+.loop{margin-top:20px}
+.loop .box{text-align:center;min-width:230px}
+.loop .box{padding:26px 34px}.loop .box b{display:block;font-size:42px}
+.back{margin:26px 0 0 140px;color:var(--muted);font:500 30px/1 ui-monospace,"SF Mono",monospace}
+/* arch */
+.arch{display:grid;grid-template-columns:330px 70px 1fr;gap:0;align-items:center;margin-top:10px}
+.clients .box{margin-bottom:16px;font-size:31px}
+.daemon{border-color:#4a3f7a;background:#1d1b2b}
+.daemon h3{font:600 30px/1.2 -apple-system,system-ui,sans-serif;margin-bottom:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cell{background:#24222f;border-radius:12px;padding:16px 20px;font-size:28px;line-height:1.35}
+.cell b{display:block;font-size:30px;margin-bottom:2px}
+.under{display:flex;gap:16px;margin-top:22px}
+.under .box{flex:1;font-size:28px}
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-top:6px}
+.step{background:var(--panel);border:1.5px solid var(--line);border-radius:18px;padding:30px 30px;font-size:29px;line-height:1.45}
+.step .n{font:700 22px/1 ui-monospace,"SF Mono",monospace;color:var(--violet);margin-bottom:12px}
+.step h3{font:600 38px/1.15 -apple-system,system-ui,sans-serif;margin-bottom:14px}
+.step p{color:#c9c9d3;margin-bottom:10px}
+/* covers */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.cols .box{padding:30px 36px;font-size:31px}
+.cols h3{font:600 36px/1.2 -apple-system,system-ui,sans-serif;margin-bottom:16px}
+.cols li{margin-bottom:10px;padding-left:38px}
+.cols li:before{width:11px;height:11px;top:.6em}
+.no li:before{background:var(--muted)}
+/* terminal */
+.term{background:#0c0c0f;border:1.5px solid var(--line);border-radius:18px;padding:34px 40px;font:400 32px/1.8 ui-monospace,"SF Mono",monospace}
+.term div{white-space:pre}
+.term .p{color:var(--green)}.term .c{color:#6f6f7d}
+/* captions over footage */
+.cap{padding:52px 140px 0;justify-content:flex-start}
+.cap h1{font-size:52px;margin-bottom:8px}
+.cap .lede{font-size:30px;margin:0}
+</style></head><body>
+
+<section id="title">
+  <img src="icon.png" alt="">
+  <h1>PR Wizard</h1>
+  <p class="lede">Reviews and fixes your GitHub PRs while you work.</p>
+  <div class="pills"><span class="pill">macOS daemon + app</span><span class="pill">Claude Code</span><span class="pill">Codex</span><span class="pill">every repo</span></div>
+</section>
+
+<section id="what">
+  <div class="kicker">What it does</div>
+  <h1>Your PRs, reviewed and fixed in a loop</h1>
+  <p class="lede">It watches every open PR you opened, that requests your review, that is assigned to you, or that you reviewed before.</p>
+  <div class="row loop">
+    <div class="box"><span class="tag">PR</span><b>new head</b></div>
+    <span class="arrow">→</span>
+    <div class="box"><span class="tag">3 reviewers</span><b class="blue">review</b><span class="tag">opus · codex · quality</span></div>
+    <span class="arrow">→</span>
+    <div class="box"><span class="tag">your PRs</span><b class="orange">fix</b><span class="tag">Codex · gates</span></div>
+    <span class="arrow">→</span>
+    <div class="box"><span class="tag">commit</span><b class="violet">push</b><span class="tag">next round</span></div>
+    <span class="arrow">⟲</span>
+  </div>
+  <div class="back">nothing left to fix  →  <span class="green">✓ Ready for your approval</span></div>
+  <ul style="margin-top:56px;font-size:36px">
+    <li>Findings land as <b>inline comments</b> on GitHub, one review per reviewer.</li>
+    <li>On your own PRs it fixes the feedback, <b>red CI</b> and <b>base conflicts</b>, then pushes.</li>
+  </ul>
+</section>
+
+<section id="how">
+  <div class="kicker">How it works</div>
+  <h1>One daemon serves every repo</h1>
+  <p class="lede" style="margin-bottom:34px">A launchd process on your Mac. The app and the CLI are clients of its socket.</p>
+  <div class="arch">
+    <div class="clients">
+      <div class="box">PR Wizard.app</div>
+      <div class="box"><span class="mono">pr-wizard</span> CLI</div>
+      <div class="box"><span class="mono">curl</span></div>
+      <div class="tag" style="text-align:center">HTTP + JSON on <span class="mono">api.sock</span></div>
+    </div>
+    <div class="arrow" style="text-align:center">→</div>
+    <div class="box daemon">
+      <h3><span class="mono">pr-wizard --daemon</span> <span class="tag">· launchd local.pr-wizard · the only process</span></h3>
+      <div class="grid2">
+        <div class="cell"><b>Refresh</b>One GitHub GraphQL query every 5 min finds your PRs in every repo</div>
+        <div class="cell"><b>Gates</b>Skip a head already reviewed, trivial files, held or too-big PRs</div>
+        <div class="cell"><b class="blue">Review pool · 3 workers</b><span class="mono">pr_review.py</span> runs <span class="mono">claude -p</span> and <span class="mono">codex exec</span></div>
+        <div class="cell"><b class="orange">Fix pool · 3 workers</b><span class="mono">pr_fix.py</span>: Codex in a sandbox, gates, commit, push</div>
+      </div>
+    </div>
+  </div>
+  <div class="under">
+    <div class="box"><b>State</b> · SQLite <span class="mono">state.db</span>: reviews, fixes, history, events</div>
+    <div class="box"><b>Config</b> · <span class="mono">config.json</span>, reloaded live: all repos → project → PR</div>
+    <div class="box"><b>Projects</b> · repos with your PRs and a checkout under <span class="mono">~/workdir</span></div>
+  </div>
+</section>
+
+<section id="round">
+  <div class="kicker">How it works · one round</div>
+  <h1>From a push to Ready</h1>
+  <p class="lede" style="margin-bottom:40px">Each round looks only at what changed since the last one.</p>
+  <div class="steps">
+    <div class="step"><div class="n">01</div><h3 class="blue">Review</h3>
+      <p>Three reviewers read the new commits, the task brief, and the repo's own conventions.</p>
+      <p>Each posts one review with inline comments.</p></div>
+    <div class="step"><div class="n">02</div><h3 class="violet">Filter</h3>
+      <p>A finding counts at severity <b>≥ medium</b> and confidence <b>≥ 0.6</b>.</p>
+      <p>From round 4: <b>≥ high</b> only.</p></div>
+    <div class="step"><div class="n">03</div><h3 class="orange">Fix · your PRs</h3>
+      <p>Codex edits in a sandbox: no git, no network.</p>
+      <p>The project's gates run: format, then test.</p>
+      <p>PR Wizard commits, pushes, replies and resolves the threads.</p></div>
+    <div class="step"><div class="n">04</div><h3 class="green">Stop</h3>
+      <p>Every reviewer clean: <b class="green">Ready</b>.</p>
+      <p>8 rounds in a row with findings: it waits for a human.</p></div>
+  </div>
+</section>
+
+<section id="covers">
+  <div class="kicker">What it covers</div>
+  <h1>Which PRs, and what it looks at</h1>
+  <div class="cols" style="margin-top:40px">
+    <div class="box"><h3 class="blue">Review lane</h3><ul>
+      <li>PRs you opened</li><li>PRs that request your review</li><li>PRs assigned to you</li><li>PRs you reviewed before</li>
+      <li>Reads the repo's <span class="mono">AGENTS.md</span>, <span class="mono">CLAUDE.md</span>, contributing doc, editorconfig, linters</li></ul></div>
+    <div class="box"><h3 class="orange">Fix lane · your PRs only</h3><ul>
+      <li>Unresolved review threads</li><li>Review bodies on the current head</li><li>Failed GitHub Actions jobs</li><li>Merge conflicts with the base</li>
+      <li>Then the project's gates, e.g. cljfmt and Karma</li></ul></div>
+  </div>
+  <div class="box no" style="margin-top:26px;font-size:31px"><h3 style="font:600 30px/1.2 -apple-system,system-ui,sans-serif;margin-bottom:12px;color:var(--muted)">Left alone</h3>
+    <ul style="display:grid;grid-template-columns:1fr 1fr;column-gap:30px">
+      <li>Repos without a local checkout</li><li>PRs that add more than 4000 lines</li>
+      <li>Only trivial files (lock files, docs, images)</li><li>PRs labeled <span class="mono">no-auto-review</span> / <span class="mono">no-auto-fix</span></li></ul></div>
+</section>
+
+<section id="expect">
+  <div class="kicker">What to expect</div>
+  <h1>It works as you, in the open</h1>
+  <ul style="margin-top:50px;font-size:38px">
+    <li>Reviews, replies and commits go out with <b>your GitHub credentials</b>.</li>
+    <li>Fix commits land <b>on your branch</b>. Codex never runs git; PR Wizard commits and pushes.</li>
+    <li>When one engine hits its usage limit, the reviewer <b>runs on the other</b>.</li>
+    <li><b>One notification only:</b> “Ready for your approval” when a colleague's PR comes back clean.</li>
+    <li>Opt a PR out with a label. Pause one PR in the app, or every lane with <span class="mono">--pause</span>.</li>
+    <li>Needs macOS 26, Python 3.10+, <span class="mono">gh</span> logged in, Claude Code and Codex.</li>
+  </ul>
+</section>
+
+<section id="cli">
+  <div class="kicker">The CLI</div>
+  <h1>Everything the app does, from the terminal</h1>
+  <div class="term" style="margin-top:44px">
+    <div><span class="p">$</span> pr-wizard -l              <span class="c"># the queue: ▶ in work · 1..n next · ✓ ready</span></div>
+    <div><span class="p">$</span> pr-wizard --pr 16400      <span class="c"># review one PR now</span></div>
+    <div><span class="p">$</span> pr-wizard --next 16400    <span class="c"># move a PR to the front</span></div>
+    <div><span class="p">$</span> pr-wizard --wait 16400    <span class="c"># block until it settles, print JSON</span></div>
+    <div><span class="p">$</span> pr-wizard --pause         <span class="c"># take no new PR until --resume</span></div>
+    <div><span class="p">$</span> pr-wizard config --patch '{"review": {"workers": 2}}'</div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="kicker">Install</div>
+  <h1>Two commands</h1>
+  <div class="term" style="margin-top:44px">
+    <div><span class="p">$</span> git clone git@github.com:sandudorogan/review-queue.git ~/workdir/review-queue</div>
+    <div><span class="p">$</span> ~/workdir/review-queue/install.py</div>
+  </div>
+  <div class="row" style="margin-top:44px;gap:16px;font-size:28px">
+    <div class="box">1 · check the tools</div><span class="arrow">→</span>
+    <div class="box">2 · link into <span class="mono">$HOME</span></div><span class="arrow">→</span>
+    <div class="box">3 · start the daemon</div><span class="arrow">→</span>
+    <div class="box">4 · build the app</div>
+  </div>
+  <p class="lede" style="margin-top:60px">MIT licensed · github.com/sandudorogan/review-queue</p>
+</section>
+
+<section id="cap-queue" class="cap"><h1>One queue for every repo</h1><p class="lede">▶ in work · 1, 2, 3 up next · ✓ ready for you · waiting</p></section>
+<section id="cap-inspect" class="cap"><h1>Three reviewers on every round</h1><p class="lede">Claude Opus for bugs and risk · Codex, adversarial · Claude Haiku for the repo's conventions</p></section>
+<section id="cap-live" class="cap"><h1>A colleague's PR, reviewed live</h1><p class="lede">All three come back clean → it moves to Ready and you get one notification</p></section>
+<section id="cap-fix" class="cap"><h1>Your own PRs also get fixed</h1><p class="lede">The fix lane reads threads, red CI and conflicts, runs Codex, then pushes</p></section>
+<section id="cap-project" class="cap"><h1>Projects come from your PRs</h1><p class="lede">A repo is worked when it has a local checkout · ⚠ marks one without</p></section>
+<section id="cap-lanes" class="cap"><h1>Config on three levels</h1><p class="lede">All repos → project → PR · workers, lanes, round limit, refresh</p></section>
+<section id="cap-reviewers" class="cap"><h1>Pick your reviewers</h1><p class="lede">Engine, model, effort and prompt for each · a fallback engine at the usage limit</p></section>
+<section id="cap-fixer" class="cap"><h1>Each project brings its own gates</h1><p class="lede">iprally formats with cljfmt, then runs Karma · no gates: CI stays the gate</p></section>
+<section id="cap-history" class="cap"><h1>Nothing in the queue?</h1><p class="lede">The app lists the PRs it worked on recently and how they ended</p></section>
+</body></html>

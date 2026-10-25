@@ -1,0 +1,22 @@
+#!/bin/zsh -e
+# Re-records docs/demo.mp4 and docs/demo.gif from the app in this checkout (about 3 min; Google Chrome renders the cards).
+cd "${0:A:h}"
+work=../../app/build/demo
+rm -rf $work && mkdir -p $work/cards
+../../app/script/bundle
+cp -R "../../app/build/PR Wizard.app" $work/
+plutil -replace CFBundleIdentifier -string local.pr-wizard.demo "$work/PR Wizard.app/Contents/Info.plist"
+plutil -replace LSUIElement -bool true "$work/PR Wizard.app/Contents/Info.plist"
+codesign --force --sign - --timestamp=none "$work/PR Wizard.app"
+clang -dynamiclib -fobjc-arc -framework AppKit -o $work/capture.dylib capture.m
+python3 record.py $work
+
+sips -s format png ../../app/Resources/AppIcon.icns --out $work/cards/icon.png >/dev/null
+cp cards.html $work/cards/
+chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+for id in ${(f)"$(grep -o '<section id="[^"]*"' cards.html | cut -d'"' -f2)"}; do
+  "$chrome" --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1920,1080 \
+    --user-data-dir=$work/chrome --screenshot=$work/cards/$id.png "file://${work:A}/cards/cards.html#$id" 2>/dev/null
+done
+python3 cut.py $work
+ls -lh ../demo.mp4 ../demo.gif

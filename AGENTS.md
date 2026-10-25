@@ -110,6 +110,7 @@ iprally's cljfmt and Karma live in its built-in override. A project with no gate
 | `launchd/local.pr-wizard.plist.tmpl` | The one service template, `{{ .chezmoi.homeDir }}` placeholder |
 | `install.py`, `links.json` | The one install step: check the tools on the plist PATH, symlink the repo into `$HOME`, render the plist into `.local/`, link the config (chezmoi from `chezmoi source-path`), bootstrap or restart the daemon, `app/script/install` + open (`--no-app`, `--no-chezmoi`, `--dry-run`) |
 | `docs/overhaul.md` | What the overhaul changed, the invariants, and the gaps that remain |
+| `docs/demo/` | The README video. `make` bundles the app, films it against `--fake` with `capture.m` injected (the window server image of its own windows: no Screen Recording permission, windows offscreen), renders `cards.html` in headless Chrome, and `cut.py` writes `docs/demo.mp4` and `docs/demo.gif`. Re-record after a UI change; `record.py` picks rows by index in the fixture queue |
 | `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
 | `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; `tests/test_api_read.py` asserts the server against them |
 | `.github/workflows/release.yml` | A `v*` tag push: app test + lint, `app/script/package`, `app/script/notes`, `gh release create` with the dmg, zip and `SHA256SUMS` |

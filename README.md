@@ -7,6 +7,12 @@ Three reviewers post findings as inline comments.
 On your own PRs, headless Codex then fixes the feedback, red CI and base conflicts, and pushes.
 The push starts the next review round.
 
+<a href="docs/demo.mp4"><img src="docs/demo.gif" width="100%"
+  alt="PR Wizard demo: the queue, a live review, a fix pass, the settings, and how the daemon works"></a>
+
+Two minutes, no sound: what it does, how a round runs, what it covers and what to expect,
+with the app on the fake API. [MP4](docs/demo.mp4).
+
 ```text
   your PR head ──▶ review ×3 ──settled──▶ fix ──pushed──▶ new head ─┐
        ▲          opus · codex · quality   │ nothing to push → ready │
@@ -107,6 +113,7 @@ Read [AGENTS.md](AGENTS.md) first: layout, state, contracts, workflow and gotcha
 ```sh
 python3 -m unittest discover -s tests -v
 cd app && script/test && script/lint
+docs/demo/make      # re-record the README video from this checkout (fake API, no daemon, about 3 min)
 ```
 
 ### Release
