@@ -30,7 +30,7 @@ from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
-from pr_wizard import __version__, api, config, db, names, pools, projects, snapshot
+from pr_wizard import __version__, api, config, db, history, names, pools, projects, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
                               REPOS, STATE, env_repo, path, tag)
 
@@ -42,7 +42,7 @@ ATTEMPTS = 3
 BACKOFF = (60, 180)
 ROUNDS = config.DEFAULTS["review"]["rounds"]
 WAIT_POLL = 30
-READY = ("clean", "quality-only")
+READY = history.READY
 SETTLED = ("nothing-to-fix", "refuted-only", "no-changes")
 LIMITED = object()
 AT_LIMIT = re.compile(r"(?:\w+ and \w+ are )?both at their usage limit|\w+ is at its usage limit")
@@ -495,9 +495,12 @@ def handle(pr, first, only, dry_run):
     absorbed = status in ("posted", "clean", "baseline", "unchanged", "trivial")
     rounds = 0 if status == "clean" else (0 if only else seen.get("rounds", 0)) + (status == "posted")
     hold = status == "clean" and pr["viewerDidAuthor"] if status in ("posted", "clean") else seen.get("hold", False)
-    record(repo, key, {"sha": pr["headRefOid"], "status": status, "verdict": verdict, "note": note, "rounds": rounds,
-                       "hold": hold,
-                       "at": f"{datetime.now():%F %T}", "files": files if absorbed else seen.get("files", {})})
+    with db.tx():
+        record(repo, key, {"sha": pr["headRefOid"], "status": status, "verdict": verdict, "note": note, "rounds": rounds,
+                           "hold": hold,
+                           "at": f"{datetime.now():%F %T}", "files": files if absorbed else seen.get("files", {})})
+        if status in history.WORKED:
+            history.remember(pr, history.outcome(status, verdict, pr["viewerDidAuthor"]))
     if n in first and status != "limited":
         with GUARD:
             save_bumped(repo, [x for x in bumped(repo) if x != n])
@@ -576,8 +579,10 @@ def fix(pr, first):
     if status == "limited":
         return
     errors = load(repo, FIXES).get(str(n), {}).get("errors", 0) + 1 if status in ("error", "tests-red") else 0
-    record(repo, str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= knobs["max_errors"] else None,
-                          "status": status, "note": note, "errors": errors, "at": f"{datetime.now():%F %T}"}, FIXES)
+    with db.tx():
+        record(repo, str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= knobs["max_errors"] else None,
+                              "status": status, "note": note, "errors": errors, "at": f"{datetime.now():%F %T}"}, FIXES)
+        history.remember(pr, status, pushed=status == "pushed")
     if status == "pushed":
         kick()
 
@@ -831,6 +836,13 @@ class Runtime:
     def events(self, since):
         return db.events_after(since)
 
+    def history(self, repo, limit):
+        """api.md §3.13: the newest entries, minus the open PRs the queue still works."""
+        items = self.snapshot()["items"]
+        busy = {i["key"] for i in items if i["group"] in ("active", "queued") or i["fix_queued"]}
+        standing = {f"{p['repo']}#{p['number']}" for p in self.prs if approved(p)}
+        return {"entries": history.entries(db.history(db.HISTORY_KEEP, repo), busy, standing, cfg(), limit)}
+
     def snapshot(self):
         return snapshot.build(self.prs, snapshot.read(self.prs), {"generated_at": db.now(), "fetched_at": self.fetched_at,
                                                           "paused": paused(), "refresh": self.refresh})
@@ -913,6 +925,7 @@ def daemon():
                 served = serving(held)
                 worked = [pr for pr in prs if pr["repo"] in served]
                 rt.refreshed(prs)
+                track(prs)
                 rt.apply()
                 rt.pools.refill("review", worked)
                 state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
@@ -943,6 +956,17 @@ def daemon():
     start_pruner(lambda: active(rt.prs))
     rt.apply()
     refresh()
+
+
+def track(prs):
+    """The history upkeep of one refresh: seed it once, mark the PRs that left the queue merged or closed. A failed
+    lookup is logged and tried again at the next refresh, and the refresh goes on."""
+    try:
+        ask = graphql()
+        history.seed(ask, prs, say)
+        history.settle(ask, prs, say)
+    except Exception as e:
+        say(f"history lookup failed: {(getattr(e, 'stderr', None) or str(e)).strip()[-200:]}")
 
 
 def kick():

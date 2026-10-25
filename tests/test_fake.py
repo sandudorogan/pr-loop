@@ -1,7 +1,9 @@
 import copy
 import json
+import os
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -61,6 +63,27 @@ class Fake(unittest.TestCase):
             self.rt.snap["items"].append(item)
             self.rt.publish()
         return item["key"]
+
+
+class Flags(unittest.TestCase):
+    def runtime(self, *argv, **env):
+        taken = []
+        with patch.object(sys, "argv", ["api", "--fake", *argv]), patch.dict(os.environ, env), \
+                patch.object(api, "bind", side_effect=lambda rt, path: taken.append(rt) or sys.exit(0)):
+            with self.assertRaises(SystemExit):
+                api.main()
+        return taken[0]
+
+    def test_the_flags_set_the_knobs(self):
+        rt = self.runtime("--fake-speed", "0", "--fake-empty")
+        self.assertEqual((rt.speed, rt.snapshot()["items"]), (0, []))
+
+    def test_the_env_vars_still_work(self):
+        rt = self.runtime(PRW_FAKE_SPEED="2", PRW_FAKE_EMPTY="1")
+        self.assertEqual((rt.speed, rt.snapshot()["items"]), (2, []))
+
+    def test_a_flag_beats_the_env_var(self):
+        self.assertEqual(self.runtime("--fake-speed", "0", PRW_FAKE_SPEED="2").speed, 0)
 
 
 class Reads(Fake):

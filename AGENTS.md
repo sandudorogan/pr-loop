@@ -58,8 +58,9 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | `pr_wizard/pools.py` | The worker pools (api.md §4.7): shared, or one review + fix pair per project; `held` spans every pool so no PR runs twice |
 | `pr_wizard/cli.py` | The CLI (api.md §5): `-l`, `--next`, `--bg`, `--wait`'s bump, `--pause`, `--resume`, `config` go to the API; daemon down: `-l`/`--next` run on `state.db`, `--bg`/`--wait` kickstart `names.LABEL` |
 | `pr_wizard/client.py` | `client.call(method, path, body)` over `api.sock`; raises `Down` (no daemon) or `Failed` (api.md §2 error) |
-| `pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures |
+| `pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures; `--fake-speed S` and `--fake-empty` (or `PRW_FAKE_SPEED`, `PRW_FAKE_EMPTY=1`) set its knobs |
 | `pr_wizard/fake.py` | The static runtime behind `--fake` |
+| `pr_wizard/history.py` | `GET /v1/history` (api.md §3.13): a row per review or fix result, written in the result's transaction; merged/closed lookup of PRs that left the fetch (one batched `pullRequest(number:)` query per 20 PRs, ~1 point, only for open rows, an open PR is asked again after 30 min); the one-time seed from the stored results (`meta.history_seeded`) |
 | `pr_wizard/names.py` | Repos, labels and every state, log and skill path. The queue, both scripts and `db.py` read them here |
 | `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.cli.main()`. `bin/review-queue` is a symlink to it |
 | `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |

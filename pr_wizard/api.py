@@ -1,10 +1,11 @@
 """The control API of api.md: HTTP/1.1 + JSON on a Unix socket, one request per connection.
 
 A runtime serves the bodies: `info()`, `snapshot()`, `config()`, `events(since)`, and `changes`, which every change moves.
-It acts on `save_config(doc)`, `refetch()`, `bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)` and `pause(on)`.
+`history(repo, limit)`. It acts on `save_config(doc)`, `refetch()`, `bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)` and `pause(on)`.
 
 Usage:
-  python3 -m pr_wizard.api --fake [--socket PATH]   serve the fixtures of tests/fixtures/api/v1
+  python3 -m pr_wizard.api --fake [--socket PATH] [--fake-speed S] [--fake-empty]
+                                                    serve the fixtures of tests/fixtures/api/v1
 """
 import argparse, json, os, re, signal, socket, socketserver, sys, threading, time, traceback
 from datetime import datetime
@@ -125,6 +126,13 @@ def patch_config(rt, query, body):
     return configure(rt, body, "patch", config.merge_patch)
 
 
+def history(rt, query):
+    limit = query.get("limit", ["20"])[-1]
+    if not (limit.isdigit() and 1 <= int(limit) <= 100):
+        raise bad("limit must be an integer from 1 to 100")
+    return rt.history(query.get("repo", [None])[-1], int(limit))
+
+
 def pr_ref(item):
     return isinstance(item, dict) and isinstance(item.get("repo"), str) and type(item.get("number")) is int
 
@@ -155,6 +163,7 @@ ROUTES = {
     "/v1/info": {"GET": lambda rt, query, body: rt.info()},
     "/v1/queue": {"GET": lambda rt, query, body: queue(rt, query)},
     "/v1/events": {"GET": lambda rt, query, body: events(rt, query)},
+    "/v1/history": {"GET": lambda rt, query, body: history(rt, query)},
     "/v1/config": {"GET": lambda rt, query, body: rt.config(), "PUT": put_config, "PATCH": patch_config},
     "/v1/prompts/(?P<name>[^/]+)": {"GET": lambda rt, query, body, name: prompt(rt, query, name)},
     "/v1/refresh": {"POST": refresh},
@@ -260,9 +269,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fake", action="store_true", required=True, help="serve the fixtures, not the daemon state")
     ap.add_argument("--socket", default=names.SOCKET, help=f"the socket path (default {names.SOCKET})")
+    ap.add_argument("--fake-speed", type=float, help="seconds one review or fix takes, 0 is instant "
+                    "(default $PRW_FAKE_SPEED, else 3)")
+    ap.add_argument("--fake-empty", action="store_true", default=None, help="start with an empty queue "
+                    "(default: $PRW_FAKE_EMPTY=1)")
     a = ap.parse_args()
     from pr_wizard import fake
-    server = bind(fake.Runtime(), a.socket)
+    server = bind(fake.Runtime(speed=a.fake_speed, empty=a.fake_empty), a.socket)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     log(f"fake daemon on {a.socket}")
     try:

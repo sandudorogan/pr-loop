@@ -388,14 +388,15 @@ def _history(row):
             **{k: row[k] for k in HISTORY_FIELDS}, "mine": bool(row["mine"])}
 
 
-def upsert_history(repo, n, **fields):
+def upsert_history(repo, n, pushed=0, **fields):
     """Merges the given fields into the PR's row; `first_at` and `at` default to now, `state` to open.
-    Trims to HISTORY_KEEP rows and DAYS days."""
+    `pushed` adds to `fixes_pushed`. Trims to HISTORY_KEEP rows and DAYS days."""
     with tx() as c:
         row = c.execute("SELECT * FROM history WHERE repo = ? AND number = ?", (repo, int(n))).fetchone()
         stamp = fields.get("at") or now()
         e = {"mine": False, "rounds": 0, "fixes_pushed": 0, "state": "open", "first_at": stamp, "at": stamp,
              "closed_at": None} | ({} if row is None else {k: row[k] for k in HISTORY_FIELDS}) | fields
+        e["fixes_pushed"] += pushed
         _put(c, "history", repo, n, **{k: e.get(k) for k in HISTORY_FIELDS} | {"mine": int(e["mine"])})
         c.execute("DELETE FROM history WHERE julianday(at) < julianday('now', ?)", (f"-{DAYS} days",))
         c.execute("DELETE FROM history WHERE rowid NOT IN (SELECT rowid FROM history ORDER BY at DESC, rowid DESC LIMIT ?)",
@@ -406,6 +407,11 @@ def history(limit=20, repo=None):
     """The newest entries first, optionally of one repo."""
     return [_history(r) for r in _all(
         "SELECT * FROM history WHERE ? IS NULL OR repo = ? ORDER BY at DESC, rowid DESC LIMIT ?", repo, repo, limit)]
+
+
+def result_repos():
+    """The repos that have a stored review or fix row."""
+    return [r[0] for r in _all("SELECT repo FROM reviews UNION SELECT repo FROM fixes ORDER BY repo")]
 
 
 def pr_override(repo, n):

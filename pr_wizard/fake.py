@@ -1,9 +1,9 @@
 """The runtime behind `python3 -m pr_wizard.api --fake`: the fixtures of tests/fixtures/api/v1 as a stateful, in-memory
 daemon (api.md §7). Writes and actions change the snapshot as the daemon would and wake the long-polls. Nothing touches disk.
 
-Knobs, as env vars because the CLI of `pr_wizard.api` has none:
-  PRW_FAKE_SPEED=<s>   seconds one review or fix takes (default 3, 0 = instant)
-  PRW_FAKE_EMPTY=1     start with an empty queue (the history view)
+Knobs, as `pr_wizard.api` flags or env vars (a flag wins):
+  --fake-speed <s> / PRW_FAKE_SPEED=<s>   seconds one review or fix takes (default 3, 0 = instant)
+  --fake-empty     / PRW_FAKE_EMPTY=1     start with an empty queue (the history view)
 """
 import copy, hashlib, json, os, secrets, threading, time
 from datetime import datetime
@@ -259,12 +259,3 @@ class Runtime:
                     self.publish()
         threading.Thread(target=go, daemon=True).start() if self.speed else go()
 
-
-def history(rt, query, body):
-    limit = query.get("limit", ["20"])[-1]
-    if not (limit.isdigit() and 1 <= int(limit) <= 100):
-        raise api.bad("limit must be an integer from 1 to 100")
-    return rt.history(query.get("repo", [None])[-1], int(limit))
-
-
-api.ROUTES.setdefault("/v1/history", {"GET": history})
