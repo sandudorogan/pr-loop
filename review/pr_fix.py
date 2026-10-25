@@ -32,7 +32,7 @@ from contextlib import contextmanager
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [DIR, os.path.dirname(DIR)]
 from pr_review import CFG, LIMIT, REPO, REPO_ROOT, brief, codex_flags
-from pr_wizard import db, names
+from pr_wizard import conventions, db, names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
 FIX = CFG["fix"]
@@ -193,7 +193,30 @@ def worktree(meta, red):
     return wt
 
 
-def merge(pr, wt, meta, session, scratch):
+def merge_prompt(pr, meta, files, conv):
+    return (conventions.fill(open(MERGE_PROMPT).read(), conv)
+            .replace("{FILES}", "\n".join(f"- `{f}`" for f in files))
+            .replace("{BRIEF}", brief({"pr": pr, "branch": meta["headRefName"]}))
+            .replace("{PR}", str(pr)).replace("{REPO}", REPO).replace("{BASE}", f"origin/{meta['baseRefName']}")
+            .replace("{SCHEMA}", open(SCHEMA).read()))
+
+
+def fix_prompt(pr, meta, feedback_path, conv):
+    return (conventions.fill(open(PROMPT).read(), conv)
+            .replace("{BRIEF}", brief({"pr": pr, "branch": meta["headRefName"]}))
+            .replace("{FEEDBACK}", feedback_path).replace("{PR}", str(pr)).replace("{REPO}", REPO)
+            .replace("{HEAD}", meta["headRefOid"]).replace("{BASE}", f"origin/{meta['baseRefName']}")
+            .replace("{SCHEMA}", open(SCHEMA).read()))
+
+
+def project_conventions(wt, meta, items):
+    """The conventions for the paths the feedback names and the paths the branch changes."""
+    sh(["git", "fetch", "-q", "origin", meta["baseRefName"]], cwd=wt)
+    diff = sh(["git", "diff", "--name-only", f"origin/{meta['baseRefName']}...HEAD"], cwd=wt).splitlines()
+    return conventions.collect(wt, [*(i["path"] for i in items if i.get("path")), *diff])
+
+
+def merge(pr, wt, meta, session, scratch, conv):
     """Merges the base into the branch and commits it; Codex resolves any conflict.
     (session, False) when Codex is at its usage limit."""
     base = f"origin/{meta['baseRefName']}"
@@ -205,11 +228,7 @@ def merge(pr, wt, meta, session, scratch):
     try:
         if not files:
             die(f"git merge {base} failed\n{out.stderr.strip()[-2000:]}")
-        prompt = (open(MERGE_PROMPT).read()
-                  .replace("{FILES}", "\n".join(f"- `{f}`" for f in files))
-                  .replace("{BRIEF}", brief({"pr": pr, "branch": meta["headRefName"]}))
-                  .replace("{PR}", str(pr)).replace("{REPO}", REPO).replace("{BASE}", base)
-                  .replace("{SCHEMA}", open(SCHEMA).read()))
+        prompt = merge_prompt(pr, meta, files, conv)
         session, result = codex(wt, prompt, session, scratch)
         if result is None:
             return session, False
@@ -409,11 +428,12 @@ def run(pr):
                                                            f"needs a human"} if names else \
             {"pr": pr, "status": "nothing-to-fix"}
     wt = worktree(meta, prior)
+    conv = project_conventions(wt, meta, items)
     os.makedirs(names.SCRATCH, exist_ok=True)
     scratch = tempfile.mkdtemp(prefix=f"{pr}-", dir=names.SCRATCH)
     try:
         if conflict:
-            session, merged = merge(pr, wt, meta, state.get("session"), scratch)
+            session, merged = merge(pr, wt, meta, state.get("session"), scratch, conv)
             if not merged:
                 return {"pr": pr, "status": "limited", "worktree": wt, "session": session}
             state["session"] = session
@@ -425,11 +445,7 @@ def run(pr):
                     "summary": f"merged origin/{meta['baseRefName']}" if pushed else "base already merged"}
         path = os.path.join(scratch, "feedback.json")
         json.dump([{k: v for k, v in i.items() if k not in ("top", "id", "count", "run")} for i in items], open(path, "w"), indent=2)
-        prompt = (open(PROMPT).read()
-                  .replace("{BRIEF}", brief({"pr": pr, "branch": meta["headRefName"]}))
-                  .replace("{FEEDBACK}", path).replace("{PR}", str(pr)).replace("{REPO}", REPO)
-                  .replace("{HEAD}", meta["headRefOid"]).replace("{BASE}", f"origin/{meta['baseRefName']}")
-                  .replace("{SCHEMA}", open(SCHEMA).read()))
+        prompt = fix_prompt(pr, meta, path, conv)
         session, result = (state.get("session"), prior["result"]) if resume else \
             codex(wt, prompt, state.get("session"), scratch)
         for attempt in range(TEST_RETRIES + 1):
@@ -459,7 +475,7 @@ def run(pr):
         caught_up = False
         if retry and not red and not changed(wt) and not conflict:
             before = sh(["git", "rev-parse", "HEAD"], cwd=wt).strip()
-            session, ok = merge(pr, wt, meta, session, scratch)
+            session, ok = merge(pr, wt, meta, session, scratch, conv)
             if not ok:
                 return {"pr": pr, "status": "limited", "worktree": wt, "session": session}
             caught_up = sh(["git", "rev-parse", "HEAD"], cwd=wt).strip() != before

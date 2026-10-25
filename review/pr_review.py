@@ -36,7 +36,7 @@ import argparse, fcntl, json, os, re, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(DIR))
-from pr_wizard import config, db, names
+from pr_wizard import config, conventions, db, names
 
 SCHEMA = os.path.join(DIR, "review-schema.json")
 PROMPTS = os.path.join(DIR, "prompts")
@@ -216,7 +216,7 @@ def brief(sc):
 
 
 def render(name, sc):
-    text = open(os.path.join(PROMPTS, name)).read()
+    text = conventions.fill(open(os.path.join(PROMPTS, name)).read(), sc["conventions"])
     return (text
             .replace("{BRIEF}", brief(sc))
             .replace("{PR}", str(sc["pr"]))
@@ -349,6 +349,10 @@ def review_worktree(pr, head):
             sh(["git", "checkout", "--force", "--detach", head], cwd=path, timeout=600)
             sh(["git", "clean", "-fdq"], cwd=path)
     return path
+
+
+def changed(worktree, diff_range):
+    return sh(["git", "diff", "--name-only", diff_range], cwd=worktree).stdout.splitlines()
 
 
 # ---------------------------------------------------------------- posting
@@ -528,11 +532,19 @@ def main():
                                      + (" and found nothing" if clean else "")}, indent=2))
         return
 
-    engine, data = run_reviewer(a.reviewer, review_worktree(a.pr, sc["head"]), sc)
+    worktree = review_worktree(a.pr, sc["head"])
+    sc["conventions"] = conv = conventions.collect(worktree, changed(worktree, sc["diff_range"]))
+    if conv.none and REVIEWERS[a.reviewer]["needs_conventions"]:
+        a.dry_run or db.add_clean(REPO, a.pr, sc["head"], a.reviewer)
+        print(json.dumps({"reviewer": a.reviewer, "round": sc["round"], "posted": False, "stop": True,
+                          "reason": "no-conventions", "conventions": []}, indent=2))
+        return
+    engine, data = run_reviewer(a.reviewer, worktree, sc)
     # `stop` is set by post() on every path: true only when there is genuinely nothing for a
     # fixer to act on. A dry run that would have posted is NOT a stop.
     result = post(a.pr, a.reviewer, data, sc, a.dry_run, engine)
-    print(json.dumps({"reviewer": a.reviewer, "engine": engine, "round": sc["round"], **result}, indent=2))
+    print(json.dumps({"reviewer": a.reviewer, "engine": engine, "round": sc["round"], **result,
+                      "conventions": conv.files}, indent=2))
 
 
 if __name__ == "__main__":

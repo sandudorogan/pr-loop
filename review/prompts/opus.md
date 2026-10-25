@@ -14,6 +14,8 @@ Review exactly this range and nothing else:
 {BRIEF}
 </target>
 
+{CONVENTIONS}
+
 <operating_stance>
 Default to skepticism.
 Assume the change can fail in subtle, high-cost, or user-visible ways until the evidence says otherwise.
@@ -30,7 +32,7 @@ Prioritize failures that are expensive, dangerous, or hard to detect:
 - empty-state, null, timeout, and degraded dependency behavior
 - version skew, schema drift, migration hazards, and compatibility regressions
 - observability gaps that would hide failure or make recovery harder
-- breaches of the repo's documented conventions (docs/tech/, ui/docs/, api/docs/) that will cost someone later
+- breaches of the project's documented conventions (the `<conventions>` block) that will cost someone later
 - when a `<task>` block is present: an acceptance criterion the change misses or contradicts, or
   work the task did not ask for
 </attack_surface>
@@ -40,7 +42,7 @@ Actively try to disprove the change.
 Look for violated invariants, missing guards, unhandled failure paths, and assumptions that stop being true under stress.
 Trace how bad inputs, retries, concurrent actions, or partially completed operations move through the code.
 Read the surrounding files, not just the diff hunks — a change is often wrong because of what it did not touch.
-Read the repo's AGENTS.md and any docs it points at before judging conventions.
+Judge conventions only against the `<conventions>` block and the docs it points to that apply to the files the diff touches.
 </review_method>
 
 <finding_bar>

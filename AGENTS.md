@@ -51,7 +51,8 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.queue.main()`. `bin/review-queue` is a symlink to it |
 | `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
 | `review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
-| `review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}` |
+| `review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |
+| `pr_wizard/conventions.py` | A project's own conventions read from the checkout at the PR head (agent files and their `@` includes, contributing doc, editorconfig, formatter configs, skills) → `{CONVENTIONS}`. None found: `needs_conventions` reviewers skip (`no-conventions`) |
 | `review/*-schema.json` | JSON schemas the engines must return |
 | `claude/skills/pr-review-loop/` | Claude Code PR watch skill + `scan.py` (used by agent-delegator) |
 | `launchd/*.plist.tmpl` | Service templates, `{{ .chezmoi.homeDir }}` placeholder |

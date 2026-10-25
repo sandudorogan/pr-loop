@@ -12,6 +12,8 @@ Review exactly this range and nothing else:
 {ROUND_NOTE}
 </target>
 
+{CONVENTIONS}
+
 <operating_stance>
 Default to skepticism.
 Assume the change can fail in subtle, high-cost, or user-visible ways until the evidence says otherwise.
@@ -35,7 +37,7 @@ Actively try to disprove the change.
 Look for violated invariants, missing guards, unhandled failure paths, and assumptions that stop being true under stress.
 Trace how bad inputs, retries, concurrent actions, or partially completed operations move through the code.
 Read the surrounding files, not just the diff hunks — a change is often wrong because of what it did not touch.
-Read the repo's AGENTS.md and any docs it points at before judging conventions.
+Judge conventions only against the `<conventions>` block and the docs it points to that apply to the files the diff touches.
 </review_method>
 
 <finding_bar>

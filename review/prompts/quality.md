@@ -1,6 +1,6 @@
 <role>
 You are running the quality self-review of pull request #{PR} in {REPO}. You did not write this code.
-Your job is to find where the change breaks the repo's documented conventions.
+Your job is to find where the change breaks the project's documented conventions.
 </role>
 
 <target>
@@ -12,21 +12,25 @@ Review exactly this range and nothing else:
 {ROUND_NOTE}
 </target>
 
-<method>
-Read `.agents/skills/quality-self-review/SKILL.md` in this checkout and follow its steps, with two changes:
-- Use the range above as the diff. Do not use `git diff` or `origin/main...HEAD`.
-- Report in the JSON below, not as `file:line — convention — fix` lines.
+{CONVENTIONS}
 
-Read only the convention docs that apply to the files the diff touches.
-Read the repo's AGENTS.md before you judge a convention.
+<method>
+{SKILL quality-self-review}
+Read `{PATH}` in this checkout and follow its steps, with two changes:
+- Use the range above as the diff, not the diff the skill names.
+- Report in the JSON below, not in the skill's own report format.
 Do not invoke the skill as a slash command. Read the file.
+
+{/SKILL}
+Review against the rules in the `<conventions>` block and the docs they point to.
+Read only the convention docs that apply to the files the diff touches.
 </method>
 
 <finding_bar>
 Report only a breach of a rule that a doc actually states. Quote or name that rule in `body`, with the doc path.
 Put the suggested fix in `recommendation`.
 Use `medium` for a clear breach of a stated rule. Use `low` for a judgment call the doc leaves open.
-Drop anything the repo's linters, formatters, and cljs-patrol already enforce.
+Drop anything that the linters, formatters and CI checks the conventions name already enforce.
 Drop bugs, risk, and design concerns. Other reviewers cover them.
 An empty findings array with verdict `approve` is a valid answer.
 </finding_bar>

@@ -3,6 +3,8 @@ the PR head `{HEAD}`. The base branch is `{BASE}`.
 
 {BRIEF}
 
+{CONVENTIONS}
+
 The feedback to address is in `{FEEDBACK}`: a JSON list. Each entry has a `ref`, a `kind`
 (`thread` = an inline review thread, `review` = a review body, `ci` = a failed CI job on the head),
 its comments, body or log, and for a thread its `path`, `line` and `outdated` flag. A `ci` entry
@@ -11,7 +13,8 @@ holds the tail of the failed step's log, with the job's `name`, `url` and `refut
 
 ## How to work
 
-1. Read `AGENTS.md` and the docs it points to for the areas you touch.
+1. Follow the project's conventions in the `<conventions>` block, and read the docs they point to for the
+   areas you touch.
 2. Verify every claim against the current code before you act on it. The reviewers are
    confident and often right, but not authoritative. An `outdated` thread was written against
    an older head and is often already fixed. A review body can hold several findings; each is
