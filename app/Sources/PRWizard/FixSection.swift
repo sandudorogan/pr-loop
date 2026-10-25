@@ -5,7 +5,7 @@ struct FixSection: View {
     let model: InspectorModel
 
     var body: some View {
-        Section("Fix") {
+        Section {
             if let fix = model.item.fix {
                 LabeledContent("Status") {
                     HStack {
@@ -24,6 +24,8 @@ struct FixSection: View {
             } else {
                 Text("No fix pass yet").foregroundStyle(.secondary)
             }
+        } header: {
+            SectionTitle(title: "Fix", symbol: "hammer", tint: .purple)
         }
     }
 }

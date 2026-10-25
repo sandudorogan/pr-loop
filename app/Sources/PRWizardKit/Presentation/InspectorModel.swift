@@ -7,8 +7,6 @@ public struct InspectorModel: Hashable, Sendable {
 
     public var title: String { "\(ProjectSummary.shortName(of: item.repo)) #\(item.number)" }
     public var head: String { Self.short(item.head) }
-    public var lines: String { "+\(item.additions) −\(item.deletions)" }
-    public var labels: String { item.labels.isEmpty ? "None" : item.labels.joined(separator: ", ") }
 
     public var verdict: String? { item.review?.verdict.map { StatusStyle($0.rawValue).label } }
     public var reviewedHead: String? { item.review.map { Self.headLine($0.sha, isCurrent: $0.isCurrent) } }

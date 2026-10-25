@@ -36,33 +36,29 @@ struct PRInspector: View {
         let item = model.item
         return Form {
             Section {
-                Text(item.title).font(.headline)
-                LabeledContent("Project", value: item.repo)
-                LabeledContent("Head") { Text(model.head).monospaced() }
-                LabeledContent("Base", value: item.base)
-                LabeledContent("Lines") { Text(model.lines).monospacedDigit() }
-                LabeledContent("Labels", value: model.labels)
+                InspectorHeader(model: model)
                 Menu("Actions") {
                     PullRequestMenu(
                         items: [item], store: store, peek: PeekFocus(model: peek, id: item.id),
                         showSettings: { tab = .settings })
                 }
-            } header: {
-                Text(model.title)
             }
             if let active = item.active { LiveSection(model: model, active: active) }
             ReviewSection(model: model)
-            Section("Findings") {
+            Section {
                 if let findings = item.findings {
                     FindingsView(findings: findings)
                     Text(findings.conventionsLine).font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text(item.detail).foregroundStyle(.secondary)
                 }
+            } header: {
+                SectionTitle(title: "Findings", symbol: "exclamationmark.bubble", tint: .orange)
             }
             FixSection(model: model)
         }
         .formStyle(.grouped)
+        .labeledContentStyle(InspectorRowStyle())
     }
 }
 
@@ -71,7 +67,7 @@ private struct LiveSection: View {
     let active: ActiveRun
 
     var body: some View {
-        Section("Live run") {
+        Section {
             LabeledContent("Lane", value: model.lane ?? "")
             LabeledContent("Running for") { Text(active.since, style: .timer).monospacedDigit() }
             ForEach(active.reviewers ?? []) { progress in
@@ -82,6 +78,8 @@ private struct LiveSection: View {
                     }
                 }
             }
+        } header: {
+            SectionTitle(title: "Live run", symbol: "play.circle.fill", tint: Tone.working.color)
         }
     }
 }

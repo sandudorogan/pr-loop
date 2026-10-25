@@ -12,15 +12,11 @@ import Testing
         InspectorModel(try Snapshots.item(index, patch))
     }
 
-    @Test("formats the pull request lines")
+    @Test("formats the title and the head")
     func pullRequest() throws {
         let model = try model(live)
         #expect(model.title == "iprally #17190")
         #expect(model.head == "5e0c2d9a41b7")
-        #expect(model.lines == "+212 −40")
-        #expect(model.labels == "None")
-        let labeled = try self.model(gitops, ["labels": .array([.string("no-auto-review"), .string("infra")])])
-        #expect(labeled.labels == "no-auto-review, infra")
     }
 
     @Test("says whether the review and the fix ran at this head")

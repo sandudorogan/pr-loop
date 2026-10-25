@@ -5,7 +5,7 @@ struct ReviewSection: View {
     let model: InspectorModel
 
     var body: some View {
-        Section("Review") {
+        Section {
             if let review = model.item.review {
                 LabeledContent("Status") { StatusBadge(status: review.status) }
                 if let verdict = model.verdict { LabeledContent("Verdict", value: verdict) }
@@ -20,6 +20,8 @@ struct ReviewSection: View {
             } else {
                 Text("Not reviewed yet").foregroundStyle(.secondary)
             }
+        } header: {
+            SectionTitle(title: "Review", symbol: "eye", tint: .blue)
         }
     }
 }
