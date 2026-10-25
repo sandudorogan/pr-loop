@@ -9,6 +9,7 @@ import Testing
             ("fixing", "hammer", .working, "Fixing"),
             ("queued", "clock", .neutral, "Queued"),
             ("ready", "checkmark.seal.fill", .good, "Ready"),
+            ("approved", "checkmark.seal.fill", .good, "Approved"),
             ("clean", "checkmark.seal.fill", .good, "Clean"),
             ("quality-only", "checkmark.seal.fill", .good, "Notes only"),
             ("posted", "text.bubble", .info, "Findings posted"),

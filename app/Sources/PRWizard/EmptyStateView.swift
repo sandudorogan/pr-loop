@@ -28,16 +28,8 @@ struct EmptyStateView: View {
         case .live, .stale:
             if !filter.query.isEmpty {
                 ContentUnavailableView.search(text: filter.query)
-            } else if let repo = filter.repo {
-                ContentUnavailableView {
-                    Label("Nothing in \(ProjectSummary.shortName(of: repo))", systemImage: "checkmark.seal")
-                } actions: {
-                    Button("Show All Repos") { sidebar = .all }
-                }
             } else {
-                ContentUnavailableView(
-                    "Nothing in the queue", systemImage: "checkmark.seal",
-                    description: Text("Your open PRs and the ones that wait on your review show up here."))
+                RecentlyWorkedOn(repo: filter.repo, sidebar: $sidebar)
             }
         }
     }

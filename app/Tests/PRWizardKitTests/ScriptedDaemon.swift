@@ -4,6 +4,7 @@ actor ScriptedDaemon: DaemonAPI {
     enum Call: Hashable {
         case info
         case queue(since: String?, wait: Duration)
+        case history(repo: String?, limit: Int)
         case refresh
         case moveToFront([PRRef])
         case review(PRRef)
@@ -15,15 +16,18 @@ actor ScriptedDaemon: DaemonAPI {
 
     private var infos: [Result<DaemonInfo, any Error>]
     private var snapshots: [Result<QueueSnapshot, any Error>]
+    private var histories: [Result<[HistoryEntry], any Error>]
     private var errors: [Call: any Error] = [:]
     private let gate: Gate?
     private(set) var calls: [Call] = []
 
     init(
-        info: [Result<DaemonInfo, any Error>] = [], queue: [Result<QueueSnapshot, any Error>] = [], gate: Gate? = nil
+        info: [Result<DaemonInfo, any Error>] = [], queue: [Result<QueueSnapshot, any Error>] = [],
+        history: [Result<[HistoryEntry], any Error>] = [], gate: Gate? = nil
     ) {
         infos = info
         snapshots = queue
+        histories = history
         self.gate = gate
     }
 
@@ -45,7 +49,10 @@ actor ScriptedDaemon: DaemonAPI {
     func config() async throws -> ConfigEnvelope { throw Unscripted() }
     func patchConfig(_ patch: JSONValue, baseRev: String) async throws -> ConfigEnvelope { throw Unscripted() }
     func prompt(named name: String) async throws -> Prompt { throw Unscripted() }
-    func history(repo: String?, limit: Int) async throws -> [HistoryEntry] { throw Unscripted() }
+    func history(repo: String?, limit: Int) async throws -> [HistoryEntry] {
+        calls.append(.history(repo: repo, limit: limit))
+        return try Self.next(&histories)
+    }
 
     func refresh() async throws { try await act(.refresh) }
     func moveToFront(_ prs: [PRRef]) async throws -> NextResult {

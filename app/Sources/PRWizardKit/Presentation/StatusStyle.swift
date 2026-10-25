@@ -12,6 +12,7 @@ public struct StatusStyle: Hashable, Sendable {
             case "fixing": ("hammer", .working, "Fixing")
             case "queued": ("clock", .neutral, "Queued")
             case "ready": ("checkmark.seal.fill", .good, "Ready")
+            case "approved": ("checkmark.seal.fill", .good, "Approved")
             case "clean": ("checkmark.seal.fill", .good, "Clean")
             case "quality-only": ("checkmark.seal.fill", .good, "Notes only")
             case "posted": ("text.bubble", .info, "Findings posted")

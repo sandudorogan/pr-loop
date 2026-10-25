@@ -1,5 +1,6 @@
 import Foundation
 import PRWizardKit
+import Testing
 
 enum Snapshots {
     private struct Lists: Decodable {
@@ -39,5 +40,16 @@ enum Snapshots {
             "id": .string("\(lane):\(repo)"), "lane": .string(lane), "repo": .string(repo),
             "workers": .number(Double(workers)), "busy": .number(Double(busy)), "pending": .number(0),
         ])
+    }
+}
+
+extension Snapshots {
+    static func historyEntry(_ patch: [String: JSONValue] = [:]) throws -> HistoryEntry {
+        var page = try JSONDecoder().decode([String: [[String: JSONValue]]].self, from: Fixture.data("history.json"))
+        let entry = try #require(page["entries"]?.first)
+        page["entries"] = [entry.merging(patch) { $1 }]
+        return try JSONDecoder.daemon.decode(
+            HistoryPage.self, from: JSONEncoder().encode(page)
+        ).entries[0]
     }
 }
