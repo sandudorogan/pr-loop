@@ -326,6 +326,16 @@ class Save(Tmp):
         self.assertEqual(json.loads(real.read_text())["fix"]["workers"], 1)
         self.assertEqual(c.load(str(link)).real_path, str(real.resolve()))
 
+    def test_a_dangling_symlink_loads_the_defaults_and_save_creates_the_real_file(self):
+        real = self.dir / "chezmoi" / ".pr-wizard" / "config.json"
+        link = self.dir / "config-link.json"
+        link.symlink_to(real)
+        got = c.load(str(link))
+        self.assertEqual((got.config, got.source, got.error), (c.DEFAULTS, "defaults", None))
+        c.save(doc(fix={"workers": 1}), str(link))
+        self.assertTrue(link.is_symlink() and real.is_file())
+        self.assertEqual(c.load(str(link)).source, "file")
+
     def test_temp_file_sits_beside_the_resolved_real_path(self):
         real_dir = self.dir / "src"
         real_dir.mkdir()

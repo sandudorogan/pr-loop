@@ -9,6 +9,7 @@
     ".claude/skills/delegator/prompts": "review/prompts",
     ".claude/skills/pr-review-loop": "claude/skills/pr-review-loop"
   },
+  "config": ".config/pr-wizard/config.json",
   "templates": {
     "Library/LaunchAgents/local.review-queue.plist": "launchd/local.review-queue.plist.tmpl"
   }

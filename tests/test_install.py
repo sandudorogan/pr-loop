@@ -77,5 +77,57 @@ class Installation(unittest.TestCase):
         self.assertFalse(original.exists())
 
 
+class ConfigInstallation(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name) / "home"
+        self.root = self.home / "workdir/sample"
+        self.root.mkdir(parents=True)
+        (self.root / "links.json").write_text(json.dumps({"links": {}, "config": ".config/pr-wizard/config.json"}))
+        self.source = self.home / ".local/share/chezmoi"
+        self.target = self.home / ".config/pr-wizard/config.json"
+        self.real = self.source / ".pr-wizard/config.json"
+        self.template = self.source / "dot_config/pr-wizard/symlink_config.json.tmpl"
+
+    def install(self, **kwargs):
+        with contextlib.redirect_stdout(io.StringIO()):
+            installer.install(self.root, self.home, **kwargs)
+
+    def test_without_chezmoi_a_plain_file_is_seeded_once(self):
+        self.install()
+        self.assertFalse(self.target.is_symlink())
+        self.assertEqual(json.loads(self.target.read_text()), json.loads(installer.default_config()))
+        self.target.write_text('{"fix": {"workers": 1}}')
+        self.install()
+        self.assertEqual(self.target.read_text(), '{"fix": {"workers": 1}}')
+
+    def test_dry_run_writes_nothing(self):
+        self.install(chezmoi=self.source, dry_run=True)
+        self.assertFalse(self.source.exists() or self.target.exists())
+
+    @unittest.skipUnless(shutil.which("chezmoi"), "chezmoi is not installed")
+    def test_chezmoi_links_the_target_to_the_real_file_and_keeps_edits(self):
+        self.source.mkdir(parents=True)
+        with patch.dict(os.environ, {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / ".config")}):
+            self.install(chezmoi=self.source)
+            self.real.write_text('{"fix": {"workers": 1}}')
+            self.install(chezmoi=self.source)
+        self.assertEqual(self.template.read_text(), "{{ .chezmoi.sourceDir }}/.pr-wizard/config.json\n")
+        self.assertTrue(self.target.is_symlink())
+        self.assertEqual(self.target.resolve(), self.real.resolve())
+        self.assertEqual(self.real.read_text(), '{"fix": {"workers": 1}}')
+
+    @unittest.skipUnless(shutil.which("chezmoi"), "chezmoi is not installed")
+    def test_chezmoi_backs_up_a_plain_file_at_the_target(self):
+        self.target.parent.mkdir(parents=True)
+        self.target.write_text("hand edited")
+        with patch.dict(os.environ, {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / ".config")}):
+            self.install(chezmoi=self.source)
+        saved = list((self.home / ".local/state/sample/backups").rglob("config.json"))
+        self.assertEqual([p.read_text() for p in saved], ["hand edited"])
+        self.assertTrue(self.target.is_symlink())
+
+
 if __name__ == "__main__":
     unittest.main()
