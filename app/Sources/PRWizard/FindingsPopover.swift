@@ -7,7 +7,8 @@ struct FindingsPopover: View {
     let live: [ReviewerProgress]
     let url: URL
 
-    init(item: QueueItem) {
+    init?(item: QueueItem) {
+        guard item.findings != nil || item.active?.reviewers?.isEmpty == false else { return nil }
         findings = item.findings
         detail = item.detail
         live = item.active?.reviewers ?? []

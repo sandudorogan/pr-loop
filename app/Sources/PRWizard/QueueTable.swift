@@ -71,7 +71,8 @@ struct QueueTable: View {
     }
 
     private func peekFocus(_ keys: Set<QueueItem.ID>) -> PeekFocus {
-        PeekFocus(model: peek, id: keys.count == 1 ? keys.first : nil)
+        let peekable = keys.count == 1 ? items(keys).filter { FindingsPopover(item: $0) != nil } : []
+        return PeekFocus(model: peek, id: peekable.first?.id)
     }
 
     private func items(_ keys: Set<QueueItem.ID>) -> [QueueItem] {
