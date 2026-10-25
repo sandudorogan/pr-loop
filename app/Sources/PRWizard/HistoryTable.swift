@@ -6,17 +6,24 @@ struct HistoryTable: View {
     let rows: [HistoryRow]
     let showsProject: Bool
     @State private var selection = Set<HistoryRow.ID>()
+    @Environment(PeekModel.self) private var peek
 
     var body: some View {
         Table(of: HistoryRow.self, selection: $selection) {
             TableColumn("State") { Text($0.stateLabel) }.width(min: 56, ideal: 64)
-            TableColumn("Outcome") { StatusBadge(status: $0.entry.outcome) }.width(min: 90, ideal: 120)
+            TableColumn("Outcome") { row in
+                StatusBadge(status: row.entry.outcome).hoverPeek(row.id, popover(row), isAnchor: true)
+            }
+            .width(min: 90, ideal: 120)
             TableColumn("PR") { Text(verbatim: "#\($0.entry.number)").monospacedDigit() }.width(min: 56, ideal: 72)
             if showsProject {
                 TableColumn("Project") { Text(ProjectSummary.shortName(of: $0.entry.repo)).lineLimit(1) }
                     .width(min: 60, ideal: 80)
             }
-            TableColumn("Title") { Text($0.entry.title).lineLimit(1) }.width(min: 160)
+            TableColumn("Title") { row in
+                Text(row.entry.title).lineLimit(1).hoverPeek(row.id, popover(row))
+            }
+            .width(min: 160)
             TableColumn("Rounds") { Text(verbatim: "\($0.entry.rounds)").monospacedDigit() }.width(56)
             TableColumn("Fixes pushed") { Text(verbatim: "\($0.entry.fixesPushed)").monospacedDigit() }.width(90)
             TableColumn("When") {
@@ -30,9 +37,24 @@ struct HistoryTable: View {
             let urls = urls(keys)
             Button("Open on GitHub") { open(urls) }.disabled(urls.isEmpty)
             Button("Copy Link") { copy(urls) }.disabled(urls.isEmpty)
+            Divider()
+            let focus = peekFocus(keys)
+            Button("Show Findings", action: focus.toggle).keyboardShortcut(.space, modifiers: []).disabled(
+                focus.id == nil)
         } primaryAction: { keys in
             open(urls(keys))
         }
+        .onExitCommand { peek.dismiss() }
+        .focusedSceneValue(\.peekFocus, peekFocus(selection))
+    }
+
+    private func popover(_ row: HistoryRow) -> FindingsPopover? {
+        row.entry.findings.map { FindingsPopover(findings: $0, url: row.entry.url) }
+    }
+
+    private func peekFocus(_ keys: Set<HistoryRow.ID>) -> PeekFocus {
+        let row = keys.count == 1 ? rows.first { keys.contains($0.id) } : nil
+        return PeekFocus(model: peek, id: row?.entry.findings == nil ? nil : row?.id)
     }
 
     private func urls(_ keys: Set<HistoryRow.ID>) -> [URL] {

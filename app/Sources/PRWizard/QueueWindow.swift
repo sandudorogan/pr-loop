@@ -9,6 +9,7 @@ struct QueueWindow: View {
     @SceneStorage("inspector") private var showsInspector = false
     @State private var selection = Set<QueueItem.ID>()
     @State private var search = ""
+    @State private var peek = PeekModel()
 
     private var filter: QueueFilter { QueueFilter(repo: sidebar.repo, text: search) }
     private var sections: [QueueSection] { filter.sections(store.snapshot?.items ?? []) }
@@ -31,6 +32,7 @@ struct QueueWindow: View {
         .focusedSceneValue(
             \.queueFocus, QueueFocus(items: selected, sidebar: $sidebar, showsInspector: $showsInspector)
         )
+        .environment(peek)
         .frame(minWidth: 820, minHeight: 400)
     }
 

@@ -5,6 +5,7 @@ import SwiftUI
 struct PullRequestMenu: View {
     let items: [QueueItem]
     let store: QueueStore
+    let peek: PeekFocus?
 
     var body: some View {
         let projects = store.snapshot?.projects ?? []
@@ -25,6 +26,9 @@ struct PullRequestMenu: View {
             for item in items { await store.fix(item.ref) }
         }
         Divider()
+        Button("Show Findings") { peek?.toggle() }
+            .keyboardShortcut(.space, modifiers: [])
+            .disabled(peek?.id == nil)
         Button("Copy Head SHA") { copy(items.map(\.head)) }
             .disabled(items.isEmpty)
     }

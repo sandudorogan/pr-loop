@@ -5,6 +5,7 @@ import SwiftUI
 struct QueueCommands: Commands {
     let store: QueueStore
     @FocusedValue(\.queueFocus) private var focus
+    @FocusedValue(\.peekFocus) private var peek
 
     var body: some Commands {
         SidebarCommands()
@@ -28,7 +29,7 @@ struct QueueCommands: Commands {
                     .disabled(focus == nil)
             }
         }
-        CommandMenu("Pull Request") { PullRequestMenu(items: focus?.items ?? [], store: store) }
+        CommandMenu("Pull Request") { PullRequestMenu(items: focus?.items ?? [], store: store, peek: peek) }
         CommandMenu("Daemon") {
             let isPaused = store.snapshot?.isPaused == true
             Button(isPaused ? "Resume" : "Pause") { Task { await store.setPaused(!isPaused) } }

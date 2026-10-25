@@ -8,6 +8,7 @@ struct PRInspector: View {
 
     let items: [QueueItem]
     @Environment(QueueStore.self) private var store
+    @Environment(PeekModel.self) private var peek
     @SceneStorage("inspectorTab") private var tab = Tab.status
 
     var body: some View {
@@ -44,7 +45,9 @@ struct PRInspector: View {
                 LabeledContent("Base", value: item.base)
                 LabeledContent("Lines") { Text(model.lines).monospacedDigit() }
                 LabeledContent("Labels", value: model.labels)
-                Menu("Actions") { PullRequestMenu(items: [item], store: store) }
+                Menu("Actions") {
+                    PullRequestMenu(items: [item], store: store, peek: PeekFocus(model: peek, id: item.id))
+                }
             } header: {
                 Text(model.title)
             }

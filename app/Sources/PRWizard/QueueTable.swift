@@ -8,6 +8,7 @@ struct QueueTable: View {
     @Binding var selection: Set<QueueItem.ID>
     @Binding var columns: TableColumnCustomization<QueueItem>
     @Environment(QueueStore.self) private var store
+    @Environment(PeekModel.self) private var peek
 
     var body: some View {
         Table(of: QueueItem.self, selection: $selection, columnCustomization: $columns) {
@@ -24,12 +25,15 @@ struct QueueTable: View {
                     if item.isDraft { Text("[Draft]").foregroundStyle(.secondary) }
                     Text(item.title).lineLimit(1)
                 }
+                .hoverPeek(item.id, FindingsPopover(item: item))
             }
             .width(min: 160).customizationID("title")
             TableColumn("Author") { Text($0.isMine ? "you" : $0.author).lineLimit(1) }
                 .width(min: 60, ideal: 100).customizationID("author")
-            TableColumn("Status") { StatusBadge(status: $0.status) }.width(min: 90, ideal: 130).customizationID(
-                "status")
+            TableColumn("Status") { item in
+                StatusBadge(status: item.status).hoverPeek(item.id, FindingsPopover(item: item), isAnchor: true)
+            }
+            .width(min: 90, ideal: 130).customizationID("status")
             TableColumn("Detail") { item in
                 Group {
                     if let active = item.active {
@@ -47,10 +51,16 @@ struct QueueTable: View {
             }
         }
         .contextMenu(forSelectionType: QueueItem.ID.self) { keys in
-            PullRequestMenu(items: items(keys), store: store)
+            PullRequestMenu(items: items(keys), store: store, peek: peekFocus(keys))
         } primaryAction: { keys in
             for item in items(keys) { NSWorkspace.shared.open(item.url) }
         }
+        .onExitCommand { peek.dismiss() }
+        .focusedSceneValue(\.peekFocus, peekFocus(selection))
+    }
+
+    private func peekFocus(_ keys: Set<QueueItem.ID>) -> PeekFocus {
+        PeekFocus(model: peek, id: keys.count == 1 ? keys.first : nil)
     }
 
     private func items(_ keys: Set<QueueItem.ID>) -> [QueueItem] {
