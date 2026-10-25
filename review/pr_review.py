@@ -47,6 +47,7 @@ TIMEOUT = int(os.environ.get("IPR_REVIEW_TIMEOUT", "2700"))
 
 INLINE_SEVERITIES = {"critical", "high", "medium"}
 LATE_SEVERITIES = {"critical", "high"}
+SEVERITIES = ("critical", "high", "medium", "low")
 LATE_ROUND = 4
 MIN_CONFIDENCE = 0.6
 FYI_MARKER = "<!-- agent-review-fyi -->"
@@ -366,6 +367,15 @@ def to_fix(findings, rnd):
     return [f for f in findings if f.get("severity") in floor and float(f.get("confidence", 0)) >= MIN_CONFIDENCE]
 
 
+def digest(findings, rnd):
+    """What a UI shows of one review: counts by severity, findings at the fix floor, the 3 worst."""
+    counts = {s: sum(f.get("severity") == s for f in findings) for s in SEVERITIES}
+    worst = sorted(findings, key=lambda f: (SEVERITIES.index(f["severity"]), -float(f.get("confidence", 0))))[:3]
+    return {"counts": counts, "at_floor": len(to_fix(findings, rnd)),
+            "top": [{"severity": f["severity"], "title": f["title"], "file": f["file"], "line": f["line_start"]}
+                    for f in worst]}
+
+
 def split_findings(findings, table):
     inline, carried = [], []
     for f in findings:
@@ -411,6 +421,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
         label += f" · run on {ENGINE_LABELS[engine]}"
     findings = data.get("findings") or []
     fyi = not to_fix(findings, sc["round"])
+    dig = digest(findings, sc["round"])
     mk = marker(reviewer, sc["round"], sc["head"]) + (f"\n{FYI_MARKER}" if fyi else "")
     table = commentable_lines(pr)
     inline, carried = split_findings(findings, table)
@@ -429,7 +440,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
         if not dry_run:
             db.add_clean(REPO, pr, sc["head"], reviewer)
         return {"posted": False, "stop": True, "reason": "no-findings", "round": sc["round"],
-                "verdict": data.get("verdict"), "findings": 0, "inline": 0,
+                "verdict": data.get("verdict"), "findings": 0, "inline": 0, "digest": dig,
                 "summary": (data.get("summary") or "").strip()}
 
     payload = {"commit_id": sc["head"], "event": "COMMENT",
@@ -437,7 +448,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
                "comments": comments}
     if dry_run:
         return {"dry_run": True, "posted": False, "would_post": True, "stop": fyi,
-                "payload": payload, "inline": len(inline),
+                "payload": payload, "inline": len(inline), "digest": dig,
                 "summary_only": len(carried), "findings": len(findings)}
 
     res = submit(pr, payload)
@@ -457,7 +468,7 @@ def post(pr, reviewer, data, sc, dry_run=False, engine=None):
     return {"posted": True, "stop": fyi, **({"reason": "notes-only"} if fyi else {}),
             "review_id": res.get("id"), "url": res.get("html_url"),
             "inline": len(inline), "summary_only": len(findings) - len(inline),
-            "findings": len(findings), "verdict": data.get("verdict")}
+            "findings": len(findings), "verdict": data.get("verdict"), "digest": dig}
 
 
 def submit(pr, payload):

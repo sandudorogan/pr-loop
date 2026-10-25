@@ -277,9 +277,21 @@ def outcome(res):
     return f"{res.get('skipped') or res.get('reason')} — {(res.get('summary') or res.get('message') or '').strip()[:160]}"
 
 
-def review(repo, pr):
+def reviewer_result(res):
+    """The `reviewer_results` row of a finished run. A skipped run has no digest: its stored row stays."""
+    if "digest" not in res:
+        return None
+    result = "clean" if res.get("reason") == "no-findings" else "notes-only" if res.get("stop") else "posted"
+    return {"result": result, "engine": res.get("engine"), "round": res.get("round"), "digest": res["digest"],
+            "url": res.get("url")}
+
+
+def review(repo, pr, sha):
     with ThreadPoolExecutor(len(REVIEWERS)) as pool:
         results = dict(zip(REVIEWERS, pool.map(lambda r: run_reviewer(repo, pr, r), REVIEWERS)))
+    for reviewer, res in results.items():
+        if res and res is not LIMITED and (row := reviewer_result(res)):
+            db.put_reviewer_result(repo, pr, sha, reviewer, row)
     limited = [r for r, res in results.items() if res is LIMITED]
     if limited:
         return "limited", f"{', '.join(limited)} hit the usage limit of both engines"
@@ -377,7 +389,7 @@ def handle(pr, first, only, dry_run):
         log(repo, n, f"reviewing {pr['headRefOid'][:12]}: {pr['title']}")
         drop_ready_alert(repo, n)
         in_review(repo, n, True)
-        status, note = review(repo, n)
+        status, note = review(repo, n, pr["headRefOid"])
         in_review(repo, n, False)
     log(repo, n, f"{status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     verdict = {"clean": "clean", "posted": "quality-only" if note == "quality" else "posted"}.get(
