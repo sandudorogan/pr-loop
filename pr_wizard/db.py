@@ -5,6 +5,7 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -72,6 +73,19 @@ def close():
     _local.conns, _local.depth = {}, 0
 
 
+def _enable_wal(conn):
+    """The first switch to WAL needs an exclusive lock and fails at once, with no busy_timeout wait, when
+    another process holds the fresh file. Retry until the budget ends."""
+    deadline = time.monotonic() + BUSY_MS / 1000
+    while True:
+        try:
+            return conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or time.monotonic() > deadline:
+                raise
+            time.sleep(0.01)
+
+
 def connect(path=None):
     """The thread's connection: WAL, busy_timeout, synchronous NORMAL, schema created or upgraded."""
     path = path or DB
@@ -83,7 +97,7 @@ def connect(path=None):
         conn.row_factory = sqlite3.Row
         conn.execute(f"PRAGMA busy_timeout = {BUSY_MS}")
         if conn.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
-            conn.execute("PRAGMA journal_mode = WAL")
+            _enable_wal(conn)
         conn.execute("PRAGMA synchronous = NORMAL")
         upgrade(conn)
         conns[key] = conn
