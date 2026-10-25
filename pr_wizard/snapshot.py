@@ -37,7 +37,7 @@ def findings(repo, seen, results, head, cfg):
     for rid in q.REVIEWERS:
         if row := results.get(rid):
             reviewers.append({"id": rid, "label": known[rid]["label"], "result": row["result"],
-                              "engine": row["engine"], **row["digest"],
+                              "engine": row["engine"] or known[rid]["engine"], **(row["digest"] or EMPTY),
                               "url": row["url"], "at": iso(row["at"])})
         elif derived:
             reviewers.append({"id": rid, "label": known[rid]["label"], "result": derived,

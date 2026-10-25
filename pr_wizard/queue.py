@@ -142,6 +142,12 @@ def drop_ready_alert(repo, pr):
     review_notifier(repo, pr, "-remove", f"review-queue{tag(repo)}-{pr}")
 
 
+def announce(type, pr, verdict=None):
+    """Records a `ready_for_approval` or `ready_withdrawn` event for the API (api.md §3.3). UIs notify from it."""
+    db.add_event(type, pr["repo"], pr["number"], pr["title"], url(pr["repo"], pr["number"]),
+                 (pr["author"] or {}).get("login", "ghost"), pr["headRefOid"], verdict)
+
+
 def review_notifier(repo, pr, *args):
     out = subprocess.run([NOTIFIER, "-group", f"review-queue{tag(repo)}-{pr}", *args], capture_output=True, text=True)
     if out.returncode:
@@ -292,12 +298,16 @@ def outcome(res):
 
 
 def reviewer_result(res):
-    """The `reviewer_results` row of a finished run. A skipped run has no digest: its stored row stays."""
+    """The `reviewer_results` row of a finished run. A run skipped as already reviewed has no digest: its stored
+    row stays. One skipped for lack of conventions stores a `skipped` row."""
+    conventions = res.get("conventions")
+    if res.get("reason") == "no-conventions":
+        return {"result": "skipped", "round": res.get("round"), "conventions": conventions}
     if "digest" not in res:
         return None
     result = "clean" if res.get("reason") == "no-findings" else "notes-only" if res.get("stop") else "posted"
     return {"result": result, "engine": res.get("engine"), "round": res.get("round"), "digest": res["digest"],
-            "url": res.get("url")}
+            "conventions": conventions, "url": res.get("url")}
 
 
 def review(repo, pr, sha):
@@ -402,6 +412,8 @@ def handle(pr, first, only, dry_run):
     else:
         log(repo, n, f"reviewing {pr['headRefOid'][:12]}: {pr['title']}")
         drop_ready_alert(repo, n)
+        if seen.get("verdict") in READY and not pr["viewerDidAuthor"]:
+            announce("ready_withdrawn", pr)
         in_review(repo, n, True)
         status, note = review(repo, n, pr["headRefOid"])
         in_review(repo, n, False)
@@ -412,6 +424,7 @@ def handle(pr, first, only, dry_run):
         post_clean_notice(repo, n, pr["headRefOid"])
     if status in ("clean", "posted") and verdict in READY and not pr["viewerDidAuthor"]:
         ready_alert(repo, n, pr["title"])
+        announce("ready_for_approval", pr, verdict)
     absorbed = status in ("posted", "clean", "baseline", "unchanged", "trivial")
     rounds = 0 if status == "clean" else (0 if only else seen.get("rounds", 0)) + (status == "posted")
     hold = status == "clean" and pr["viewerDidAuthor"] if status in ("posted", "clean") else seen.get("hold", False)
@@ -601,6 +614,9 @@ class Runtime:
             self.prs, self.fetched_at = prs, at
         self.refresh = {"last_at": at, "last_error": error}
         self.changes.touch()
+
+    def events(self, since):
+        return db.events_after(since)
 
     def snapshot(self):
         return snapshot.build(self.prs, snapshot.read(), {"generated_at": db.now(), "fetched_at": self.fetched_at,

@@ -22,3 +22,6 @@ class Runtime:
 
     def config(self):
         return self.read("config")
+
+    def events(self, since):
+        return self.read("events")

@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from prs import MONOREPO, finding, pr_review as prr, rq
-from pr_wizard import db
+from pr_wizard import config, db, snapshot
 
 A, B = "a" * 40, "b" * 40
 
@@ -88,6 +88,31 @@ class Stored(unittest.TestCase):
         self.run_review({r: skipped for r in rq.REVIEWERS})
         row = db.reviewer_results(MONOREPO, 5)["opus"]
         self.assertEqual((row["result"], row["digest"], row["url"]), ("posted", d, "u"))
+
+    def test_the_conventions_of_a_run_land_in_its_row_and_the_snapshot(self):
+        files = ["AGENTS.md", "ui/AGENTS.md"]
+        outputs = {r: {"stop": True, "reason": "no-findings", "engine": "claude", "round": 1, "digest": digest([]),
+                       "conventions": files} for r in rq.REVIEWERS}
+        self.run_review(outputs)
+        rows = db.reviewer_results(MONOREPO, 5)
+        self.assertEqual([r["conventions"] for r in rows.values()], [files] * 3)
+        found = snapshot.findings(MONOREPO, {}, rows, A, config.load().config)
+        self.assertEqual(found["conventions"], files)
+
+    def test_a_run_skipped_for_lack_of_conventions_stores_a_skipped_row(self):
+        skipped = {"reviewer": "quality", "round": 2, "posted": False, "stop": True, "reason": "no-conventions",
+                   "conventions": []}
+        clean = {"stop": True, "reason": "no-findings", "engine": "claude", "round": 2, "digest": digest([]),
+                 "conventions": []}
+        self.assertEqual(self.run_review({"opus": clean, "codex": clean, "quality": skipped}), ("clean", "no findings"))
+        rows = db.reviewer_results(MONOREPO, 5)
+        self.assertEqual((rows["quality"]["result"], rows["quality"]["digest"], rows["quality"]["round"],
+                          rows["quality"]["sha"]), ("skipped", None, 2, A))
+        found = snapshot.findings(MONOREPO, {}, rows, A, config.load().config)
+        quality = next(r for r in found["reviewers"] if r["id"] == "quality")
+        self.assertEqual((quality["result"], quality["counts"], quality["top"], quality["url"], quality["engine"]),
+                         ("skipped", snapshot.EMPTY["counts"], [], None, "claude"))
+        self.assertEqual(found["conventions"], [])
 
     def test_a_new_head_replaces_the_older_rows(self):
         db.put_reviewer_result(MONOREPO, 5, B, "opus", {"result": "posted", "digest": digest([])})

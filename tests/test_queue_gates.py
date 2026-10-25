@@ -1,7 +1,10 @@
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
+from pr_wizard import db
 
 OTHER = "b" * 40
 
@@ -263,6 +266,14 @@ class Verdicts(unittest.TestCase):
 
     SEEN = {"sha": OTHER, "status": "posted", "verdict": "posted", "rounds": 2, "hold": False,
             "files": {"old.py": "1"}}
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        patcher = patch.object(db, "DB", os.path.join(self.dir.name, "state.db"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(db.close)
+        self.addCleanup(self.dir.cleanup)
 
     def handle(self, p, outcome, seen=SEEN, files=None, first=()):
         files = {"a.py": "1"} if files is None else files

@@ -1,6 +1,6 @@
 """The control API of api.md: HTTP/1.1 + JSON on a Unix socket, one request per connection.
 
-A runtime serves the bodies: `info()`, `snapshot()`, `config()`, and `changes`, which every change moves.
+A runtime serves the bodies: `info()`, `snapshot()`, `config()`, `events(since)`, and `changes`, which every change moves.
 
 Usage:
   python3 -m pr_wizard.api --fake [--socket PATH]   serve the fixtures of tests/fixtures/api/v1
@@ -58,19 +58,29 @@ def log(msg):
     sys.stdout.flush()
 
 
-def queue(rt, query):
-    """The snapshot at once, or when `since` is the current rev, once it changes or `wait` runs out."""
+def poll(rt, query, read, ready):
+    """`read(since)` at once, or when `ready(body, since)` holds, once a change makes it so or `wait` runs out."""
     since, wait = query.get("since", [None])[-1], query.get("wait", ["0"])[-1]
     if not (wait.isdigit() and int(wait) <= MAX_WAIT):
         raise Problem(400, "bad_request", f"wait must be an integer from 0 to {MAX_WAIT}")
     deadline = time.monotonic() + int(wait)
     while True:
         seen = rt.changes.seen
-        snap = rt.snapshot()
+        body = read(since)
         left = deadline - time.monotonic()
-        if snap["rev"] != since or left <= 0:
-            return snap
+        if ready(body, since) or left <= 0:
+            return body
         rt.changes.wait(seen, left)
+
+
+def queue(rt, query):
+    """The snapshot at once, or when `since` is the current rev, once it changes or `wait` runs out."""
+    return poll(rt, query, lambda since: rt.snapshot(), lambda snap, since: snap["rev"] != since)
+
+
+def events(rt, query):
+    """The events after the `since` cursor at once, or, when it is the current one, once an event lands."""
+    return poll(rt, query, rt.events, lambda page, since: since is None or page["reset"] or bool(page["events"]))
 
 
 def prompt(rt, query, name):
@@ -85,6 +95,7 @@ def prompt(rt, query, name):
 ROUTES = {
     "/v1/info": {"GET": lambda rt, query: rt.info()},
     "/v1/queue": {"GET": queue},
+    "/v1/events": {"GET": events},
     "/v1/config": {"GET": lambda rt, query: rt.config()},
     "/v1/prompts/(?P<name>[^/]+)": {"GET": prompt},
 }
