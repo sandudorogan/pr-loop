@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -61,6 +62,22 @@ class Resize(unittest.TestCase):
         for t in threads:
             t.join(5)
             self.assertFalse(t.is_alive())
+        self.assertEqual(pending.live, 0)
+
+    def test_a_worker_survives_a_failing_take_and_gives_its_slot_back(self):
+        pending = rq.Pending([pr(1)])
+        ran = threading.Event()
+        calls = iter([sqlite3.OperationalError("database is locked")])
+
+        def bumps():
+            if err := next(calls, None):
+                raise err
+            return {MONOREPO: []}
+
+        with patch.object(rq, "bumps", bumps), patch.object(rq.time, "sleep"):
+            threads = pending.resize(1, lambda: rq.worker(pending, False, lambda *_: ran.set()))
+            threads[0].join(5)
+        self.assertTrue(ran.is_set())
         self.assertEqual(pending.live, 0)
 
 

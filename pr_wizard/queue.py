@@ -608,7 +608,6 @@ class Pending:
         with self.cond:
             while not self.prs or self.live > self.workers or self.paused:
                 if self.live > self.workers or not wait:
-                    self.live -= 1
                     return None
                 self.cond.wait()
             first = bumps()
@@ -621,24 +620,39 @@ class Pending:
         with self.cond:
             self.busy.discard(key)
 
+    def retire(self):
+        with self.cond:
+            self.live -= 1
+
     def idle(self):
         with self.cond:
             return not self.prs and len(self.busy) < self.workers
 
 
 def work(pending, wait, job):
-    while picked := pending.take(wait):
-        repo, n = key = pr_key(picked[0])
-        try:
-            with claimed(repo, n) as mine:
-                if mine:
-                    job(*picked)
-                else:
-                    log_once(repo, n, "handled by another run")
-        except Exception:
-            log(repo, n, f"crashed: {traceback.format_exc().strip()[-300:]}".replace("\n", " ⏎ "))
-        finally:
-            pending.done(key)
+    try:
+        while True:
+            try:
+                picked = pending.take(wait)
+            except Exception:
+                say(f"worker could not take a PR: {traceback.format_exc().strip()[-300:]}".replace("\n", " ⏎ "))
+                time.sleep(1)
+                continue
+            if not picked:
+                return
+            repo, n = key = pr_key(picked[0])
+            try:
+                with claimed(repo, n) as mine:
+                    if mine:
+                        job(*picked)
+                    else:
+                        log_once(repo, n, "handled by another run")
+            except Exception:
+                log(repo, n, f"crashed: {traceback.format_exc().strip()[-300:]}".replace("\n", " ⏎ "))
+            finally:
+                pending.done(key)
+    finally:
+        pending.retire()
 
 
 def worker(pending, wait, job):
