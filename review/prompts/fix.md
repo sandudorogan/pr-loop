@@ -31,9 +31,7 @@ holds the tail of the failed step's log, with the job's `name`, `url` and `refut
    requires.
 5. Add no explanatory comments anywhere, tests included. Add no fallbacks, validation or error
    handling for cases the code cannot reach.
-6. Add or update a test when a fix changes behaviour. Do not run tests that need a JVM or a
-   browser (lein, Karma): they abort in this sandbox. The caller runs the Karma namespaces you
-   touch after you finish and sends any failure back to you.
+6. Add or update a test when a fix changes behaviour. {GATES}
 7. Do not run `git commit`, `git push`, `git stash` or any other command that writes to git.
    The caller commits your working tree.
 

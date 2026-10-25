@@ -8,10 +8,10 @@ Usage:
 Codex runs sandboxed (workspace-write, no network) and never touches git, so every step that
 needs git writes, the network or a browser happens here:
 
-  feedback ──▶ codex (one session per PR, resumed) ──▶ cljfmt ──▶ Karma per touched ns
-                    ▲                                                │ red
-                    └──────────── failure output, at most 2× ◀───────┘
-                                                                     │ green
+  feedback ──▶ codex (one session per PR, resumed) ──▶ format gates ──▶ test gates per item
+                    ▲                                                          │ red
+                    └──────────────── failure output, at most 2× ◀─────────────┘
+                                                                               │ green
                     👍 + resolve fixed · reply to refuted ◀── commit + push
 
 Feedback is every unresolved review thread whose last word is not mine, plus the review bodies
@@ -26,13 +26,12 @@ nothing-to-fix | ci-stuck | tests-red | limited. A tests-red pass leaves its wor
 the next pass on the same head tests it again and carries on from there, and a new head discards it.
 Any other local change (a pass that died mid-way) is stashed, never lost.
 """
-import argparse, fcntl, json, os, re, shutil, signal, subprocess, sys, tempfile, time
-from contextlib import contextmanager
+import argparse, fcntl, json, os, re, shutil, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [DIR, os.path.dirname(DIR)]
 from pr_review import CFG, LIMIT, REPO, REPO_ROOT, brief, codex_flags
-from pr_wizard import conventions, db, names
+from pr_wizard import conventions, db, gates, names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
 FIX = CFG["fix"]
@@ -40,12 +39,9 @@ PROMPT = os.path.join(DIR, "prompts", FIX["prompt"])
 MERGE_PROMPT = os.path.join(DIR, "prompts", FIX["merge_prompt"])
 TIMEOUT = FIX["turn_timeout_s"]
 TEST_RETRIES = FIX["test_retries"]
-UI_TIMEOUT = 1800
-KARMA_SLOTS = 2
+GATES = FIX["gates"]
 AGENT_MARKER = "<!-- agent-review:"
 FYI_MARKER = "<!-- agent-review-fyi -->"
-NODE = ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null"
-CLJ = (".clj", ".cljs", ".cljc", ".edn")
 CI_LOG_CHARS = 20000
 CI_TRIES = FIX["ci_tries"]
 LOG_NOISE = re.compile(r"^﻿?\d{4}-\d\d-\d\dT\S+Z |\x1b\[[0-9;]*m", re.M)
@@ -202,7 +198,7 @@ def merge_prompt(pr, meta, files, conv):
 
 
 def fix_prompt(pr, meta, feedback_path, conv):
-    return (conventions.fill(open(PROMPT).read(), conv)
+    return (gates.fill(conventions.fill(open(PROMPT).read(), conv), GATES)
             .replace("{BRIEF}", brief({"pr": pr, "branch": meta["headRefName"]}))
             .replace("{FEEDBACK}", feedback_path).replace("{PR}", str(pr)).replace("{REPO}", REPO)
             .replace("{HEAD}", meta["headRefOid"]).replace("{BASE}", f"origin/{meta['baseRefName']}")
@@ -280,74 +276,10 @@ def codex(wt, prompt, session, scratch):
 
 # ---------------------------------------------------------------- gate
 
-def namespaces(paths):
-    """The Karma namespaces a change touches: changed tests, and the test beside each changed source."""
-    found = set()
-    for path in paths:
-        if path.startswith("ui/src/cljs/") and path.endswith(".cljs"):
-            path = f"ui/test/{path[len('ui/src/cljs/'):-5]}_test.cljs"
-        if path.startswith("ui/test/") and path.endswith("_test.cljs"):
-            found.add(path[len("ui/test/"):-5].replace("/", ".").replace("_", "-"))
-    return sorted(ns for ns in found if re.fullmatch(r"[\w.-]+", ns))
-
-
-def ui(wt, cmd):
-    """A timeout is a red run, so the pass saves its work; the group kill takes the JVMs under bash too."""
-    proc = subprocess.Popen(["bash", "-c", f"{NODE} && {cmd}"], cwd=os.path.join(wt, "ui"), stdin=subprocess.DEVNULL,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
-    try:
-        log = proc.communicate(timeout=UI_TIMEOUT)[0]
-    except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
-        log = proc.communicate()[0] + f"\n{cmd} timed out after {UI_TIMEOUT} s"
-    return {"ok": proc.returncode == 0, "log": log}
-
-
-def karma(wt, tests):
-    """One compile of the karma-test build, then one Karma run per namespace: the filter takes one. The root
-    postinstall rebuilds the gitignored loyto packages first, since a merge of the base leaves them stale."""
-    built = ui(wt, "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test")
-    if not built["ok"]:
-        return [{"ns": "shadow-cljs compile karma-test", **built}]
-    return [{"ns": ns, **ui(wt, f"npx karma start --single-run --client.args iprally_ui.karma_runner_test.init "
-                                f"--client.args {ns}")} for ns in tests]
-
-
 def saved(scratch, test):
     path = os.path.join(scratch, re.sub(r"\W+", "-", test["ns"]) + ".log")
     open(path, "w").write(test["log"])
     return path
-
-
-@contextmanager
-def karma_slot():
-    """One of KARMA_SLOTS across every run on this machine: each Karma run is a cold JVM build plus Chrome."""
-    os.makedirs(names.WIZARD, exist_ok=True)
-    while True:
-        for i in range(KARMA_SLOTS):
-            with open(names.slot(i), "w") as fh:
-                try:
-                    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    continue
-                yield
-                return
-        time.sleep(15)
-
-
-def gate(wt):
-    paths = changed(wt)
-    clj = [p for p in paths if p.endswith(CLJ)]
-    if clj and shutil.which("cljfmt"):
-        subprocess.run(["cljfmt", "fix", *clj], cwd=wt, capture_output=True)
-    tests = [ns for ns in namespaces(paths)
-             if os.path.exists(os.path.join(wt, "ui", "test", *ns.replace("-", "_").split(".")) + ".cljs")]
-    if tests and not os.path.isdir(os.path.join(wt, "ui", "node_modules")):
-        return [{"ns": ns, "ok": None, "log": "ui/node_modules missing, CI grades it"} for ns in tests]
-    if not tests:
-        return []
-    with karma_slot():
-        return karma(wt, tests)
 
 
 # ---------------------------------------------------------------- land
@@ -453,18 +385,12 @@ def run(pr):
                 return {"pr": pr, "status": "limited", "worktree": wt, "session": session}
             state["session"] = session
             save(pr, state)
-            tests = gate(wt)
+            tests = gates.run(GATES, wt, changed(wt))
             red = [t for t in tests if t["ok"] is False]
             if not red or attempt == TEST_RETRIES:
                 break
             logs = "\n\n".join(f"### {t['ns']}\nFull log: {saved(scratch, t)}\n...\n{t['log'][-3000:]}" for t in red)
-            session, result = codex(wt, f"These Karma runs fail after your change:\n\n{logs}\n\n"
-                                        "Read each full log first: the cause is often above the tail. Fix what your "
-                                        "change broke. Never edit build or runner config (shadow-cljs.edn, "
-                                        "karma.conf.js, package.json) to make a run pass. When the build or the "
-                                        "runner fails and your change does not cause it, change nothing and say so "
-                                        "in `summary`. Return the same JSON as before, for the same refs.",
-                                    session, scratch)
+            session, result = codex(wt, gates.retry(GATES, red, logs), session, scratch)
         by_ref = {i["ref"]: i for i in items}
         refuted = [(by_ref[a["ref"]], a["reply"]) for a in result["items"] if a["disposition"] == "refuted"
                    and by_ref.get(a["ref"], {}).get("kind") == "ci"]
@@ -486,7 +412,8 @@ def run(pr):
     if red:
         state["red"] = {"head": meta["headRefOid"], "paths": sorted(dirty(wt)), "result": result}
         save(pr, state)
-        return {**report, "status": "tests-red", "failing": [t["ns"] for t in red]}
+        return {**report, "status": "tests-red", "gate": ", ".join(dict.fromkeys(t["gate"] for t in red)),
+                "failing": [t["ns"] for t in red]}
     state.pop("red", None)
     pushed = land(wt, meta["headRefName"], meta["headRefOid"], result["commit_message"], result["summary"])
     base = f"origin/{meta['baseRefName']}"

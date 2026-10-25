@@ -20,7 +20,7 @@ One process serves every repo in `REPOS` (`pr_wizard/names.py`): `iprally/iprall
    trivial files     │                                       │ my PR, reviewers done, new feedback_key
    hold / rounds     │                                       ▼
    too big           └───────────────────── fix lane (3 workers) ─── pr_fix.py run
-                                                             │ codex (sandbox) → cljfmt → Karma → commit
+                                                             │ codex (sandbox) → fix.gates → commit
                                                              ▼
                                                  push = new head → next review round
 ```
@@ -54,6 +54,7 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
 | `review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
 | `review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |
+| `pr_wizard/gates.py` | The project's `fix.gates` (format, then test) run after Codex, `{GATES}` in `fix.md`, the retry prompt. iprally's cljfmt and Karma are its built-in override in `config.DEFAULTS`; a project without gates runs none |
 | `pr_wizard/conventions.py` | A project's own conventions read from the checkout at the PR head (agent files and their `@` includes, contributing doc, editorconfig, formatter configs, skills) → `{CONVENTIONS}`. None found: `needs_conventions` reviewers skip (`no-conventions`) |
 | `review/*-schema.json` | JSON schemas the engines must return |
 | `claude/skills/pr-review-loop/` | Claude Code PR watch skill + `scan.py` (used by agent-delegator) |
@@ -88,7 +89,7 @@ The live service runs the code in the **main checkout** (`~/workdir/review-queue
 | `state.db` `clean_reviews` | pr_review.py | `(repo, number, sha, reviewer)` heads a reviewer cleared |
 | `~/.local/state/review-queue.{lock,pid}` | daemon | single-daemon flock, pid for SIGUSR1 |
 | `~/.local/state/pr-wizard/locks/<owner>/<name>/<N>` | both lanes | per-PR flock across processes (`<N>.fix`: a pr_fix.py run) |
-| `~/.local/state/pr-wizard/slot.{0,1}.lock` | pr_fix.py | 2 Karma runs machine-wide |
+| `~/.local/state/pr-wizard/slot.{0,1}.lock` | pr_fix.py | 2 `slot: true` gate runs (iprally's Karma) machine-wide |
 | `~/.local/state/pr-wizard/api.sock` | daemon | control API socket, `0600` in a `0700` dir; SIGTERM unlinks it, a stale one goes at start |
 | `~/.local/state/pr-wizard/launchd-label` | daemon | the label to `launchctl kickstart`, written at every start |
 | `~/.local/state/pr-wizard/scratch/<N>-*` | pr_fix.py | Codex scratch dirs |
