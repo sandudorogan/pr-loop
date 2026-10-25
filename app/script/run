@@ -1,0 +1,5 @@
+#!/bin/zsh -e
+cd "${0:A:h}/.."
+script/bundle
+[[ $1 == -- ]] && shift
+open "build/PR Wizard.app" --args "$@"

@@ -55,8 +55,11 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 | `launchd/*.plist.tmpl` | Service templates, `{{ .chezmoi.homeDir }}` placeholder |
 | `install.py`, `links.json` | Symlink the repo into `$HOME`; render plists into `.local/` |
 | `docs/overhaul.md` | Coupling, invariants and known gaps to read before a large change |
+| `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
+| `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; the Python API tests will assert against them |
 
 Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless the overhaul decides otherwise.
+The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, no dependencies.
 
 ## Installed paths and state
 
@@ -119,6 +122,8 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
 
 1. Work in a worktree: `git worktree add .worktrees/<branch> -b <branch> origin/main`. Never edit the main checkout: the daemon runs it.
 2. Test: `python3 -m unittest discover -s tests -v` (about 1 s).
+   App (from `app/`): `script/test` (`--filter <Suite>` for one suite), `script/lint`, `script/bundle` → `build/PR Wizard.app`, `script/run`.
+   Never plain `swift test`: under the Command Line Tools it runs 0 tests and exits 0.
 3. Dry-run what you can: `review-queue -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`.
 4. Push straight to `main` (`git push origin HEAD:main`). Open no PRs here. Then `git -C ~/workdir/review-queue pull --ff-only`.
 5. Restart only for daemon code (`bin/review-queue`). Check `review-queue -l` for ▶ rows first: a restart kills in-flight passes.

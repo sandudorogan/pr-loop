@@ -1,0 +1,16 @@
+#!/bin/zsh -e
+cd "${0:A:h}/.."
+swift build -c release --product PRWizard
+bin=$(swift build -c release --show-bin-path)
+app="build/PR Wizard.app"
+count=$(git rev-list --count HEAD)
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$bin/PRWizard" "$app/Contents/MacOS/PRWizard"
+cp Resources/Info.plist "$app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$count" "$app/Contents/Info.plist"
+plutil -replace CFBundleShortVersionString -string "1.0.$count" "$app/Contents/Info.plist"
+[[ -f Resources/AppIcon.icns ]] && cp Resources/AppIcon.icns "$app/Contents/Resources/"
+codesign --force --sign - --timestamp=none "$app"
+codesign --verify --strict "$app"
+echo "$PWD/$app"

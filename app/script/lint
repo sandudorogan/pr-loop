@@ -1,0 +1,3 @@
+#!/bin/zsh -e
+cd "${0:A:h}/.."
+swift format lint --strict --recursive Package.swift Sources Tests

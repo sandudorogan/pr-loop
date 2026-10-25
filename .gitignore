@@ -7,3 +7,5 @@ briefs/
 .clean-reviews.json
 state.json
 prs.json
+app/.build/
+app/build/

@@ -1,0 +1,8 @@
+#!/bin/zsh -e
+cd "${0:A:h}/.."
+flags=()
+if [[ $(xcode-select -p) == *CommandLineTools* ]]; then
+  dev=/Library/Developer/CommandLineTools/Library/Developer
+  flags=(-Xswiftc -F -Xswiftc $dev/Frameworks -Xlinker -rpath -Xlinker $dev/Frameworks -Xlinker -rpath -Xlinker $dev/usr/lib)
+fi
+swift test $flags "$@"
