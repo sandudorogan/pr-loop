@@ -1,0 +1,13 @@
+ ▶  #10  reviewing  since 12:01:02        title 10
+ ▶  gitops#21  fixing     since 12:05:00        title 21
+ 1  #12  queued     pushed Sun 10:00      title 12
+ 2  #11  queued     pushed Sun 10:00      title 11
+ ✓  #14  ready      fix refuted-only      title 14
+ ✓  #13  ready      quality notes only    title 13
+ ✓  #22  ready      2026-10-25 10:00:00   title 22
+    #15  posted     fix queued            title 15
+    #19  held       --next 19 to review   title 19
+    #20  skipped    no-auto-review        title 20
+    gitops#10  skipped    no-auto-review        title 10
+    #16  failed     2026-10-25 10:00:00   title 16
+    #18  new        baseline on next run  title 18

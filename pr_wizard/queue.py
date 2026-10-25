@@ -40,7 +40,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from fnmatch import fnmatch
 
-from pr_wizard import db, names
+from pr_wizard import db, names, snapshot
 from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
                               REPOS, STATE, env_repo, path, root, tag)
 
@@ -72,7 +72,8 @@ CLEAN_NOTICE = ("Automatic review pipeline ran on `{sha}`. None of the Opus code
 
 FRAGMENT = """
 fragment pr on PullRequest {
-  number title state isDraft headRefOid baseRefName additions deletions viewerDidAuthor mergeable
+  number title state isDraft headRefOid baseRefName additions deletions viewerDidAuthor mergeable updatedAt
+  author { login }
   repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
   latestOpinionatedReviews(first: 20) { nodes { state viewerDidAuthor } }
@@ -245,12 +246,22 @@ def false_clean(res):
     return res.get("reason") == "no-findings" and (len(summary) < 40 or bool(FALSE_CLEAN.search(summary)))
 
 
+def progress(repo, pr, reviewer, state, attempt):
+    """Sets one reviewer's step in the PR's `runs` row, in REVIEWERS order."""
+    with db.tx():
+        steps = {s["id"]: s for s in db.live_runs(repo)[pr]["reviewers"]}
+        steps[reviewer] = {"id": reviewer, "state": state, "attempt": attempt, "since": db.now()}
+        db.run_update(repo, pr, [steps[r] for r in REVIEWERS if r in steps])
+
+
 def run_reviewer(repo, pr, reviewer):
     force = []
     for i in range(ATTEMPTS):
         if i:
+            progress(repo, pr, reviewer, "waiting", i + 1)
             log(repo, pr, f"{reviewer} retry in {BACKOFF[i - 1]} s")
             time.sleep(BACKOFF[i - 1])
+        progress(repo, pr, reviewer, "running", i + 1)
         log(repo, pr, f"{reviewer} attempt {i + 1}/{ATTEMPTS} started{' (--force)' if force else ''}")
         start = time.monotonic()
         out = subprocess.run([sys.executable, PR_REVIEW, "run", "--pr", str(pr), "--reviewer", reviewer, *force],
@@ -262,13 +273,16 @@ def run_reviewer(repo, pr, reviewer):
         if out.returncode == 0 and res and not false_clean(res):
             via = f" on {res['engine']}" if "usage limit" in out.stderr else ""
             log(repo, pr, f"{reviewer} done{via} in {time.monotonic() - start:.0f} s: {outcome(res)}")
+            progress(repo, pr, reviewer, "clean" if res.get("stop") else "posted", i + 1)
             return res
         if "both at their usage limit" in out.stderr:
             log(repo, pr, f"{reviewer} stopped: claude and codex are both at their usage limit")
+            progress(repo, pr, reviewer, "limited", i + 1)
             return LIMITED
         force = force or (["--force"] if res and false_clean(res) else [])
         why = (out.stderr.strip() or out.stdout.strip())[-300:].replace("\n", " ⏎ ")
         log(repo, pr, f"{reviewer} attempt {i + 1}/{ATTEMPTS} failed: {why}")
+    progress(repo, pr, reviewer, "failed", ATTEMPTS)
 
 
 def outcome(res):
@@ -340,7 +354,7 @@ def log_once(repo, n, msg):
 
 
 def in_review(repo, n, on, lane="review"):
-    db.run_start(repo, n, lane) if on else db.run_end(repo, n)
+    db.run_start(repo, n, lane, reviewers=[] if lane == "review" else None) if on else db.run_end(repo, n)
 
 
 def record(repo, key, entry, kind=STATE):
@@ -722,22 +736,9 @@ def bump(repo, n):
 
 
 def show(prs=None):
-    tty, first = sys.stdout.isatty(), bumps()
-    state, fixed = {r: load(r) for r in REPOS}, {r: load(r, FIXES) for r in REPOS}
-    now = {r: reviewing(r) for r in REPOS}
-    listed = ((*row(pr, state[pr["repo"]].get(str(pr["number"]), {}), now[pr["repo"]], first[pr["repo"]],
-                    fixed[pr["repo"]].get(str(pr["number"]), {})), pr)
-              for pr in prs or queue("--cache", LIST_CACHE))
-    rows = sorted((r for r in listed if r[0] == 0 or not approved(r[3])),
-                  key=lambda r: (r[0], priority(r[3], first), r[3]["number"] < max(now[r[3]["repo"]], default=0),
-                                 r[3]["number"]))
-    rank = 0
-    for group, status, detail, pr in rows:
-        rank += group == 1
-        mark = {0: "▶", 1: str(rank), 3: "✓"}.get(group, "")
-        name = f"{tag(pr['repo'])[1:]}#{pr['number']}"
-        link = f"\033]8;;{url(*pr_key(pr))}\033\\{name}\033]8;;\033\\" if tty else name
-        print(f"{mark:>2}  {link}  {status:<9}  {detail:<20}  {'[draft] ' * pr['isDraft']}{pr['title']}")
+    prs, at = prs or queue("--cache", LIST_CACHE), db.now()
+    runtime = {"generated_at": at, "fetched_at": at, "paused": False, "refresh": {"last_at": at, "last_error": None}}
+    print(snapshot.render(snapshot.build(prs, snapshot.read(), runtime), sys.stdout.isatty()), end="")
 
 
 def worktrees(repo):

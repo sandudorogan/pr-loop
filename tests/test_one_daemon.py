@@ -16,6 +16,7 @@ def node(repo, number, mine=True, title="t"):
     return {"number": number, "title": f"{title} {number}", "state": "OPEN", "isDraft": False,
             "headRefOid": f"{number:040d}", "baseRefName": "main", "additions": 1, "deletions": 0,
             "viewerDidAuthor": mine, "mergeable": "MERGEABLE", "repository": {"nameWithOwner": repo},
+            "author": {"login": "me"}, "updatedAt": "2026-10-25T10:00:00Z",
             "labels": {"nodes": []}, "latestOpinionatedReviews": {"nodes": []},
             "commits": {"nodes": [{"commit": {"committedDate": "2026-10-25T10:00:00Z", "statusCheckRollup": None}}]},
             "reviews": {"totalCount": 0}, "reviewThreads": {"nodes": []}}
