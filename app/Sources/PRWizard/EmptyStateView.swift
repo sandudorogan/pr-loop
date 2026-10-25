@@ -1,0 +1,44 @@
+import PRWizardKit
+import SwiftUI
+
+struct EmptyStateView: View {
+    let filter: QueueFilter
+    let socket: String
+    @Binding var sidebar: SidebarSelection
+    @Environment(QueueStore.self) private var store
+
+    var body: some View {
+        switch store.phase {
+        case .idle, .connecting:
+            ProgressView("Connecting to PR Wizard…")
+        case .down(let error, _):
+            ContentUnavailableView {
+                Label("PR Wizard is not running", systemImage: "bolt.horizontal.circle")
+            } description: {
+                Text(verbatim: (error as? APIError) == .down ? "Nothing answers on \(socket)." : "\(socket): \(error)")
+            } actions: {
+                Button("Start Daemon") { Task { await store.startDaemon(with: ProcessDaemonLauncher()) } }
+                    .disabled(store.pendingActions.contains(.startDaemon))
+                Button("Retry") { store.retry() }
+            }
+        case .incompatible(let api):
+            ContentUnavailableView(
+                "Update PR Wizard.app", systemImage: "arrow.triangle.2.circlepath",
+                description: Text("The daemon speaks API v\(api). This app speaks v1."))
+        case .live, .stale:
+            if !filter.query.isEmpty {
+                ContentUnavailableView.search(text: filter.query)
+            } else if let repo = filter.repo {
+                ContentUnavailableView {
+                    Label("Nothing in \(ProjectSummary.shortName(of: repo))", systemImage: "checkmark.seal")
+                } actions: {
+                    Button("Show All Repos") { sidebar = .all }
+                }
+            } else {
+                ContentUnavailableView(
+                    "Nothing in the queue", systemImage: "checkmark.seal",
+                    description: Text("Your open PRs and the ones that wait on your review show up here."))
+            }
+        }
+    }
+}

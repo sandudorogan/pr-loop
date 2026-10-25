@@ -16,6 +16,16 @@ extension QueueStore.Phase {
     }
 }
 
+private actor Launches: DaemonLauncher {
+    private(set) var count = 0
+
+    func run(_ executable: String, _ arguments: [String]) {}
+
+    func start() {
+        count += 1
+    }
+}
+
 @MainActor @Suite struct QueueStoreTests {
     private let pr = PRRef(repo: "iprally/iprally", number: 17190)
     private let gitops = PRRef(repo: "iprally/gitops", number: 412)
@@ -56,6 +66,7 @@ extension QueueStore.Phase {
         let run = Task { await store.run() }
         await gate.arrival()
         #expect(store.phase.summary == "down down 1002.0")
+        #expect(store.phase.isDisconnected)
         #expect(store.projects.isEmpty)
         await gate.open()
         await run.value
@@ -161,6 +172,25 @@ extension QueueStore.Phase {
         #expect(store.phase.summary == "down down 1002.0")
         store.retry()
         #expect(await eventually { store.snapshot?.rev == "a" })
+        await gate.open()
+        store.stop()
+    }
+
+    @Test("start daemon kickstarts it, then reconnects at once")
+    func startDaemon() async throws {
+        let gate = Gate()
+        let launches = Launches()
+        let store = store(
+            ScriptedDaemon(
+                info: [.failure(APIError.down), .success(try Snapshots.info())],
+                queue: [.success(try Snapshots.queue(rev: "a"))]),
+            sleeper: Sleeper(gate: gate))
+        store.start()
+        await gate.arrival()
+        await store.startDaemon(with: launches)
+        #expect(await launches.count == 1)
+        #expect(await eventually { store.snapshot?.rev == "a" })
+        #expect(!store.phase.isDisconnected)
         await gate.open()
         store.stop()
     }

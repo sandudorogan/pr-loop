@@ -69,6 +69,11 @@ import Observation
         await perform([.fix(pr)], on: pr) { try await daemon.fix(pr) }
     }
 
+    public func startDaemon(with launcher: any DaemonLauncher) async {
+        await perform([.startDaemon], on: nil) { try await launcher.start() }
+        retry()
+    }
+
     public func setPaused(_ paused: Bool) async {
         await perform([.setPaused(paused)], on: nil) { _ = try await daemon.setPaused(paused) }
     }

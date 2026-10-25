@@ -9,11 +9,12 @@ public struct QueueFilter: Hashable, Sendable {
         self.text = text
     }
 
+    public var query: String { text.trimmingCharacters(in: .whitespaces) }
+
     public func items(_ items: [QueueItem]) -> [QueueItem] {
-        let text = text.trimmingCharacters(in: .whitespaces)
-        return items.filter { item in
+        items.filter { item in
             (repo == nil || item.repo == repo)
-                && (text.isEmpty || "\(item.key) \(item.title)".localizedStandardContains(text))
+                && (query.isEmpty || "\(item.key) \(item.title)".localizedStandardContains(query))
         }
     }
 

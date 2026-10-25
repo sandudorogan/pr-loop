@@ -9,6 +9,13 @@ extension QueueStore {
         case down(any Error, retryAt: Date)
         case incompatible(api: Int)
 
+        public var isDisconnected: Bool {
+            switch self {
+            case .down, .stale: true
+            default: false
+            }
+        }
+
         public var snapshot: QueueSnapshot? {
             switch self {
             case .live(let snapshot), .stale(let snapshot, _, _): snapshot
