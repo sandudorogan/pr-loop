@@ -148,6 +148,7 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
 1. Work in a worktree: `git worktree add .worktrees/<branch> -b <branch> origin/main`. Never edit the main checkout: the daemon runs it.
 2. Test: `python3 -m unittest discover -s tests -v` (about 1 s).
    App (from `app/`): `script/test` (`--filter <Suite>` for one suite), `script/lint`, `script/bundle` → `build/PR Wizard.app`, `script/run`.
+   `script/contract` runs `ContractTests` (the real client) against `python3 -m pr_wizard.api --fake` on a temp socket; run it after any change to a wire shape, either side.
    `script/install` quits the installed copy and puts a fresh bundle at `/Applications/PR Wizard.app` (`~/Applications` is root-owned here).
    `script/icon` renders `wand.and.stars` into `Resources/AppIcon.icns`; commit the result. "Open at login" survives a reinstall.
    Never plain `swift test`: under the Command Line Tools it runs 0 tests and exits 0.
