@@ -2,6 +2,7 @@ import io
 import contextlib
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import MagicMock, call, patch
 
@@ -71,6 +72,11 @@ class PruneInDaemon(unittest.TestCase):
             self.assertEqual([list(prune_all.call_args.args[0]), prune_all.call_args.args[1]], [repos, False])
             prune_all.assert_called_once()
             self.assertFalse(exit.exception.code)
+
+    def test_a_worktree_dir_deleted_by_hand_does_not_block_the_prune(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gone = f"{tmp}/wt"
+            self.assertIsNone(rq.blocker(rq.MONOREPO, gone, "a" * 40, [], []))
 
 
 if __name__ == "__main__":

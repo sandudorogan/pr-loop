@@ -1097,6 +1097,8 @@ def cwds():
 def blocker(repo, path, head, prs, busy):
     if any(d == path or d.startswith(f"{path}/") for d in busy):
         return "in use"
+    if not os.path.isdir(path):
+        return None
     if sh("git", "-C", path, "status", "--porcelain", repo=repo).strip():
         return "local changes"
     if not any(pushed(repo, head, pr) for pr in prs):
