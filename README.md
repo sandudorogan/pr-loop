@@ -1,8 +1,8 @@
-# Review queue
+# PR Wizard
 
 A macOS daemon that reviews and fixes your GitHub PRs with Claude Code and Codex. MIT licensed.
 
-It watches your own PRs and the PRs that request your review.
+It watches every open PR you opened, that requests your review or that is assigned to you, in any repo.
 Three reviewers post findings as inline comments.
 On your own PRs, headless Codex then fixes the feedback, red CI and base conflicts, and pushes.
 The push starts the next review round.
@@ -17,14 +17,37 @@ The push starts the next review round.
 | --- | --- | --- |
 | `opus` | Claude Opus | bugs and risk; checks the change against the task brief when one exists |
 | `codex` | Codex (read-only) | adversarial review of the same diff |
-| `quality` | Claude Haiku | breaches of the repo's documented conventions |
+| `quality` | Claude Haiku | breaches of the project's documented conventions (skipped when it documents none) |
 
 When one engine hits its usage limit, the reviewer runs on the other.
 A round reviews only the commits since the last round.
 After 8 rounds in a row with findings, the PR waits for a human.
 
-The defaults target `iprally/iprally` in `~/workdir/iprally`, and the prompts and the fix lane's test gate carry its conventions.
-See [docs/overhaul.md](docs/overhaul.md) for every repo-specific part.
+## How it works
+
+```text
+ PR Wizard.app · pr-wizard CLI · curl
+        │  HTTP/1.1 + JSON
+        ▼
+ ~/.local/state/pr-wizard/api.sock ──▶ pr-wizard --daemon (launchd local.pr-wizard, the only process)
+                                          │ detects projects from your PRs, finds their checkouts under ~/workdir
+                                          │ review pool ×3 · fix pool ×3 (threads), prune every 30 min
+                                          ▼
+                                 ~/.local/state/pr-wizard/state.db (SQLite)
+```
+
+- **Projects.** A repo becomes a project when one of your PRs is in it. PR Wizard works it when it finds a main
+  checkout of that repo under `~/workdir/*/`. A new project gets the defaults: review and fix on.
+- **Conventions.** The prompts are generic. Each run reads the project's own `AGENTS.md` / `CLAUDE.md`,
+  contributing doc, editorconfig, formatter and linter configs and skills from the checkout at the PR head.
+- **Gates.** After Codex, the fix pass runs the project's `fix.gates` (format, then test). A project without gates
+  runs none, and its CI stays the gate.
+- **Config.** `~/.config/pr-wizard/config.json` is a chezmoi-managed symlink to `.pr-wizard/config.json` in your
+  chezmoi source. Three levels: all repos → project → PR. The PR level lives in `state.db` and drops when the PR closes.
+  Labels opt a PR out: `no-auto-review` skips the reviewers, `no-auto-fix` skips the fix lane.
+- **API.** The daemon has no UI. It serves the queue, history, config and `ready_for_approval` events on its socket.
+- **App.** `PR Wizard.app` shows the queue and the PRs it worked on recently, edits the config, and posts the
+  "Ready for your approval" notification for a colleague's PR.
 
 ## Install
 
@@ -35,38 +58,43 @@ git clone git@github.com:sandudorogan/review-queue.git ~/workdir/review-queue
 cd ~/workdir/review-queue
 python3 install.py --dry-run
 python3 install.py --chezmoi-source ~/.local/share/chezmoi   # omit the flag without chezmoi
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.review-queue.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.pr-wizard.plist
 ```
 
-The installer symlinks the command, the runners and the launchd plists into `$HOME`.
+The installer symlinks the commands, the runners, the launchd plist and the config into `$HOME`.
+With chezmoi, it writes the default config into the source once and applies only the paths it owns.
 It backs up what it replaces under `~/.local/state/review-queue/backups/`. It does not start the service.
 
-The "ready" notification uses a copy of `terminal-notifier` at `~/.local/share/review-queue/Review Queue.app`.
+The app (Command Line Tools only, no Xcode): `cd app && script/install` puts `PR Wizard.app` in `/Applications`.
+
+Until the daemon stops calling it, the "ready" notification also uses a copy of `terminal-notifier` at
+`~/.local/share/review-queue/Review Queue.app`.
 The task briefs come from [agent-delegator](https://github.com/sandudorogan/agent-delegator), which also uses the PR watch skill in `claude/`.
-The queue runs without either.
+PR Wizard runs without either.
 
 ## Use
 
 ```sh
-review-queue -l            # the queue: ▶ in work, 1..n review order, ✓ ready to approve
-review-queue --pr 16400    # review one PR now
-review-queue --next 16400  # move a PR to the front
-review-queue --wait 16400  # block until the PR settles at its head, print JSON
-review-queue -n            # dry run: print each PR's gate decision
-review-queue --prune       # remove worktrees of merged or approved PRs, every repo (the daemon does it every 30 min)
+pr-wizard -l                 # the queue: ▶ in work, 1..n review order, ✓ ready to approve
+pr-wizard --pr 16400         # review one PR now (owner/name#N for another repo)
+pr-wizard --next 16400       # move a PR to the front
+pr-wizard --wait 16400       # block until the PR settles at its head, print JSON
+pr-wizard --pause            # workers take no new PR until --resume
+pr-wizard config             # print the config (--patch JSON, --put FILE)
+pr-wizard -n                 # dry run: print each PR's gate decision
+pr-wizard --prune            # remove worktrees of merged or approved PRs (the daemon does it every 30 min)
 ```
 
-Labels opt a PR out: `no-auto-review` skips the reviewers, `no-auto-fix` skips the fix lane.
-One daemon serves `iprally/iprally` (review + fix) and `iprally/gitops` (fix only). `--repo` picks the repo of
-`--pr`, `--next` and `--wait` (default `$IPR_REPO`, else `iprally/iprally`), and limits `--prune` to that repo.
+`review-queue` is the same command. A bare `N` is a PR of `--repo`, else `$PR_WIZARD_REPO`, else `iprally/iprally`.
 
-The queue posts reviews, replies and commits with your GitHub credentials.
-Log: `~/Library/Logs/review-queue.log`. State: `~/.local/state/review-queue*` and `~/.local/state/pr-fix*`.
+PR Wizard posts reviews, replies and commits with your GitHub credentials.
+Log: `~/Library/Logs/pr-wizard.log`. State: `~/.local/state/pr-wizard/`.
 
 ## Develop
 
-Read [AGENTS.md](AGENTS.md) first: layout, state files, contracts, workflow and gotchas.
+Read [AGENTS.md](AGENTS.md) first: layout, state, contracts, workflow and gotchas.
 
 ```sh
 python3 -m unittest discover -s tests -v
+cd app && script/test && script/lint
 ```

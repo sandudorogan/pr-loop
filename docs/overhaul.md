@@ -1,94 +1,62 @@
-# Overhaul baseline
+# PR Wizard overhaul
 
-Read this before a large change. It records where the queue stands on 2026-10-25,
-what must keep working, and where the code is tied to one repo, one machine and one owner.
-It sets no direction. The overhaul decides that.
+Read this before a large change. It records what the overhaul (2026-10-25) changed in the review queue,
+what must keep working, and the gaps that remain. The plan and the API contract are in the delegator briefs
+(`~/.claude/skills/delegator/briefs/pr-wizard/plan.md`, `api.md`).
 
-## Baseline
+## Before and after
 
-```text
-bin/review-queue                       841 lines   daemon + CLI + both lanes
-review/pr_review.py                    530 lines   one reviewer pass
-review/pr_fix.py                       519 lines   one fix pass
-claude/skills/pr-review-loop/scan.py   289 lines   PR watch scanner
-install.py                              75 lines
-tests/                                   5 tests   installer + path resolution only
-```
+| What | Before (`review-queue@3dc9b3f`) | Now |
+| --- | --- | --- |
+| Processes | 2 daemons (`IPR_REPO` per process) + a prune job | 1 daemon (`local.pr-wizard`), prune is a thread |
+| Repos | `iprally/iprally`, `iprally/gitops`, hard-coded | detected from my PRs, worked where a checkout exists |
+| Knobs | constants in 3 files | one config file in chezmoi, three override levels |
+| Conventions | iprally's, in the prompts | each project's own files, read at the PR head |
+| Fixer checks | cljfmt + Karma in `pr_fix.py` | per-project `fix.gates`; iprally's are its built-in override |
+| State | `review-queue*.json`, `pr-fix*/`, `.clean-reviews.json`, `now.d/` | `~/.local/state/pr-wizard/state.db` |
+| Control | SIGUSR1, a shell snippet to re-arm | HTTP/1.1 + JSON on `api.sock` |
+| Ready alert | terminal-notifier | `ready_for_approval` events; the app notifies |
+| UI | `review-queue -l` | `pr-wizard -l` and `PR Wizard.app` |
+| Code | `bin/review-queue`, 841 lines | `pr_wizard/` package; `bin/review-queue` → `bin/pr-wizard` |
 
-The service is live. launchd runs `main` of `~/workdir/review-queue` for two repos
-(`iprally/iprally`: review + fix; `iprally/gitops`: fix only). Every step must leave it running.
+## Invariants
 
-## Guardrails
-
-- Keep each contract in [AGENTS.md › Contracts](../AGENTS.md#contracts-that-other-code-depends-on).
-  The markers live on GitHub PRs already: a format change must still read the old one.
-- Keep the state files readable, or migrate them in the same change. `review-queue.json`,
-  `review-queue.fixes.json` and `pr-fix/<N>.json` hold live per-PR progress.
+- One daemon process, one launchd label, one socket, for every project (AGENTS.md › Ground truth).
+- Each contract in [AGENTS.md › Contracts](../AGENTS.md#contracts-that-other-code-depends-on). The markers live on
+  GitHub PRs already: a format change must still read the old one.
+- With no config file, the defaults reproduce the behaviour before the overhaul.
 - Keep the symlinked entry points in `links.json` until agent-delegator stops calling them
-  (`~/.claude/skills/delegator/pr_review.py`, `pr_fix.py`, `prompts`).
-- Land in PRs of about 700 lines or less, tests included.
+  (`~/.local/bin/review-queue`, `~/.claude/skills/delegator/pr_review.py`, `pr_fix.py`, `prompts`).
+- `state.db` has one owning code path per table. Every write is `BEGIN IMMEDIATE`.
+- Land in commits of about 700 lines or less, tests included.
 
-## Repo coupling (IPRally)
-
-| Where | What |
-| --- | --- |
-| `bin/review-queue:47-50` | default repo `iprally/iprally`; `MONOREPO` decides review lane on/off and the state tag |
-| `review/pr_review.py:41` | same default repo |
-| `review/pr_fix.py:39` | state tag compares to `iprally/iprally` again |
-| `review/pr_fix.py:46` | `nvm use 22.15.1` |
-| `review/pr_fix.py:266-333` | test gate: `ui/src/cljs` → `ui/test/*_test.cljs` namespaces, `npm run postinstall` (loyto), shadow-cljs `karma-test`, `iprally_ui.karma_runner_test.init`, `cljfmt` |
-| `review/pr_fix.py:142` | only `github-actions` check runs count as CI |
-| `review/prompts/opus.md:33` | convention docs `docs/tech/`, `ui/docs/`, `api/docs/` |
-| `review/prompts/quality.md:16` | `.agents/skills/quality-self-review/SKILL.md` in the reviewed repo |
-| `claude/skills/pr-review-loop/scan.py:32-36` | hard-coded repo and root, ignores `IPR_REPO` |
-
-The review lane is off outside the monorepo because the prompts carry monorepo conventions.
-
-## Delegator coupling
+## Coupling that remains
 
 | Where | What |
 | --- | --- |
-| `review/pr_review.py:51` | `.clean-reviews.json` under `~/.claude/skills/delegator/` |
-| `review/pr_review.py:64` | briefs under `~/.claude/skills/delegator/briefs/`, keyed by bare PR number or branch |
-| `links.json` | old `~/.claude/skills/delegator/` runner paths |
-| `tests/test_paths.py:23-24` | asserts both delegator paths |
+| `pr_wizard/names.py` `MONOREPO` | the default repo of a bare `N` on the CLI and in the scripts |
+| `pr_wizard/names.py` `REPOS` | the two repos of the old JSON layout, for `migrate()` / `--reverse` only |
+| `pr_wizard/config.py` `DEFAULTS` | iprally's gates and gitops' review-off, as built-in project overrides |
+| `claude/skills/pr-review-loop/scan.py` | hard-coded `iprally/iprally`; reads `IPR_REPO_ROOT` only |
+| `review/pr_review.py` | briefs under `~/.claude/skills/delegator/briefs/`, by bare PR number or branch |
 | `claude/skills/pr-review-loop/SKILL.md` | needs agent-delegator's `pr-fixer` and `github` agents |
 
-## Machine coupling (macOS)
+macOS: the launchd plist, `launchctl kickstart`/`bootstrap`, `ProcessType Standard`, `lsof` for in-use worktrees
+(needs `/usr/sbin` on `PATH`), and `fcntl` flocks for every lock.
 
-- launchd plists, `launchctl kickstart`/`bootstrap`, `ProcessType Standard` (see AGENTS.md gotchas).
-- `bin/review-queue:61`: notifier app at `~/.local/share/review-queue/Review Queue.app`, built by hand, not in this repo.
-- `bin/review-queue:778`: `lsof` for in-use worktrees (needs `/usr/sbin` on `PATH`).
-- `fcntl` flocks for every lock: POSIX only.
-
-## Duplication
+## Still to do
 
 ```text
-                     bin/review-queue   pr_review.py   pr_fix.py   scan.py
-REPO / REPO_ROOT            ✓                ✓          (import)      ✓ (hard-coded)
-agent / FYI markers                          ✓              ✓          ✓
-sh / die / gh helpers       ✓                ✓              ✓          ✓
-JSON state load/save        ✓                ✓              ✓          ✓
-GraphQL threads query                                       ✓          ✓
+ unit 27     drop terminal-notifier       after the app runs at login with notifications allowed
+ cutover B   GitHub repo + checkout       sandudorogan/review-queue → pr-wizard, ~/workdir/review-queue → ~/workdir/pr-wizard
 ```
 
-`pr_fix.py` imports `LIMIT`, `REPO`, `REPO_ROOT` and `brief` from `pr_review.py`.
-The daemon calls both scripts as subprocesses and reads their stdout JSON.
+The owner confirms cutover B first (plan.md §5). Until then, the checkout, the clone URL and the
+install backups (`~/.local/state/review-queue/backups`) keep the old name.
 
 ## Known gaps
 
 - A `no-auto-fix` PR of mine: `scan.py` drops review threads on my PRs, so nobody acts on them.
-- Briefs resolve by bare PR number, so a gitops PR can pick up a monorepo brief with the same number.
-- `.clean-reviews.json` writes without a lock. A lost entry costs one extra review.
-- `fix_note` for `tests-red` hides Codex's summary of the cause.
-- One log file for both instances.
-
-## Test gaps
-
-No test covers the decision logic. These are pure or close to it, so they are cheap to pin first:
-
-```text
-bin/review-queue   decide · fingerprint parsing · false_clean · feedback_key · fixable · fixing · ready · row · priority
-pr_review.py       scope (round + range) · to_fix · split_findings · commentable_lines · extract_json · marker round-trip
-pr_fix.py          namespaces · mine_last · feedback filtering · stuck · failed_jobs filtering
-```
+- Briefs resolve by bare PR number, so a PR of another repo can pick up an iprally brief with the same number.
+- A Codex review with a "no ship" summary and zero findings counts as clean: `false_clean()` checks only the
+  summary's length and error words.
