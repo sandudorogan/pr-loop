@@ -132,8 +132,37 @@ extension QueueStore.Phase {
         #expect(store.pendingActions.isEmpty)
         await gate.open()
         await review.value
-        #expect(store.lastActionError == nil)
+        #expect(await eventually { store.lastActionError == nil })
         #expect(await sleeper.durations == [.seconds(6)])
+    }
+
+    @Test("a failed action returns before its banner clears")
+    func failureReturns() async {
+        let gate = Gate()
+        let daemon = ScriptedDaemon()
+        await daemon.fail(.review(pr), with: busy)
+        let store = store(daemon, sleeper: Sleeper(gate: gate))
+        await store.review(pr)
+        #expect(store.lastActionError != nil)
+        await gate.arrival()
+        await gate.open()
+        #expect(await eventually { store.lastActionError == nil })
+    }
+
+    @Test("retry reconnects at once, without waiting out the backoff")
+    func retry() async throws {
+        let gate = Gate()
+        let daemon = ScriptedDaemon(
+            info: [.failure(APIError.down), .success(try Snapshots.info())],
+            queue: [.success(try Snapshots.queue(rev: "a"))])
+        let store = store(daemon, sleeper: Sleeper(gate: gate))
+        store.start()
+        await gate.arrival()
+        #expect(store.phase.summary == "down down 1002.0")
+        store.retry()
+        #expect(await eventually { store.snapshot?.rev == "a" })
+        await gate.open()
+        store.stop()
     }
 
     @Test(

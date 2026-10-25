@@ -34,6 +34,11 @@ import Observation
         task = Task { await run() }
     }
 
+    public func retry() {
+        task?.cancel()
+        task = Task { await run() }
+    }
+
     public func stop() {
         task?.cancel()
         task = nil
@@ -90,8 +95,10 @@ import Observation
             pendingActions.subtract(actions)
             let failure = ActionFailure(pr: pr, error: error)
             lastActionError = failure
-            try? await sleep(.seconds(6))
-            if lastActionError?.id == failure.id { lastActionError = nil }
+            Task {
+                try? await sleep(.seconds(6))
+                if lastActionError?.id == failure.id { lastActionError = nil }
+            }
         }
     }
 }

@@ -2,6 +2,27 @@ import Foundation
 import PRWizardKit
 
 enum Snapshots {
+    private struct Lists: Decodable {
+        let items: [[String: JSONValue]]
+        let projects: [[String: JSONValue]]
+    }
+
+    static func item(_ index: Int, _ patch: [String: JSONValue] = [:]) throws -> QueueItem {
+        try patched(QueueItem.self, \.items, index, patch)
+    }
+
+    static func project(_ index: Int, _ patch: [String: JSONValue] = [:]) throws -> Project {
+        try patched(Project.self, \.projects, index, patch)
+    }
+
+    private static func patched<Value: Decodable>(
+        _ type: Value.Type, _ list: KeyPath<Lists, [[String: JSONValue]]>, _ index: Int,
+        _ patch: [String: JSONValue]
+    ) throws -> Value {
+        let object = try JSONDecoder().decode(Lists.self, from: Fixture.data("queue.json"))[keyPath: list][index]
+        return try JSONDecoder.daemon.decode(type, from: JSONEncoder().encode(object.merging(patch) { $1 }))
+    }
+
     static func info() throws -> DaemonInfo {
         try Fixture.decode(DaemonInfo.self, from: "info.json")
     }

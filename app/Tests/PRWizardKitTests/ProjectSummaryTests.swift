@@ -43,4 +43,26 @@ import Testing
         #expect(projects["iprally/gitops"]?.pools.map(\.id) == ["fix:iprally/gitops"])
         #expect(projects["sandudorogan/dataspex"]?.pools == [])
     }
+
+    @Test("the lane line names the lanes or why none run")
+    func laneLine() throws {
+        let projects = summaries(try Snapshots.queue())
+        #expect(projects["iprally/iprally"]?.laneLine == "review · fix")
+        #expect(projects["iprally/gitops"]?.laneLine == "fix only")
+        #expect(projects["clojure/clojurescript-site"]?.laneLine == "no local checkout")
+        #expect(projects["clojure/clojurescript-site"]?.needsAttention == true)
+        #expect(projects["iprally/iprally"]?.needsAttention == false)
+    }
+
+    @Test(
+        "every status and lane switch reads as one line",
+        arguments: [
+            ("active", true, false, "review only"),
+            ("off", false, false, "lanes off"),
+            ("error", true, true, "checkout error"),
+        ])
+    func laneLines(status: String, review: Bool, fix: Bool, line: String) throws {
+        let project = try Snapshots.project(0, ["status": .string(status), "review": .bool(review), "fix": .bool(fix)])
+        #expect(ProjectSummary(project, in: try Snapshots.queue()).laneLine == line)
+    }
 }
