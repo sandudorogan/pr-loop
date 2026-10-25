@@ -10,6 +10,8 @@ struct QueueWindow: View {
     @SceneStorage("inspector") private var showsInspector = false
     @SceneStorage("sidebarShown") private var showsSidebar = true
     @SceneStorage("inspectorTab") private var inspectorTab = PRInspector.Tab.status
+    @SceneStorage("inspectorWidth") private var inspectorWidth = 320.0
+    @State private var detailWidth: CGFloat = 0
     @State private var selection = Set<QueueItem.ID>()
     @State private var search = ""
     @State private var peek = PeekModel()
@@ -21,28 +23,23 @@ struct QueueWindow: View {
         NavigationSplitView(columnVisibility: columnVisibility) {
             ProjectSidebar(selection: $sidebar)
                 .toolbar(removing: .sidebarToggle)
-                .toolbar {
-                    ToolbarItem {
-                        Toggle(isOn: $showsSidebar) { Label("Sidebar", systemImage: "sidebar.leading") }
-                            .toggleStyle(.button)
-                            .help(showsSidebar ? "Hide the sidebar" : "Show the sidebar")
-                    }
-                }
+                .toolbar { ToolbarItem { sidebarToggle } }
         } detail: {
             HStack(spacing: 0) {
                 detail.frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                 if showsInspector {
-                    Divider()
-                    PRInspector(items: selected, tab: $inspectorTab).frame(width: 320)
+                    ResizeHandle(width: $inspectorWidth, range: inspectorRange)
+                    PRInspector(items: selected, tab: $inspectorTab).frame(width: CGFloat(inspectorWidth))
                 }
             }
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { detailWidth = $0 }
             .safeAreaInset(edge: .bottom) { banner }
         }
         .navigationTitle("PR Wizard")
         .navigationSubtitle(subtitle)
         .toolbar {
             QueueToolbar(
-                store: store, repo: sidebar.repo, showsInspector: $showsInspector, search: $search)
+                store: store, repo: sidebar.repo, items: selected, showsInspector: $showsInspector, search: $search)
         }
         .focusedSceneValue(
             \.queueFocus,
@@ -57,11 +54,25 @@ struct QueueWindow: View {
         }
     }
 
+    private var sidebarToggle: some View {
+        Button {
+            showsSidebar.toggle()
+        } label: {
+            Label("Sidebar", systemImage: showsSidebar ? "rectangle.leadingthird.inset.filled" : "sidebar.leading")
+        }
+        .help(showsSidebar ? "Hide the sidebar" : "Show the sidebar")
+    }
+
+    /// The inspector and its 1 pt divider never squeeze the table below its minimum.
+    private var inspectorRange: ClosedRange<Double> {
+        280...max(280, Double(detailWidth - QueueTable.minWidth - 1))
+    }
+
     /// SwiftUI drops a minimum on the detail column (it runs under the sidebar), so the window
-    /// carries it: the sidebar (220 plus its 8 pt inset), the table and the docked inspector column (320 plus its
-    /// 1 pt divider). Opening the inspector in a narrower window grows the window, and the table never scrolls sideways.
+    /// carries it: the sidebar (220 plus its 8 pt inset), the table and the docked inspector column (its width plus
+    /// its 1 pt divider). Opening the inspector in a narrower window grows the window, and the table never scrolls sideways.
     private var minWidth: CGFloat {
-        max(820, (showsSidebar ? 228 : 0) + QueueTable.minWidth + (showsInspector ? 321 : 0))
+        max(820, (showsSidebar ? 228 : 0) + QueueTable.minWidth + (showsInspector ? CGFloat(inspectorWidth) + 1 : 0))
     }
 
     private var columnVisibility: Binding<NavigationSplitViewVisibility> {

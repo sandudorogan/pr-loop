@@ -14,13 +14,8 @@ struct PRInspector: View {
     var body: some View {
         if items.count == 1, let item = items.first {
             VStack(spacing: 0) {
-                Picker("Inspector", selection: $tab) {
-                    Text("Status").tag(Tab.status)
-                    Text("Settings").tag(Tab.settings)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(8)
+                bar
+                Divider()
                 switch tab {
                 case .status: status(InspectorModel(item))
                 case .settings: PRSettingsTab(item: item)
@@ -30,6 +25,21 @@ struct PRInspector: View {
             ContentUnavailableView(
                 items.isEmpty ? "No Selection" : "Multiple Selection", systemImage: "sidebar.trailing")
         }
+    }
+
+    private var bar: some View {
+        HStack {
+            Text(tab == .status ? "Status" : "PR Settings").font(.headline)
+            Spacer()
+            switch tab {
+            case .status: Button("PR Settings", systemImage: "gearshape") { tab = .settings }.help("PR settings")
+            case .settings: Button("Close", systemImage: "xmark") { tab = .status }.help("Back to the status")
+            }
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12)
+        .frame(height: 36)
     }
 
     private func status(_ model: InspectorModel) -> some View {

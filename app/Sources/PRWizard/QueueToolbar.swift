@@ -4,6 +4,7 @@ import SwiftUI
 struct QueueToolbar: ToolbarContent {
     let store: QueueStore
     let repo: String?
+    let items: [QueueItem]
     @Binding var showsInspector: Bool
     @Binding var search: String
 
@@ -11,8 +12,7 @@ struct QueueToolbar: ToolbarContent {
         ToolbarItem(placement: .principal) { DaemonStatus(store: store, repo: repo) }
         ToolbarItem(placement: .primaryAction) { FilterField(text: $search) }
         ToolbarItemGroup(placement: .primaryAction) {
-            let isPaused = store.snapshot?.isPaused == true
-            if isPaused { pause(isPaused).buttonStyle(.borderedProminent) } else { pause(isPaused) }
+            pause
             Button {
                 Task { await store.refresh() }
             } label: {
@@ -21,20 +21,27 @@ struct QueueToolbar: ToolbarContent {
             }
             .disabled(store.snapshot == nil || store.isRefreshing)
             .help(store.isRefreshing ? "Fetching the PRs from GitHub…" : "Fetch the PRs from GitHub now")
-            Toggle(isOn: $showsInspector) { Label("Inspector", systemImage: "sidebar.trailing") }
-                .toggleStyle(.button)
-                .help(showsInspector ? "Hide the inspector" : "Show the inspector")
+            Button {
+                showsInspector.toggle()
+            } label: {
+                Label(
+                    "Inspector",
+                    systemImage: showsInspector ? "rectangle.trailingthird.inset.filled" : "sidebar.trailing")
+            }
+            .help(showsInspector ? "Hide the inspector" : "Show the inspector")
         }
     }
 
-    private func pause(_ isPaused: Bool) -> some View {
-        Button {
-            Task { await store.setPaused(!isPaused) }
+    private var pause: some View {
+        let refs = items.map(\.ref)
+        let resumes = items.resumes
+        return Button {
+            Task { await store.setPaused(refs, !resumes) }
         } label: {
-            Label(isPaused ? "Resume" : "Pause", systemImage: isPaused ? "play.fill" : "pause.fill")
+            Label(resumes ? "Resume" : "Pause", systemImage: resumes ? "play.fill" : "pause.fill")
         }
-        .disabled(store.snapshot == nil || store.pendingActions.contains(.setPaused(!isPaused)))
-        .help(isPaused ? "Resume every lane" : "Pause every lane")
+        .disabled(refs.isEmpty || refs.contains { store.pendingActions.contains(.pause($0)) })
+        .help(refs.isEmpty ? "Select a PR to pause" : resumes ? "Resume the PR" : "Pause the PR: no new review or fix")
     }
 }
 

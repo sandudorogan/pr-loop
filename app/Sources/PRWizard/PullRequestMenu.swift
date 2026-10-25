@@ -26,6 +26,9 @@ struct PullRequestMenu: View {
         action("Retry Fix", items.map { .fix($0, in: projects) }, PendingAction.fix, "f", [.command, .shift]) {
             for item in items { await store.fix(item.ref) }
         }
+        action(items.resumes ? "Resume" : "Pause", [], PendingAction.pause, "p", [.command, .shift]) {
+            await store.setPaused(items.map(\.ref), !items.resumes)
+        }
         Divider()
         Button("Show Findings") { peek?.toggle() }
             .keyboardShortcut("y")

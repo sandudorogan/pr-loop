@@ -92,6 +92,8 @@ private struct MarkCell: View {
             Text("\(rank)").monospacedDigit().foregroundStyle(.secondary)
         } else if item.group == .ready {
             Image(systemName: "checkmark").foregroundStyle(Tone.good.color).accessibilityLabel("Ready")
+        } else if item.isPaused {
+            Image(systemName: "pause.fill").foregroundStyle(.secondary).accessibilityLabel("Paused")
         }
     }
 }
