@@ -423,9 +423,9 @@ def run(pr):
     resume = prior.get("head") == meta["headRefOid"]
     conflict = meta["mergeable"] == "CONFLICTING" and not resume
     if not items and not conflict and not resume:
-        names = stuck(jobs, state)
-        return {"pr": pr, "status": "ci-stuck", "summary": f"{', '.join(names)} red after {CI_TRIES} refuted looks, "
-                                                           f"needs a human"} if names else \
+        red_jobs = stuck(jobs, state)
+        return {"pr": pr, "status": "ci-stuck", "summary": f"{', '.join(red_jobs)} red after {CI_TRIES} refuted looks, "
+                                                           f"needs a human"} if red_jobs else \
             {"pr": pr, "status": "nothing-to-fix"}
     wt = worktree(meta, prior)
     conv = project_conventions(wt, meta, items)
