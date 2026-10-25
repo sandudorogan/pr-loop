@@ -1,5 +1,3 @@
-import importlib.machinery
-import importlib.util
 import io
 import contextlib
 from pathlib import Path
@@ -7,11 +5,7 @@ import subprocess
 import unittest
 from unittest.mock import MagicMock, call, patch
 
-ROOT = Path(__file__).resolve().parents[1]
-loader = importlib.machinery.SourceFileLoader("review_queue", str(ROOT / "bin/review-queue"))
-spec = importlib.util.spec_from_loader("review_queue", loader)
-rq = importlib.util.module_from_spec(spec)
-loader.exec_module(rq)
+from pr_wizard import queue as rq
 
 
 class Stop(Exception):
@@ -32,7 +26,7 @@ class PruneInDaemon(unittest.TestCase):
         thread.return_value.start.assert_called_once_with()
 
     def test_the_daemon_starts_the_pruner(self):
-        self.assertIn("start_pruner()", Path(ROOT / "bin/review-queue").read_text().split("def daemon()")[1])
+        self.assertIn("start_pruner()", Path(rq.__file__).read_text().split("def daemon()")[1])
 
     def test_loop_prunes_every_repo_at_start_then_every_interval(self):
         sleep, prune = MagicMock(side_effect=[None, Stop]), MagicMock()

@@ -1,6 +1,7 @@
 {
   "links": {
     ".local/bin/review-queue": "bin/review-queue",
+    ".local/bin/pr-wizard": "bin/pr-wizard",
     ".claude/skills/delegator/pr_review.py": "review/pr_review.py",
     ".claude/skills/delegator/pr_fix.py": "review/pr_fix.py",
     ".claude/skills/delegator/review-schema.json": "review/review-schema.json",

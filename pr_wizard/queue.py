@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Reviews my own open PRs and the ones that wait on me, three at a time, then stays quiet until their own diff changes.
 
 Usage:

@@ -1,16 +1,11 @@
 """Shared fixtures: the three scripts as modules, and builders for queue PRs and GitHub payloads."""
-import importlib.machinery
-import importlib.util
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "review"))
 
-loader = importlib.machinery.SourceFileLoader("review_queue", str(ROOT / "bin/review-queue"))
-rq = importlib.util.module_from_spec(importlib.util.spec_from_loader("review_queue", loader))
-loader.exec_module(rq)
-
+from pr_wizard import queue as rq  # noqa: E402
 import pr_fix, pr_review  # noqa: E402
 
 MONOREPO, GITOPS = rq.MONOREPO, "iprally/gitops"

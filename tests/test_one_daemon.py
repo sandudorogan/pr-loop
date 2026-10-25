@@ -1,7 +1,5 @@
 import contextlib
 import fcntl
-import importlib.machinery
-import importlib.util
 import io
 import json
 from pathlib import Path
@@ -9,11 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-loader = importlib.machinery.SourceFileLoader("review_queue", str(ROOT / "bin/review-queue"))
-spec = importlib.util.spec_from_loader("review_queue", loader)
-rq = importlib.util.module_from_spec(spec)
-loader.exec_module(rq)
+from pr_wizard import queue as rq
 
 GITOPS = "iprally/gitops"
 
