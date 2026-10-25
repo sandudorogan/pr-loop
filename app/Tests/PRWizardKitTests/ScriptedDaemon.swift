@@ -4,6 +4,7 @@ actor ScriptedDaemon: DaemonAPI {
     enum Call: Hashable {
         case info
         case queue(since: String?, wait: Duration)
+        case events(since: String?, wait: Duration)
         case history(repo: String?, limit: Int)
         case refresh
         case moveToFront([PRRef])
@@ -21,6 +22,7 @@ actor ScriptedDaemon: DaemonAPI {
     private var histories: [Result<[HistoryEntry], any Error>]
     private var configs: [Result<ConfigEnvelope, any Error>]
     private var patches: [Result<ConfigEnvelope, any Error>]
+    private var pages: [Result<EventPage, any Error>]
     private var errors: [Call: any Error] = [:]
     private let gate: Gate?
     private(set) var calls: [Call] = []
@@ -28,13 +30,15 @@ actor ScriptedDaemon: DaemonAPI {
     init(
         info: [Result<DaemonInfo, any Error>] = [], queue: [Result<QueueSnapshot, any Error>] = [],
         history: [Result<[HistoryEntry], any Error>] = [], config: [Result<ConfigEnvelope, any Error>] = [],
-        patch: [Result<ConfigEnvelope, any Error>] = [], gate: Gate? = nil
+        patch: [Result<ConfigEnvelope, any Error>] = [], events: [Result<EventPage, any Error>] = [],
+        gate: Gate? = nil
     ) {
         infos = info
         snapshots = queue
         histories = history
         configs = config
         patches = patch
+        pages = events
         self.gate = gate
     }
 
@@ -52,7 +56,11 @@ actor ScriptedDaemon: DaemonAPI {
         return try Self.next(&snapshots)
     }
 
-    func events(since cursor: String?, wait: Duration) async throws -> EventPage { throw Unscripted() }
+    func events(since cursor: String?, wait: Duration) async throws -> EventPage {
+        calls.append(.events(since: cursor, wait: wait))
+        return try Self.next(&pages)
+    }
+
     func config() async throws -> ConfigEnvelope {
         calls.append(.config)
         return try Self.next(&configs)

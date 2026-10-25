@@ -4,13 +4,26 @@ import SwiftUI
 
 struct GeneralPane: View {
     @AppStorage(AppStorageKey.showsMenuBarExtra) private var showsMenuBarExtra = true
+    @AppStorage(AppStorageKey.notifiesReady) private var notifiesReady = true
     @Environment(QueueStore.self) private var store
+    @Environment(ReadyNotifications.self) private var notifications
 
     var body: some View {
         Form {
             Section("App") {
                 Toggle("Show in menu bar", isOn: $showsMenuBarExtra)
                 LoginItemToggle()
+            }
+            Section("Notifications") {
+                Toggle("Notify when a colleague's PR is ready for your approval", isOn: $notifiesReady)
+                    .onChange(of: notifiesReady) { Task { await notifications.authorize() } }
+                if notifications.authorization == .denied {
+                    LabeledContent {
+                        Button("Open…") { openNotificationSettings() }
+                    } label: {
+                        Label("Notifications are off for PR Wizard in System Settings.", systemImage: "flag.fill")
+                    }
+                }
             }
             Section("Daemon") {
                 daemon
@@ -49,6 +62,12 @@ struct GeneralPane: View {
             state("The daemon speaks API v\(api). This app speaks v1.", .bad)
         } else {
             state("Connecting…", .neutral)
+        }
+    }
+
+    private func openNotificationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
         }
     }
 

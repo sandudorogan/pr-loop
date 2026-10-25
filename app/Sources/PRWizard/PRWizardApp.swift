@@ -14,7 +14,10 @@ struct PRWizardApp: App {
         .defaultSize(width: 1180, height: 640)
         .commands { QueueCommands(store: delegate.store) }
         Settings {
-            SettingsView().environment(delegate.store).environment(delegate.settings)
+            SettingsView()
+                .environment(delegate.store)
+                .environment(delegate.settings)
+                .environment(delegate.notifications)
         }
         MenuBarExtra("PR Wizard", systemImage: "wand.and.stars", isInserted: $showsMenuBarExtra) {
             MenuBarContent().environment(delegate.store)
