@@ -51,7 +51,7 @@ private actor Launches: DaemonLauncher {
             ScriptedDaemon(info: [.success(try Snapshots.info())], queue: [.success(try Snapshots.queue(rev: "a"))]))
         await store.run()
         #expect(store.phase.summary == "live a")
-        #expect(store.info?.label == "local.review-queue")
+        #expect(store.info?.label == "local.pr-wizard")
         #expect(store.projects.count == 4)
     }
 

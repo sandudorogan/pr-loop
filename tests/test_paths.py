@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import prs  # noqa: F401
 from pr_wizard import db, names
@@ -19,7 +20,7 @@ STATE = Path.home() / ".local/state"
 def script_names(script, **env):
     probe = ("import json, runpy, sys; g = runpy.run_path(sys.argv[1]); "
              "print(json.dumps({k: g.get(k) for k in ('REPO', 'REPO_ROOT', 'BRIEFS')}))")
-    clean = {k: v for k, v in os.environ.items() if not k.startswith("IPR_")}
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("IPR_", "PR_WIZARD_REPO"))}
     out = subprocess.run([sys.executable, "-c", probe, str(script)], env={**clean, **env}, cwd="/",
                          capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
@@ -62,13 +63,19 @@ class RunnerPaths(unittest.TestCase):
                 link.symlink_to(ROOT / "review" / script)
                 default = script_names(link)
                 gitops = script_names(link, IPR_REPO=GITOPS, IPR_REPO_ROOT="/tmp/gitops")
+                wizard = script_names(link, PR_WIZARD_REPO=GITOPS, PR_WIZARD_REPO_ROOT="/tmp/gitops",
+                                      IPR_REPO=names.MONOREPO, IPR_REPO_ROOT="/tmp/iprally")
             self.assertEqual((default["REPO"], default["REPO_ROOT"]), (names.MONOREPO, str(Path.home() / "workdir/iprally")))
             self.assertEqual((gitops["REPO"], gitops["REPO_ROOT"]), (GITOPS, "/tmp/gitops"))
+            self.assertEqual((wizard["REPO"], wizard["REPO_ROOT"]), (GITOPS, "/tmp/gitops"))
             if script == "pr_review.py":
                 self.assertEqual(Path(default["BRIEFS"]), Path.home() / ".claude/skills/delegator/briefs")
 
-    def test_names_keep_todays_paths(self):
-        self.assertEqual(names.LOG, str(Path.home() / "Library/Logs/review-queue.log"))
+    def test_names_carry_the_pr_wizard_paths(self):
+        self.assertEqual(names.LABEL, "local.pr-wizard")
+        self.assertEqual(names.LOG, str(Path.home() / "Library/Logs/pr-wizard.log"))
+        self.assertEqual(names.DAEMON_LOCK, str(STATE / "pr-wizard/daemon.lock"))
+        self.assertEqual(names.DAEMON_PID, str(STATE / "pr-wizard/daemon.pid"))
         self.assertEqual(names.root(GITOPS), str(Path.home() / "workdir/gitops"))
         self.assertEqual(db.DB, names.DB)
         self.assertEqual(names.DB, str(STATE / "pr-wizard/state.db"))
@@ -81,16 +88,23 @@ class RunnerPaths(unittest.TestCase):
             self.assertIsInstance(json.loads(schema.read_text()), dict)
         for template in (ROOT / "launchd").glob("*.tmpl"):
             data = plistlib.loads(template.read_text().replace("{{ .chezmoi.homeDir }}", str(Path.home())).encode())
-            self.assertEqual(data["ProgramArguments"][0], str(Path.home() / ".local/bin/review-queue"))
+            self.assertEqual(data["ProgramArguments"][0], str(Path.home() / ".local/bin/pr-wizard"))
+            self.assertEqual({data["StandardOutPath"], data["StandardErrorPath"]}, {names.LOG})
             self.assertNotIn("IPR_REPO", data.get("EnvironmentVariables", {}))
 
     def test_the_daemon_is_the_only_launchd_job(self):
         plists = [plistlib.loads(t.read_bytes()) for t in (ROOT / "launchd").glob("*.tmpl")]
-        self.assertEqual([p["Label"] for p in plists], ["local.review-queue"])
+        self.assertEqual([p["Label"] for p in plists], [names.LABEL])
         self.assertEqual(plists[0]["ProcessType"], "Standard")
         self.assertIn("/usr/sbin", plists[0]["EnvironmentVariables"]["PATH"].split(":"))
         templates = json.loads((ROOT / "links.json").read_text())["templates"]
-        self.assertEqual(list(templates.values()), ["launchd/local.review-queue.plist.tmpl"])
+        self.assertEqual(templates, {"Library/LaunchAgents/local.pr-wizard.plist": "launchd/local.pr-wizard.plist.tmpl"})
+
+    def test_the_label_file_names_the_launchd_job(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(names, "LABEL_FILE", f"{temporary}/launchd-label"):
+            names.write_label()
+            self.assertEqual(Path(names.LABEL_FILE).read_text(), "local.pr-wizard\n")
 
 
 if __name__ == "__main__":

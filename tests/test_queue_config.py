@@ -120,7 +120,7 @@ class Projects(Configured):
         self.assertEqual(rq.checkouts(), {MONOREPO: "/src/iprally", GITOPS: os.path.expanduser("~/workdir/gitops"),
                                           "acme/tools": os.path.expanduser("~/src/tools")})
         self.assertEqual({p["repo"]: p["status"] for p in rq.listed([])}[NEW], "no-checkout")
-        self.assertEqual(rq.child("acme/tools")["env"]["IPR_REPO_ROOT"], os.path.expanduser("~/src/tools"))
+        self.assertEqual(rq.child("acme/tools")["env"]["PR_WIZARD_REPO_ROOT"], os.path.expanduser("~/src/tools"))
 
     def test_lanes_follow_the_project_and_the_labels_still_win(self):
         self.write({"projects": {NEW: {"root": "/src/w", "fix": {"enabled": False}}, GITOPS: {"review": {"enabled": True}}}})

@@ -1,7 +1,7 @@
 """The command line of the one PR Wizard daemon. review-queue is the same command.
 
 Usage:
-  pr-wizard --daemon     launchd keeps this alive: 3 workers review, 3 fix my PRs, the queue refreshes every 5 min
+  pr-wizard --daemon     launchd job local.pr-wizard: 3 workers review, 3 fix my PRs, the queue refreshes every 5 min
   pr-wizard              run one review tick now, in this terminal, beside the daemon
   pr-wizard --pr 16400   review one PR now, even if its own diff is unchanged
   pr-wizard -n           dry run: print each PR's gate decision, review nothing
@@ -17,6 +17,7 @@ Usage:
 -l, --next, --bg, --wait, --pause, --resume and config ask the daemon on its socket. With the daemon down, -l and
 --next work on state.db here, --bg and --wait start the daemon. --pr, -n, the tick, --prune and migrate run here.
 A PR is N (of --repo, else $PR_WIZARD_REPO, else $IPR_REPO, else iprally/iprally) or owner/name#N.
+State: ~/.local/state/pr-wizard/state.db. Log: ~/Library/Logs/pr-wizard.log.
 """
 import argparse, json, os, re, subprocess, sys, time
 
@@ -152,7 +153,7 @@ def main():
     a = ap.parse_args()
     if a.repo and a.repo not in q.checkouts():
         ap.error(f"--repo {a.repo}: no local checkout of it under detect.roots or projects[repo].root")
-    repo = a.repo or os.environ.get("PR_WIZARD_REPO") or names.env_repo()
+    repo = a.repo or names.env_repo()
     if a.cmd == "migrate":
         return print("\n".join(names.reverse()) if a.reverse else q.migrated(names.migrate(a.dry_run), a.dry_run))
     if not (a.prune or a.bg):

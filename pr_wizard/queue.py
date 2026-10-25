@@ -21,7 +21,7 @@ fix lane alone. The daemon prunes the worktrees of every active project at start
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
        └────────────────────────────────────────────────────────────────┘
-Log: ~/Library/Logs/review-queue.log
+Log: ~/Library/Logs/pr-wizard.log
 """
 import fcntl, hashlib, json, os, re, signal, subprocess, sys, threading, time, traceback
 from contextlib import contextmanager
@@ -31,8 +31,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from pr_wizard import __version__, api, config, db, history, names, pools, projects, snapshot
-from pr_wizard.names import (FIXES, LABEL, LOCK, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PID, PR_FIX, PR_REVIEW,
-                              REPOS, STATE, env_repo, path, tag)
+from pr_wizard.names import (FIXES, LABEL, LOG, MONOREPO, NO_FIX, NO_REVIEW, NOTIFIER, PR_FIX, PR_REVIEW, REPOS, STATE,
+                              env_repo, tag)
 
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
 
@@ -146,7 +146,7 @@ def root(repo):
 
 
 def child(repo):
-    return {"env": {**os.environ, "IPR_REPO": repo, "IPR_REPO_ROOT": root(repo)}, "cwd": root(repo)}
+    return {"env": {**os.environ, "PR_WIZARD_REPO": repo, "PR_WIZARD_REPO_ROOT": root(repo)}, "cwd": root(repo)}
 
 
 def pr_key(pr):
@@ -720,20 +720,6 @@ def summary(listing):
     return ", ".join(f"{p['repo']} {lanes(p)}" for p in listing)
 
 
-def serving(held):
-    """The repos this daemon works on. A repo that had its own daemon before stays off while that one still
-    holds its lock; `held` keeps the locks taken so far."""
-    for repo in REPOS.keys() - held.keys() - {MONOREPO}:
-        lock = open(path(repo, LOCK), "w")
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            held[repo] = lock
-        except BlockingIOError:
-            lock.close()
-            log_once(repo, "-", f"skipped: an old {repo} daemon holds {path(repo, LOCK)}")
-    return {repo for repo in checkouts() if repo == MONOREPO or repo in held or repo not in REPOS}
-
-
 class Runtime:
     """What the API serves: the last queue fetch, its refresh status, and the changes long-polls wait on."""
 
@@ -921,17 +907,16 @@ def daemon():
     """Workers review nonstop. The queue data behind them refreshes every `refresh.interval_s`, every
     `refresh.idle_s` while a worker has nothing to take, and at once on SIGUSR1. Each refresh builds the pools
     the config asks for."""
-    lock = open(path(MONOREPO, LOCK), "w")
+    lock = open(names.DAEMON_LOCK, "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return say("daemon already running")
-    with open(path(MONOREPO, PID), "w") as fh:
+    with open(names.DAEMON_PID, "w") as fh:
         fh.write(str(os.getpid()))
     db.sweep_runs()
     rt = Runtime()
     serve(rt)
-    held = {}
     rt.attach(pools.Pools())
     signal.signal(signal.SIGUSR1, lambda *_: rt.refetch())
 
@@ -942,7 +927,7 @@ def daemon():
             try:
                 prs, cost, left = fetched(note=say)
                 found({pr["repo"] for pr in prs})
-                served = serving(held)
+                served = checkouts()
                 worked = [pr for pr in prs if pr["repo"] in served]
                 rt.refreshed(prs)
                 track(prs)
@@ -992,7 +977,7 @@ def track(prs):
 def kick():
     """Ask the daemon for a queue refresh now; False when no daemon runs."""
     try:
-        os.kill(int(open(path(MONOREPO, PID)).read()), signal.SIGUSR1)
+        os.kill(int(open(names.DAEMON_PID).read()), signal.SIGUSR1)
         return True
     except (OSError, ValueError):
         return False

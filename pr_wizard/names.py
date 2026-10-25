@@ -11,17 +11,18 @@ PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
 
 MONOREPO = "iprally/iprally"
 REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally"}, "iprally/gitops": {"root": f"{HOME}/workdir/gitops"}}
-LABEL = "local.review-queue"
+LABEL = "local.pr-wizard"
 NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
 
 STATE_DIR = f"{HOME}/.local/state"
-STATE, FIXES, NEXT, LOCK, LOCKS, NOWS, PID = ".json", ".fixes.json", ".next", ".lock", ".locks", ".now.d", ".pid"
+STATE, FIXES, NEXT, LOCK, LOCKS, NOWS = ".json", ".fixes.json", ".next", ".lock", ".locks", ".now.d"
 WIZARD = f"{STATE_DIR}/pr-wizard"
 DB = f"{WIZARD}/state.db"
 SCRATCH = f"{WIZARD}/scratch"
 SOCKET = f"{WIZARD}/api.sock"
 LABEL_FILE = f"{WIZARD}/launchd-label"
-LOG = f"{HOME}/Library/Logs/review-queue.log"
+DAEMON_LOCK, DAEMON_PID = f"{WIZARD}/daemon.lock", f"{WIZARD}/daemon.pid"
+LOG = f"{HOME}/Library/Logs/pr-wizard.log"
 NOTIFIER = f"{HOME}/.local/share/review-queue/Review Queue.app/Contents/MacOS/terminal-notifier"
 DELEGATOR = f"{HOME}/.claude/skills/delegator"
 BRIEFS = f"{DELEGATOR}/briefs"
@@ -62,15 +63,15 @@ def worktrees(repo_root):
 
 
 def env_repo():
-    return os.environ.get("IPR_REPO", MONOREPO)
+    return os.environ.get("PR_WIZARD_REPO") or os.environ.get("IPR_REPO", MONOREPO)
 
 
 def env_root(repo):
-    return os.environ.get("IPR_REPO_ROOT", f"{HOME}/workdir/{repo.split('/')[1]}")
+    return os.environ.get("PR_WIZARD_REPO_ROOT") or os.environ.get("IPR_REPO_ROOT", f"{HOME}/workdir/{repo.split('/')[1]}")
 
 
 def legacy():
-    """Today's JSON state: {rows: {repo: {table: rows}}, files, scratch, ephemera}. The daemon lock and pid stay."""
+    """Today's JSON state: {rows: {repo: {table: rows}}, files, scratch, ephemera}. The old daemon lock and pid stay."""
     read = lambda p, empty: json.load(open(p)) if os.path.exists(p) else empty
     found = {"rows": {}, "files": [], "scratch": [], "ephemera": []}
     for repo in REPOS:

@@ -11,6 +11,6 @@
   },
   "config": ".config/pr-wizard/config.json",
   "templates": {
-    "Library/LaunchAgents/local.review-queue.plist": "launchd/local.review-queue.plist.tmpl"
+    "Library/LaunchAgents/local.pr-wizard.plist": "launchd/local.pr-wizard.plist.tmpl"
   }
 }

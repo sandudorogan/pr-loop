@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>local.review-queue</string>
+  <string>local.pr-wizard</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{{ .chezmoi.homeDir }}/.local/bin/review-queue</string>
+    <string>{{ .chezmoi.homeDir }}/.local/bin/pr-wizard</string>
     <string>--daemon</string>
   </array>
   <key>EnvironmentVariables</key>
@@ -23,8 +23,8 @@
   <key>ProcessType</key>
   <string>Standard</string>
   <key>StandardOutPath</key>
-  <string>{{ .chezmoi.homeDir }}/Library/Logs/review-queue.log</string>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/pr-wizard.log</string>
   <key>StandardErrorPath</key>
-  <string>{{ .chezmoi.homeDir }}/Library/Logs/review-queue.log</string>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/pr-wizard.log</string>
 </dict>
 </plist>

@@ -1,5 +1,4 @@
 import contextlib
-import fcntl
 import io
 import json
 from pathlib import Path
@@ -68,36 +67,24 @@ class OneDaemon(unittest.TestCase):
 
     def test_path_helpers_keep_todays_names(self):
         found = {kind: (Path(names.path(rq.MONOREPO, kind)).name, Path(names.path(GITOPS, kind)).name)
-                 for kind in (names.STATE, names.FIXES, names.NEXT, names.LOCKS, names.NOWS, names.LOCK, names.PID)}
+                 for kind in (names.STATE, names.FIXES, names.NEXT, names.LOCKS, names.NOWS, names.LOCK)}
         self.assertEqual(found, {
             ".json": ("review-queue.json", "review-queue-gitops.json"),
             ".fixes.json": ("review-queue.fixes.json", "review-queue-gitops.fixes.json"),
             ".next": ("review-queue.next", "review-queue-gitops.next"),
             ".locks": ("review-queue.locks", "review-queue-gitops.locks"),
             ".now.d": ("review-queue.now.d", "review-queue-gitops.now.d"),
-            ".lock": ("review-queue.lock", "review-queue-gitops.lock"),
-            ".pid": ("review-queue.pid", "review-queue-gitops.pid")})
-        self.assertEqual(rq.LABEL, "local.review-queue")
+            ".lock": ("review-queue.lock", "review-queue-gitops.lock")})
 
     def test_children_run_in_their_repo(self):
         for repo, root in ((rq.MONOREPO, "iprally"), (GITOPS, "gitops")):
             run = rq.child(repo)
             self.assertEqual(run["cwd"], str(Path.home() / "workdir" / root))
-            self.assertEqual((run["env"]["IPR_REPO"], run["env"]["IPR_REPO_ROOT"]), (repo, run["cwd"]))
+            self.assertEqual((run["env"]["PR_WIZARD_REPO"], run["env"]["PR_WIZARD_REPO_ROOT"]), (repo, run["cwd"]))
 
     def test_review_lane_is_off_for_gitops(self):
         self.assertFalse(rq.unreviewed(dict(node(rq.MONOREPO, 1), repo=rq.MONOREPO)))
         self.assertTrue(rq.unreviewed(dict(node(GITOPS, 1), repo=GITOPS)))
-
-    def test_a_held_legacy_lock_skips_its_repo(self):
-        held = {}
-        with open(rq.path(GITOPS, rq.LOCK), "w") as old:
-            fcntl.flock(old, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            with contextlib.redirect_stdout(io.StringIO()) as out:
-                self.assertEqual(rq.serving(held), {rq.MONOREPO})
-            self.assertIn("gitops#-", out.getvalue())
-        self.assertEqual(rq.serving(held), {rq.MONOREPO, GITOPS})
-        self.addCleanup(held[GITOPS].close)
 
     def test_list_mixes_both_repos_in_priority_order(self):
         db.bump(GITOPS, 3)

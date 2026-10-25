@@ -6,7 +6,7 @@
   "pid": 48973,
   "started_at": "2026-10-25T09:00:00+03:00",
   "uptime_s": 10862,
-  "label": "local.review-queue",
+  "label": "local.pr-wizard",
   "paused": false,
   "projects": [
     {"repo": "iprally/iprally", "status": "active", "available": true, "review": true, "fix": true, "checkout": {"path": "/Users/sandu.dorogan/workdir/iprally", "source": "detected"}, "prs": 3, "error": null, "conventions": {"ref": "origin/main", "files": ["AGENTS.md", "CLAUDE.md", "api/AGENTS.md", "api/CLAUDE.md", "ui/AGENTS.md", "ui/CLAUDE.md", ".clj-kondo/config.edn"], "skills": ["add-phosphor-icon", "adr", "quality-self-review"]}, "gates": [{"name": "cljfmt", "kind": "format", "source": "default"}, {"name": "Karma", "kind": "test", "source": "default"}]},
