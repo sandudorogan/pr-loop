@@ -8,6 +8,7 @@ extension Tone {
         case .working: .accentColor
         case .good: .green
         case .info: .blue
+        case .caution: .yellow
         case .attention: .orange
         case .bad: .red
         }

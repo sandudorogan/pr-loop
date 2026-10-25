@@ -1,3 +1,3 @@
 public enum Tone: Hashable, Sendable {
-    case neutral, working, good, info, attention, bad
+    case neutral, working, good, info, caution, attention, bad
 }

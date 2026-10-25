@@ -19,7 +19,7 @@ struct QueueWindow: View {
         } detail: {
             detail
                 .inspector(isPresented: $showsInspector) {
-                    ContentUnavailableView("No Selection", systemImage: "sidebar.trailing")
+                    PRInspector(items: selected)
                         .inspectorColumnWidth(min: 260, ideal: 320)
                 }
                 .safeAreaInset(edge: .bottom) { banner }
