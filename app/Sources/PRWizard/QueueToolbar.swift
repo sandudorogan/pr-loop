@@ -21,12 +21,9 @@ struct QueueToolbar: ToolbarContent {
             }
             .disabled(store.snapshot == nil || store.isRefreshing)
             .help(store.isRefreshing ? "Fetching the PRs from GitHub…" : "Fetch the PRs from GitHub now")
-            Button {
-                showsInspector.toggle()
-            } label: {
-                Label("Inspector", systemImage: "sidebar.trailing")
-            }
-            .help(showsInspector ? "Hide the inspector" : "Show the inspector")
+            Toggle(isOn: $showsInspector) { Label("Inspector", systemImage: "sidebar.trailing") }
+                .toggleStyle(.button)
+                .help(showsInspector ? "Hide the inspector" : "Show the inspector")
         }
     }
 

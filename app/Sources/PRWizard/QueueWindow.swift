@@ -8,6 +8,7 @@ struct QueueWindow: View {
     @SceneStorage("sidebar") private var sidebar = SidebarSelection.all
     @SceneStorage("columns") private var columns = TableColumnCustomization<QueueItem>()
     @SceneStorage("inspector") private var showsInspector = false
+    @SceneStorage("sidebarShown") private var showsSidebar = true
     @SceneStorage("inspectorTab") private var inspectorTab = PRInspector.Tab.status
     @State private var selection = Set<QueueItem.ID>()
     @State private var search = ""
@@ -17,8 +18,16 @@ struct QueueWindow: View {
     private var sections: [QueueSection] { filter.sections(store.snapshot?.items ?? []) }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: columnVisibility) {
             ProjectSidebar(selection: $sidebar)
+                .toolbar(removing: .sidebarToggle)
+                .toolbar {
+                    ToolbarItem {
+                        Toggle(isOn: $showsSidebar) { Label("Sidebar", systemImage: "sidebar.leading") }
+                            .toggleStyle(.button)
+                            .help(showsSidebar ? "Hide the sidebar" : "Show the sidebar")
+                    }
+                }
         } detail: {
             HStack(spacing: 0) {
                 detail.frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
@@ -49,7 +58,15 @@ struct QueueWindow: View {
     /// carries it: the sidebar (220 plus its 8 pt inset), the table and the docked inspector column. Opening the
     /// inspector in a narrower window grows the window, and the table never scrolls sideways.
     private var minWidth: CGFloat {
-        max(820, 228 + QueueTable.minWidth + (showsInspector ? 320 : 0))
+        max(820, (showsSidebar ? 228 : 0) + QueueTable.minWidth + (showsInspector ? 320 : 0))
+    }
+
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding {
+            showsSidebar ? .all : .detailOnly
+        } set: {
+            showsSidebar = $0 != .detailOnly
+        }
     }
 
     @ViewBuilder private var detail: some View {
