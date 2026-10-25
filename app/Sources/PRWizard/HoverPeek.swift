@@ -6,7 +6,7 @@ struct HoverPeek: ViewModifier {
     let id: String
     let popover: FindingsPopover?
     let isAnchor: Bool
-    @Environment(PeekModel.self) private var peek
+    let peek: PeekModel
     @State private var scrollMonitor: Any?
 
     func body(content: Content) -> some View {
@@ -53,7 +53,7 @@ struct HoverPeek: ViewModifier {
 }
 
 extension View {
-    func hoverPeek(_ id: String, _ popover: FindingsPopover?, isAnchor: Bool = false) -> some View {
-        modifier(HoverPeek(id: id, popover: popover, isAnchor: isAnchor))
+    func hoverPeek(_ id: String, _ popover: FindingsPopover?, isAnchor: Bool = false, peek: PeekModel) -> some View {
+        modifier(HoverPeek(id: id, popover: popover, isAnchor: isAnchor, peek: peek))
     }
 }

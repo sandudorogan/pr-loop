@@ -12,7 +12,7 @@ struct HistoryTable: View {
         Table(of: HistoryRow.self, selection: $selection) {
             TableColumn("State") { Text($0.stateLabel) }.width(min: 56, ideal: 64)
             TableColumn("Outcome") { row in
-                StatusBadge(status: row.entry.outcome).hoverPeek(row.id, popover(row), isAnchor: true)
+                StatusBadge(status: row.entry.outcome).hoverPeek(row.id, popover(row), isAnchor: true, peek: peek)
             }
             .width(min: 90, ideal: 120)
             TableColumn("PR") { Text(verbatim: "#\($0.entry.number)").monospacedDigit() }.width(min: 56, ideal: 72)
@@ -21,7 +21,7 @@ struct HistoryTable: View {
                     .width(min: 60, ideal: 80)
             }
             TableColumn("Title") { row in
-                Text(row.entry.title).lineLimit(1).hoverPeek(row.id, popover(row))
+                Text(row.entry.title).lineLimit(1).hoverPeek(row.id, popover(row), peek: peek)
             }
             .width(min: 160)
             TableColumn("Rounds") { Text(verbatim: "\($0.entry.rounds)").monospacedDigit() }.width(56)
