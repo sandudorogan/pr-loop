@@ -49,6 +49,14 @@ import Observation
         set(shownID == id ? .idle : .shown(id))
     }
 
+    /// Space on a table row: toggles the peek of the one selected row (`nil` is none, or one with no findings).
+    /// Returns whether it took the key, so any other Space reaches its text field.
+    public func toggleOnSpace(_ id: String?) -> Bool {
+        guard let id else { return false }
+        toggle(id)
+        return true
+    }
+
     public func dismiss() {
         set(.idle)
     }

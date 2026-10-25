@@ -39,12 +39,12 @@ struct HistoryTable: View {
             Button("Copy Link") { copy(urls) }.disabled(urls.isEmpty)
             Divider()
             let focus = peekFocus(keys)
-            Button("Show Findings", action: focus.toggle).keyboardShortcut(.space, modifiers: []).disabled(
-                focus.id == nil)
+            Button("Show Findings", action: focus.toggle).keyboardShortcut("y").disabled(focus.id == nil)
         } primaryAction: { keys in
             open(urls(keys))
         }
         .onExitCommand { peek.dismiss() }
+        .onKeyPress(.space) { peekFocus(selection).pressSpace() }
         .focusedSceneValue(\.peekFocus, peekFocus(selection))
     }
 

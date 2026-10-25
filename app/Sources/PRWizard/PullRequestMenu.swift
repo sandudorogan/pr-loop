@@ -27,7 +27,7 @@ struct PullRequestMenu: View {
         }
         Divider()
         Button("Show Findings") { peek?.toggle() }
-            .keyboardShortcut(.space, modifiers: [])
+            .keyboardShortcut("y")
             .disabled(peek?.id == nil)
         Button("Copy Head SHA") { copy(items.map(\.head)) }
             .disabled(items.isEmpty)

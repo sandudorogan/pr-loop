@@ -56,6 +56,7 @@ struct QueueTable: View {
             for item in items(keys) { NSWorkspace.shared.open(item.url) }
         }
         .onExitCommand { peek.dismiss() }
+        .onKeyPress(.space) { peekFocus(selection).pressSpace() }
         .focusedSceneValue(\.peekFocus, peekFocus(selection))
     }
 

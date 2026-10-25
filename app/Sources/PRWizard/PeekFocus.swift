@@ -1,4 +1,5 @@
 import PRWizardKit
+import SwiftUI
 
 struct PeekFocus {
     let model: PeekModel
@@ -7,4 +8,6 @@ struct PeekFocus {
     func toggle() {
         if let id { model.toggle(id) }
     }
+
+    func pressSpace() -> KeyPress.Result { model.toggleOnSpace(id) ? .handled : .ignored }
 }

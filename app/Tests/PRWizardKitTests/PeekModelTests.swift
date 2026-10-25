@@ -42,6 +42,16 @@ import Testing
         #expect(await stays(.idle))
     }
 
+    @Test("Space toggles the one selected row and leaves every other Space alone")
+    func space() {
+        #expect(!peek.toggleOnSpace(nil))
+        #expect(peek.phase == .idle)
+        #expect(peek.toggleOnSpace("a"))
+        #expect(peek.phase == .shown("a"))
+        #expect(peek.toggleOnSpace("a"))
+        #expect(peek.phase == .idle)
+    }
+
     @Test("hides after the grace once the pointer leaves")
     func leave() async {
         peek.toggle("a")
