@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, call, patch
 
-from pr_wizard import queue as rq
+from pr_wizard import cli, queue as rq
 
 
 class Stop(Exception):
@@ -67,8 +67,8 @@ class PruneInDaemon(unittest.TestCase):
     def test_cli_prune_without_repo_loops_every_repo_and_with_repo_one(self):
         for argv, repos in ((["--prune"], list(rq.REPOS)), (["--prune", "--repo", "iprally/gitops"], ["iprally/gitops"])):
             with patch.object(rq, "prune_all", return_value=False) as prune_all, \
-                    patch.object(rq.sys, "argv", ["review-queue", *argv]), self.assertRaises(SystemExit) as exit:
-                rq.main()
+                    patch.object(cli.sys, "argv", ["review-queue", *argv]), self.assertRaises(SystemExit) as exit:
+                cli.main()
             self.assertEqual([list(prune_all.call_args.args[0]), prune_all.call_args.args[1]], [repos, False])
             prune_all.assert_called_once()
             self.assertFalse(exit.exception.code)

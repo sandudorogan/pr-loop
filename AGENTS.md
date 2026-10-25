@@ -49,11 +49,13 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 
 | Path | Role |
 | --- | --- |
-| `pr_wizard/queue.py` | Daemon, CLI, queue fetch, gates, both lanes, `--wait`, `-l`, `--prune` |
+| `pr_wizard/queue.py` | Daemon, queue fetch, gates, both lanes, the local paths of the CLI (`--wait` loop, `-l` and `--next` with the daemon down, `--pr`, tick, `--prune`) |
+| `pr_wizard/cli.py` | The CLI (api.md §5): `-l`, `--next`, `--bg`, `--wait`'s bump, `--pause`, `--resume`, `config` go to the API; daemon down: `-l`/`--next` run on `state.db`, `--bg`/`--wait` kickstart `names.LABEL` |
+| `pr_wizard/client.py` | `client.call(method, path, body)` over `api.sock`; raises `Down` (no daemon) or `Failed` (api.md §2 error) |
 | `pr_wizard/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_wizard.api --fake [--socket PATH]` serves the fixtures |
 | `pr_wizard/fake.py` | The static runtime behind `--fake` |
 | `pr_wizard/names.py` | Repos, labels and every state, log and skill path. The queue, both scripts and `db.py` read them here |
-| `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.queue.main()`. `bin/review-queue` is a symlink to it |
+| `bin/pr-wizard` | CLI entry point: puts the repo root on `sys.path`, runs `pr_wizard.cli.main()`. `bin/review-queue` is a symlink to it |
 | `review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
 | `review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
 | `review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |

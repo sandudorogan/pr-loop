@@ -1,17 +1,5 @@
 """Reviews my own open PRs and the ones that wait on me, three at a time, then stays quiet until their own diff changes.
 
-Usage:
-  review-queue --daemon     launchd keeps this alive: 3 workers review, 3 fix my PRs, the queue refreshes every 5 min
-  review-queue              run one review tick now, in this terminal, beside the daemon
-  review-queue --pr 16400   review one PR now, even if its own diff is unchanged
-  review-queue -n           dry run: print each PR's gate decision, review nothing
-  review-queue -l           list the queue: ▶ in review or fix, 1..n review order, ✓ ready to approve
-  review-queue --next 16400 move a PR to the front of the review order
-  review-queue --wait 16400 16401   block until one of these PRs settles at its current head, print it
-  review-queue --bg         refresh the daemon's queue now (starts the daemon if it is down)
-  review-queue --prune      remove the worktrees of PRs that merged or that I approved (-n: dry run)
-  review-queue migrate      import today's JSON state into state.db (-n: dry run, --reverse: export it back)
-
 One GraphQL call lists the queue: my own open PRs, review requests, and PRs I reviewed. Local
 gates (head sha, own-diff fingerprint) drop every PR with nothing new, so the reviewers in
 pr_review.py run only on new code. A push re-enters the queue at once: CI is never awaited.
@@ -27,15 +15,14 @@ no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
 One process serves every project: REPOS and the config's projects. The config (~/.config/pr-wizard/config.json)
 sets each project's lanes, reviewers and gates; by default iprally/gitops gets the fix lane alone.
---pr, --next and --wait act on --repo, else $IPR_REPO, else iprally/iprally.
-The daemon prunes the worktrees of every repo at start and every 30 min; --prune does one pass (--repo: that repo only).
+The daemon prunes the worktrees of every repo at start and every 30 min. pr_wizard/cli.py is the command line.
 
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
        └────────────────────────────────────────────────────────────────┘
 Log: ~/Library/Logs/review-queue.log
 """
-import argparse, fcntl, hashlib, json, os, re, signal, subprocess, sys, threading, time, traceback
+import fcntl, hashlib, json, os, re, signal, subprocess, sys, threading, time, traceback
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -936,11 +923,6 @@ def kick():
         return False
 
 
-def wake():
-    if not kick():
-        subprocess.run(["launchctl", "kickstart", f"gui/{os.getuid()}/{LABEL}"], check=True)
-
-
 def heads(repo, numbers):
     """{pr: {repo, number, state, headRefOid, viewerDidAuthor, labels}} in one GraphQL call."""
     owner, name = repo.split("/")
@@ -952,18 +934,19 @@ def heads(repo, numbers):
     return {n: dict(found[f"p{n}"], repo=repo) for n in numbers}
 
 
-def wait(repo, numbers, timeout):
-    """Bumps the PRs whose current head has no result yet, then blocks until one of them settles and
-    prints [{pr, head, status, fix?, ...}] for every listed PR that has. Settled = the reviewers are done
-    with the head and, on my PR they posted on, a fix pass ran without pushing (its result is `fix`).
-    Closed or merged counts as settled, a no-auto-review PR too. A held PR is not bumped, since a bump is
-    a review request: it comes back as `held`."""
+def unsettled(repo, numbers):
+    """The PRs `--wait` bumps: their current head has no result yet. A held PR is not bumped, since a bump is a
+    review request: it comes back as `held`."""
     state = load(repo)
-    pending = [n for n, pr in heads(repo, numbers).items()
-               if state.get(str(n), {}).get("sha") != pr["headRefOid"] and not state.get(str(n), {}).get("hold")
-               and not unreviewed(pr)]
-    save_bumped(repo, pending + [x for x in bumped(repo) if x not in pending])
-    wake()
+    return [n for n, pr in heads(repo, numbers).items()
+            if state.get(str(n), {}).get("sha") != pr["headRefOid"] and not state.get(str(n), {}).get("hold")
+            and not unreviewed(pr)]
+
+
+def settle(repo, numbers, timeout):
+    """Blocks until one of the PRs settles and prints [{pr, head, status, fix?, ...}] for every listed PR that has.
+    Settled = the reviewers are done with the head and, on my PR they posted on, a fix pass ran without pushing
+    (its result is `fix`). Closed or merged counts as settled, a no-auto-review PR too."""
     deadline = time.monotonic() + timeout
     while True:
         state, fixes, now = load(repo), load(repo, FIXES), reviewing(repo)
@@ -1157,46 +1140,3 @@ def migrated(done, dry_run):
                      for repo, tables in done["rows"].items())
     return (f"{'would import' if dry_run else 'imported'}:\n{rows}\n{len(done['files'])} files to legacy/, "
             f"{len(done['scratch'])} scratch dirs to scratch/, {len(done['ephemera'])} locks and live-run files deleted")
-
-
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", nargs="?", choices=["migrate"], help="import today's JSON state into state.db")
-    ap.add_argument("--reverse", action="store_true", help="migrate: export state.db back to today's JSON files")
-    ap.add_argument("--pr", type=int, help="review this PR now, even if its own diff is unchanged")
-    ap.add_argument("-n", "--dry-run", action="store_true", help="print gate decisions, review nothing")
-    ap.add_argument("-l", "--list", action="store_true", help="list the queue and each PR's last result")
-    ap.add_argument("--next", type=int, metavar="PR", help="move this PR to the front of the review order")
-    ap.add_argument("--wait", type=int, nargs="+", metavar="PR",
-                    help="block until one of these PRs has a result for its current head, print it as JSON")
-    ap.add_argument("--timeout", type=int, default=7200, help="seconds --wait blocks before it prints the pending state")
-    ap.add_argument("--bg", action="store_true", help="refresh the daemon's queue now, or start the daemon")
-    ap.add_argument("--daemon", action="store_true", help="review nonstop, refreshing the queue every 5 min")
-    ap.add_argument("--prune", action="store_true",
-                    help="remove the worktrees of PRs that merged or that I approved, in every repo")
-    ap.add_argument("--repo", choices=projects(), help="the repo of --pr, --next and --wait (default $IPR_REPO, "
-                                                  f"else {MONOREPO}); --prune: only this repo")
-    a = ap.parse_args()
-    repo = a.repo or env_repo()
-    if a.cmd:
-        return print("\n".join(names.reverse()) if a.reverse else migrated(names.migrate(a.dry_run), a.dry_run))
-    if not (a.prune or a.bg):
-        names.migrate()
-    if a.list:
-        return show()
-    if a.next:
-        return bump(repo, a.next)
-    if a.wait:
-        return wait(repo, a.wait, a.timeout)
-    if a.daemon:
-        return daemon()
-    if a.prune:
-        sys.exit(prune_all([a.repo] if a.repo else projects(), a.dry_run))
-    if a.bg:
-        wake()
-        return print(f"queue refresh requested — tail -f {LOG}")
-    tick((repo, a.pr) if a.pr else None, a.dry_run)
-
-
-if __name__ == "__main__":
-    main()
