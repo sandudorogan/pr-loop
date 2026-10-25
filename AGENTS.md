@@ -3,6 +3,18 @@
 Read this file before you change or operate PR Wizard. It holds what an agent needs to work here.
 Do not rely on memory files for this repository. When you learn something durable, add it here.
 
+## Docs
+
+`docs/` holds the design. Read the file for the area you change. Record each new owner decision in `decisions.md`.
+
+| File | Holds |
+| --- | --- |
+| [architecture.md](docs/architecture.md) | one daemon backend, many front ends: processes, lanes, state, config, contracts |
+| [api.md](docs/api.md) | the control API contract. Code cites it as `api.md §N`: keep the numbers stable |
+| [ui-macos.md](docs/ui-macos.md) | PR Wizard.app: toolchain, architecture, scenes, tests |
+| [decisions.md](docs/decisions.md) | every settled decision and its reason |
+| [status.md](docs/status.md) | open items, who acts, the coupling that remains |
+
 ## What it is
 
 A macOS launchd daemon (`local.pr-wizard`) that reviews and fixes GitHub PRs for one owner (`gh` user).
@@ -109,12 +121,12 @@ iprally's cljfmt and Karma live in its built-in override. A project with no gate
 | `claude/skills/pr-review-loop/` | Claude Code PR watch skill + `scan.py` (used by agent-delegator) |
 | `launchd/local.pr-wizard.plist.tmpl` | The one service template, `{{ .chezmoi.homeDir }}` placeholder |
 | `install.py`, `links.json` | The one install step: check the tools on the plist PATH, symlink the repo into `$HOME`, render the plist into `.local/`, link the config (chezmoi from `chezmoi source-path`), bootstrap or restart the daemon, `app/script/install` + open (`--no-app`, `--no-chezmoi`, `--dry-run`) |
-| `docs/overhaul.md` | What the overhaul changed, the invariants, and the gaps that remain |
+| `docs/` | The design: architecture, the API contract (`api.md`, cited by § in the code), the app, decisions, open items |
 | `app/` | PR Wizard.app: one SwiftPM package, `PRWizardKit` library (models, no SwiftUI) + thin `PRWizard` app target |
 | `tests/fixtures/api/v1/` | Control API responses. The Swift tests decode them; `tests/test_api_read.py` asserts the server against them |
 | `.github/workflows/release.yml` | A `v*` tag push: app test + lint, `app/script/package`, `app/script/notes`, `gh release create` with the dmg, zip and `SHA256SUMS` |
 
-Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless the overhaul decides otherwise.
+Python 3.10+, standard library only. No `requirements.txt`, no packaging. Keep it that way unless a new entry in `docs/decisions.md` changes it.
 The app: Swift 6, macOS 26, Command Line Tools only (no Xcode), Swift Testing, no dependencies.
 
 ## Installed paths and state
@@ -171,7 +183,7 @@ Fix worktrees: the PR branch's existing worktree, else `<repo>/.claude/worktrees
 
 ## Control API
 
-`api.md` (in the delegator briefs) is the contract. Routes under `/v1`, one request per connection, JSON both ways.
+[docs/api.md](docs/api.md) is the contract. Routes under `/v1`, one request per connection, JSON both ways.
 
 ```text
 GET    info · queue (long-poll ?since=<rev>&wait=<s>) · events (long-poll) · history · config · prompts/<name>

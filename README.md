@@ -103,6 +103,8 @@ Log: `~/Library/Logs/pr-wizard.log`. State: `~/.local/state/pr-wizard/`.
 ## Develop
 
 Read [AGENTS.md](AGENTS.md) first: layout, state, contracts, workflow and gotchas.
+The design is in [docs/](docs/): [architecture](docs/architecture.md), the [API contract](docs/api.md),
+the [app](docs/ui-macos.md), [decisions](docs/decisions.md) and [open items](docs/status.md).
 
 ```sh
 python3 -m unittest discover -s tests -v

@@ -49,10 +49,12 @@ An agent session cannot activate apps or capture the screen, so these wait for t
 6. The Fixer pane opens about 1200 pt tall, partly off-screen. Confirm, then cap its height.
 7. Inspector at the window minimum: once, the split stuck at detail 820 / inspector 0 and did not recover. It did not
    repeat in a sweep. Open the inspector in a narrow window a few times.
+8. Reviewer drag reorder, the gate token field, sheet Cancel/Done, the confirmation dialogs.
 
 ## Known limits (app)
 
 - ⇧⌘, switches the inspector to its Settings tab but does not move keyboard focus into it.
+- The history table's column minimums can overflow a narrow detail column.
 
 ## Known gaps (daemon)
 
