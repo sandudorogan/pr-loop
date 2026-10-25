@@ -9,6 +9,11 @@ struct QueueCommands: Commands {
 
     var body: some Commands {
         SidebarCommands()
+        CommandGroup(replacing: .textEditing) {
+            Button("Filter") { focus?.focusFilter() }
+                .keyboardShortcut("f")
+                .disabled(focus == nil)
+        }
         CommandGroup(after: .sidebar) {
             Button(focus?.showsInspector.wrappedValue == true ? "Hide Inspector" : "Show Inspector") {
                 focus?.showsInspector.wrappedValue.toggle()

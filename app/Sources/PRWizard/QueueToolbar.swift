@@ -5,9 +5,11 @@ struct QueueToolbar: ToolbarContent {
     let store: QueueStore
     let repo: String?
     @Binding var showsInspector: Bool
+    @Binding var search: String
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .principal) { DaemonStatus(store: store, repo: repo) }
+        ToolbarItem(placement: .primaryAction) { FilterField(text: $search) }
         ToolbarItemGroup(placement: .primaryAction) {
             let isPaused = store.snapshot?.isPaused == true
             if isPaused { pause(isPaused).buttonStyle(.borderedProminent) } else { pause(isPaused) }
@@ -36,6 +38,28 @@ struct QueueToolbar: ToolbarContent {
         }
         .disabled(store.snapshot == nil || store.pendingActions.contains(.setPaused(!isPaused)))
         .help(isPaused ? "Resume every lane" : "Pause every lane")
+    }
+}
+
+private struct FilterField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary)
+            TextField("Filter", text: $text)
+                .textFieldStyle(.plain)
+                .onExitCommand { text = "" }
+            if !text.isEmpty {
+                Button("Clear", systemImage: "xmark.circle.fill") { text = "" }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(width: 200)
+        .help("Filter by number, title or project (⌘F)")
     }
 }
 

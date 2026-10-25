@@ -6,4 +6,5 @@ struct QueueFocus {
     let sidebar: Binding<SidebarSelection>
     let showsInspector: Binding<Bool>
     let showSettings: () -> Void
+    let focusFilter: () -> Void
 }

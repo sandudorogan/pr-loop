@@ -299,6 +299,10 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
 - **No `@Environment(Model.self)` in a table cell.** A `Table` with a conditional `TableColumn` (Project, shown
   for "All repos" only) rebuilds its cells without the window's environment when the column set changes, and the
   lookup traps ("No Observable object of type PeekModel found"). Read the model in the table view and pass it in.
+- **Inspector is an `HStack` column.** On macOS 26 `.inspector` floats over the table in a narrow window, and
+  `HSplitView` lays a SwiftUI child out at its `maxWidth`, so the content clips. Keep the fixed 320 pt column.
+- **No `@FocusState` in a toolbar item.** It never takes focus from there. ⌘F calls `NSWindow.focusToolbarField()`.
+  The filter goes before the buttons: NSToolbar overflows from the trailing end, and SwiftUI has no visibility priority.
 
 ## Scope rules
 

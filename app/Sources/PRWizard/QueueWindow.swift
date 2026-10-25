@@ -1,3 +1,4 @@
+import AppKit
 import PRWizardKit
 import SwiftUI
 
@@ -19,22 +20,26 @@ struct QueueWindow: View {
         NavigationSplitView {
             ProjectSidebar(selection: $sidebar)
         } detail: {
-            detail
-                .inspector(isPresented: $showsInspector) {
-                    PRInspector(items: selected, tab: $inspectorTab)
-                        .inspectorColumnWidth(min: 260, ideal: 320)
+            HStack(spacing: 0) {
+                detail.frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+                if showsInspector {
+                    Divider()
+                    PRInspector(items: selected, tab: $inspectorTab).frame(width: 320)
                 }
-                .safeAreaInset(edge: .bottom) { banner }
+            }
+            .safeAreaInset(edge: .bottom) { banner }
         }
         .navigationTitle("PR Wizard")
         .navigationSubtitle(subtitle)
-        .searchable(text: $search, placement: .toolbar, prompt: "Filter")
-        .toolbar { QueueToolbar(store: store, repo: sidebar.repo, showsInspector: $showsInspector) }
+        .toolbar {
+            QueueToolbar(
+                store: store, repo: sidebar.repo, showsInspector: $showsInspector, search: $search)
+        }
         .focusedSceneValue(
             \.queueFocus,
             QueueFocus(
                 items: selected, sidebar: $sidebar, showsInspector: $showsInspector,
-                showSettings: { showSettings(selection) })
+                showSettings: { showSettings(selection) }, focusFilter: { NSApp.keyWindow?.focusToolbarField() })
         )
         .environment(peek)
         .frame(minWidth: 820, minHeight: 400)
