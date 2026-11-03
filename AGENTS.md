@@ -27,7 +27,7 @@ One process serves every project. Clients (the CLI, the app) read and change its
  pr-wizard --daemon ── refresh: one GraphQL call every 5 min (60 s when a worker idles, now on POST /v1/refresh)
    │                   mine + requested + assigned + reviewed, no repo: filter → group by repo → project → pool
    │
-   ├─ gates ── review pool (3 workers) ─── pr_review.py run × {opus, codex, quality}
+   ├─ gates ── review pool (3 workers) ─── pr_review.py run × {opus, codex, quality} + bugbot
    │   same head · own-diff hash           │ posts 1 review per reviewer, marker in body
    │   trivial · hold · rounds · too big   ▼
    │                          ~/.local/state/pr-wizard/state.db (SQLite, WAL)
@@ -60,7 +60,7 @@ One daemon process runs for the whole system. Never more than one. This rule doe
 - Every PR the owner opened goes into the review queue or the fix queue inside that process.
 - Every PR assigned to the owner, or that requests the owner's review, goes into those queues too.
 - The workers are threads inside that process.
-- The commands a worker runs for one pass are child processes of that pass: `pr_review.py`, `pr_fix.py`, `claude -p`, `codex exec`. They are not daemons.
+- The commands a worker runs for one pass are child processes of that pass: `pr_review.py`, `pr_fix.py`, `claude -p`, `codex exec`, `cursor-agent -p`. They are not daemons.
 - Do not add a second launchd job, a per-repo process, or a per-repo socket.
 - To support a new repo, add it to the one daemon.
 
@@ -127,7 +127,7 @@ The daemon and each UI are separate trees. They share only the API contract.
 | `daemon/bin/pr-wizard` | CLI entry point: puts `daemon/` on `sys.path`, runs `pr_wizard.cli.main()`. `daemon/bin/review-queue` is a symlink to it |
 | `daemon/review/pr_review.py` | One reviewer on one PR: scope the round, run the engine, post the review |
 | `daemon/review/pr_fix.py` | One fix pass on one PR: collect feedback, Codex, gate, land, reply/resolve |
-| `daemon/review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |
+| `daemon/review/prompts/*.md` | Prompt templates. `{PR}`, `{REPO}`, `{HEAD}`, `{BASE}`, `{DIFF_RANGE}`, `{ROUND_NOTE}`, `{BRIEF}`, `{SCHEMA}`, `{WORKTREE}`, `{FEEDBACK}`, `{FILES}`, `{CONVENTIONS}`; a `{SKILL name}…{/SKILL}` block stays only when the project lists that skill (`{PATH}` = its SKILL.md). No project's rules belong in a prompt |
 | `daemon/pr_wizard/gates.py` | The project's `fix.gates` (format, then test) run after Codex, `{GATES}` in `fix.md`, the retry prompt. iprally's cljfmt and Karma are its built-in override in `config.DEFAULTS`; a project without gates runs none |
 | `daemon/pr_wizard/conventions.py` | A project's own conventions read from the checkout at the PR head (agent files and their `@` includes, contributing doc, editorconfig, formatter configs, skills) → `{CONVENTIONS}`. None found: `needs_conventions` reviewers skip (`no-conventions`) |
 | `daemon/review/*-schema.json` | JSON schemas the engines must return |
@@ -316,6 +316,11 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
 - **Nested `claude -p`.** Drop `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` (a harness key outranks the login and 401s
   on stdout) and pass `stdin=DEVNULL`. `child_env()` does this.
 - **No slash commands headless.** `/review` in `claude -p` returns `(none)` without a review. Send a plain prompt.
+  `cursor-agent -p` is the exception: `bugbot.md` starts with `/review-bugbot` and the skill runs in place.
+- **Cursor Bugbot.** `cursor-agent` keeps its login in the keychain (`cursor-agent login`, `cursor-agent status`).
+  On the Free plan only Grok 4.7 / 4.6 / Auto at fixed settings run, and the agent quota runs out after a few
+  reviews: `You've hit your usage limit` → bugbot `limited` → the PR stays `limited` and retries every refresh.
+  A dropped connection makes the CLI print its answer twice; `extract_json` takes the last block.
 - **Codex stderr.** `codex exec` echoes the prompt to stderr, so a truncated error tail can hide the cause.
   Re-run the command by hand and keep all of stderr.
 - **Codex and worktrees.** Codex obeys a global "always work in a worktree" rule. Every prompt that runs

@@ -56,7 +56,7 @@ import Testing
     @Test("choices decode with the Codex default and models")
     func choicesDecode() throws {
         let choices = try Fixture.decode(ConfigEnvelope.self, from: "config.json").choices
-        #expect(choices.engines == ["claude", "codex"])
+        #expect(choices.engines == ["claude", "codex", "cursor"])
         #expect(choices.codexDefault?.model == "gpt-6.1-sol")
         #expect(choices.codexDefault?.effort == "high")
         #expect(choices.codexModels.map(\.id) == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna"])

@@ -372,7 +372,7 @@ class Save(Tmp):
 class Choices(Tmp):
     def test_static_lists_and_prompts(self):
         got = c.choices(str(self.dir))
-        self.assertEqual(got["engines"], ["claude", "codex"])
+        self.assertEqual(got["engines"], ["claude", "codex", "cursor"])
         self.assertEqual(got["fix_engines"], ["codex"])
         self.assertEqual(got["gate_kinds"], ["format", "test"])
         self.assertEqual(got["claude_efforts"], ["low", "medium", "high", "xhigh", "max"])

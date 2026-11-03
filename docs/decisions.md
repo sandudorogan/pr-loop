@@ -93,6 +93,12 @@ the PR inherited the project's model and "Codex default" could not win at the PR
 
 **D20. Keep the three default reviewers: opus, codex, quality.** *Why:* they work well together.
 
+**D31. A `cursor` engine for Cursor's `/review-bugbot` skill on Grok 4.7: the `bugbot` reviewer.** It runs
+`cursor-agent -p --mode ask` (read-only) on the review worktree, with the skill's own prompt shape and a
+`Custom Instructions:` line that asks for our schema instead of its table. Model `grok-4.7-medium`: the Free plan
+refuses `-high`. No fallback: on Claude it would repeat `opus`. The reviewer lives in the owner's config, not in
+`DEFAULTS` (D20). *Why:* the owner wanted a different model family's bug hunt beside the other three.
+
 **D21. Codex never writes git.** It runs `workspace-write` with no network. `pr_fix.py` commits, pushes, replies
 and resolves. *Why:* one place controls what lands, and it strips AI attribution.
 

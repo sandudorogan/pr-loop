@@ -4,8 +4,8 @@ findings as one attributed review with inline comments.
 
 Usage:
   pr_review.py scope --pr N
-  pr_review.py run   --pr N --reviewer <opus|codex|quality> [--force]
-  pr_review.py post  --pr N --reviewer <opus|codex|quality> --findings <file.json>
+  pr_review.py run   --pr N --reviewer <opus|codex|quality|bugbot> [--force]
+  pr_review.py post  --pr N --reviewer <opus|codex|quality|bugbot> --findings <file.json>
 
 A review that found nothing posts nothing — an empty review is noise, and it means
 the cycle should stop rather than order another round. `run` says so in its output:
@@ -58,7 +58,7 @@ MARKER_RE = re.compile(
     r"<!--\s*agent-review:\s*reviewer=(\S+)\s+round=(\d+)\s+sha=(\S+)\s*-->")
 
 BRIEFS = names.BRIEFS
-ENGINE_LABELS = {"claude": "Claude", "codex": "Codex"}
+ENGINE_LABELS = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor"}
 LIMIT = re.compile(r"(usage|spend|session|rate) limit|hit your \S+ limit|quota exceeded", re.I)
 
 
@@ -221,12 +221,13 @@ def brief(sc):
     return ""
 
 
-def render(name, sc):
+def render(name, sc, worktree):
     text = conventions.fill(open(os.path.join(PROMPTS, name)).read(), sc["conventions"])
     return (text
             .replace("{BRIEF}", brief(sc))
             .replace("{PR}", str(sc["pr"]))
             .replace("{REPO}", REPO)
+            .replace("{WORKTREE}", worktree)
             .replace("{HEAD}", sc["head"])
             .replace("{BASE}", sc["base_ref"])
             .replace("{DIFF_RANGE}", sc["diff_range"])
@@ -298,6 +299,20 @@ def codex_exec(worktree, prompt, model=None, effort=None):
         os.unlink(last)
 
 
+def cursor_agent(worktree, prompt, model=None, effort=None):
+    """Read-only `ask` mode. After a dropped connection the CLI prints the answer again, so the last JSON block wins."""
+    out = subprocess.run(
+        ["cursor-agent", "-p", "--trust", "--mode", "ask", "--workspace", worktree, "--output-format", "text",
+         *(["--model", model] if model else []), prompt],
+        cwd=worktree, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=TIMEOUT)
+    if out.returncode != 0:
+        at_limit(out)
+        die(f"cursor-agent exited {out.returncode}\n"
+            f"--- stderr ---\n{out.stderr.strip()[:2000]}\n"
+            f"--- stdout ---\n{out.stdout.strip()[:2000]}")
+    return out.stdout
+
+
 class AtLimit(Exception):
     pass
 
@@ -308,8 +323,8 @@ def at_limit(out):
         raise AtLimit(text[max(0, match.start() - 80):match.end() + 120].strip())
 
 
-ENGINES = {"claude": claude_p, "codex": codex_exec}
-OTHER = {"claude": "codex", "codex": "claude"}
+ENGINES = {"claude": claude_p, "codex": codex_exec, "cursor": cursor_agent}
+OTHER = {"claude": "codex", "codex": "claude", "cursor": "claude"}
 
 
 def engine_args(spec, engine, incremental):
@@ -326,14 +341,14 @@ def run_reviewer(reviewer, worktree, sc):
     is at its usage limit and the reviewer allows the fallback. A plain prompt, not `/review`: in `-p` the
     native command returns "(none)" without reviewing."""
     spec = REVIEWERS[reviewer]
-    prompt = render(spec["prompt"], sc)
+    prompt = render(spec["prompt"], sc, worktree)
     engines = (spec["engine"], OTHER[spec["engine"]]) if spec.get("fallback", True) else (spec["engine"],)
     for engine in engines:
         try:
             return engine, extract_json(ENGINES[engine](worktree, prompt, *engine_args(spec, engine, sc["base_sha"])))
         except AtLimit as e:
             print(f"{engine} at its usage limit: {e}", file=sys.stderr)
-    die("claude and codex are both at their usage limit" if len(engines) > 1 else f"{engines[0]} is at its usage limit")
+    die(f"{' and '.join(engines)} are both at their usage limit" if len(engines) > 1 else f"{engines[0]} is at its usage limit")
 
 
 # ---------------------------------------------------------------- worktree

@@ -10,7 +10,7 @@ from typing import Any, Callable, NamedTuple
 from pr_wizard import db
 
 NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
-ENGINES, FIX_ENGINES, GATE_KINDS = ["claude", "codex"], ["codex"], ["format", "test"]
+ENGINES, FIX_ENGINES, GATE_KINDS = ["claude", "codex", "cursor"], ["codex"], ["format", "test"]
 CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 CODEX_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"]
 CLAUDE_MODELS = ["opus", "sonnet", "haiku"]
@@ -175,6 +175,7 @@ REVIEWER = Obj({
     "enabled": BOOL, "label": Leaf(lambda v: isinstance(v, str) and 1 <= len(v) <= 80, "a string of 1-80 characters"),
     "prompt": PROMPT, "engine": one_of(ENGINES), "fallback": BOOL, "needs_conventions": BOOL, "advisory": BOOL,
     "claude": CLAUDE_MODEL_EFFORT, "codex": Obj({"model": NULL_TEXT, "effort": one_of(CODEX_EFFORTS, null=True)}),
+    "cursor": Obj({"model": NULL_TEXT}),
 }, ("id", "label", "prompt", "engine"))
 TARGETS = Obj({"map": Arr(PAIR), "keep": REGEX, "exists": BOOL, "item": CHARS, "valid": REGEX})
 GATE = Obj({

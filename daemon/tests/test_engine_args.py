@@ -5,6 +5,7 @@ import importlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -108,7 +109,7 @@ class Goldens:
                     engine, argvs, kws, render = review(self.prr, reviewer, is_incremental)
                     self.assertEqual((engine, argvs), (primary[0], [primary]))
                     self.assertEqual([kw["timeout"] for kw in kws], [2700])
-                    render.assert_called_once_with(f"{reviewer}.md", sc)
+                    render.assert_called_once_with(f"{reviewer}.md", sc, "/wt")
                     engine, argvs, kws, _ = review(self.prr, reviewer, is_incremental, at_limit=True)
                     self.assertEqual((engine, argvs), (other[0], [primary, other]))
                     self.assertEqual([kw["timeout"] for kw in kws], [2700, 2700])
@@ -136,6 +137,12 @@ class SeededFile(Goldens, unittest.TestCase):
 def project(review=None, fix=None, repo="iprally/iprally"):
     """A config file doc with a project override."""
     return {"projects": {repo: {**({"review": review} if review else {}), **({"fix": fix} if fix else {})}}}
+
+
+BUGBOT = {"id": "bugbot", "label": "Grok 4.7 · Cursor Bugbot", "prompt": "bugbot.md", "engine": "cursor",
+          "fallback": False, "cursor": {"model": "grok-4.7-medium"}}
+CURSOR = ["cursor-agent", "-p", "--trust", "--mode", "ask", "--workspace", "/wt", "--output-format", "text",
+          "--model", "grok-4.7-medium", "PROMPT"]
 
 
 def reviewers(**edits):
@@ -179,10 +186,33 @@ class ProjectOverride(unittest.TestCase):
             prr.run_reviewer("opus", "/wt", {"base_sha": None})
         self.assertEqual([c[0][0] for c in calls], ["claude"])
 
+    def test_bugbot_runs_cursor_agent_read_only_in_the_worktree(self):
+        prr, _ = self.scripts(project(review={"reviewers": [*reviewers(), BUGBOT]}))
+        engine, argvs, kws, _ = review(prr, "bugbot")
+        self.assertEqual((engine, argvs, kws), ("cursor", [CURSOR], [{"cwd": "/wt", "timeout": 2700}]))
+
+    def test_bugbot_at_its_limit_stops_without_a_fallback(self):
+        prr, _ = self.scripts(project(review={"reviewers": [*reviewers(), BUGBOT]}))
+        calls, err = [], io.StringIO()
+        with patch.object(prr, "render", return_value="PROMPT"), patch.object(prr.subprocess, "run", fake_run(calls, 1)), \
+                contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+            prr.run_reviewer("bugbot", "/wt", {"base_sha": None})
+        self.assertEqual([c[0][0] for c in calls], ["cursor-agent"])
+        self.assertIn("cursor is at its usage limit", err.getvalue())
+
+    def test_the_bugbot_prompt_carries_the_skill_shape(self):
+        prr, _ = self.scripts(None)
+        sc = {"pr": 7, "branch": "f", "head": "c" * 40, "base_ref": "origin/main", "diff_range": "origin/main...HEAD",
+              "round_note": "Round 1.", "conventions": prr.conventions.collect("/nonexistent", [])}
+        text = prr.render("bugbot.md", sc, "/wt")
+        self.assertTrue(text.startswith("/review-bugbot\nFull Repository Path: /wt\nDiff: branch changes\n"
+                                        "Base Branch: origin/main\n"))
+        self.assertEqual(re.findall(r"\{[A-Z_]+\}", text), [])
+
     def test_the_label_and_prompt_come_from_the_config(self):
         prr, _ = self.scripts(project(review={"reviewers": reviewers(opus={"label": "Opus X", "prompt": "codex.md"})}))
         _, _, _, render = review(prr, "opus")
-        render.assert_called_once_with("codex.md", {"base_sha": None})
+        render.assert_called_once_with("codex.md", {"base_sha": None}, "/wt")
         self.assertEqual(prr.REVIEWERS["opus"]["label"], "Opus X")
 
     def test_review_timeout_reaches_every_engine_call(self):

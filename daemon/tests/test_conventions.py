@@ -186,7 +186,7 @@ SC = {"pr": 7, "branch": "f", "head": "h" * 40, "base_ref": "origin/main", "diff
 
 class Prompts(Checkout):
     def quality(self):
-        return prr.render("quality.md", dict(SC, conventions=self.collect("ui/a.cljs")))
+        return prr.render("quality.md", dict(SC, conventions=self.collect("ui/a.cljs")), "/wt")
 
     def test_the_iprally_quality_prompt_points_at_its_skill(self):
         for rel, text in IPRALLY:

@@ -17,7 +17,8 @@ from xml.sax.saxutils import escape
 CONFIG_SOURCE = ".pr-wizard/config.json"
 APP = "/Applications/PR Wizard.app"
 TOOLS = {"python3": "brew install python", "git": "xcode-select --install", "gh": "brew install gh",
-         "claude": "https://claude.com/claude-code", "codex": "npm install -g @openai/codex"}
+         "claude": "https://claude.com/claude-code", "codex": "npm install -g @openai/codex",
+         "cursor-agent": "curl https://cursor.com/install -fsS | bash"}
 
 
 def default_config():

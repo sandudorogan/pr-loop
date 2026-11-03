@@ -444,7 +444,7 @@ catch-up, a UI checks `GET /v1/queue`: post it only when that `key` is still `gr
     "iprally/gitops": {"root": "/Users/sandu.dorogan/workdir/gitops", "review": {"enabled": false, "…": "…"}, "fix": {"enabled": true, "…": "…"}}
   },
   "choices": {
-    "engines": ["claude", "codex"],
+    "engines": ["claude", "codex", "cursor"],
     "fix_engines": ["codex"],
     "gate_kinds": ["format", "test"],
     "claude_efforts": ["low", "medium", "high", "xhigh", "max"],
@@ -810,8 +810,8 @@ Reviewer object:
 | `id` | `^[a-z][a-z0-9-]{0,31}$` | dict key | goes into the agent marker `reviewer=<id>` and the clean cache. Renaming an id makes it re-review heads it already did |
 | `enabled` | bool | all three on | the daemon runs enabled reviewers only; `pr_review.py run --reviewer <id>` still runs a disabled one by hand |
 | `label` | string 1–80 | `label` | review heading and inline footer; the clean notice lists enabled labels |
-| `prompt` | prompt name | `prompt` | template rendered with `{PR}` `{REPO}` `{HEAD}` `{BASE}` `{DIFF_RANGE}` `{ROUND_NOTE}` `{BRIEF}` `{SCHEMA}` |
-| `engine` | `claude` \| `codex` | `engine` | primary engine |
+| `prompt` | prompt name | `prompt` | template rendered with `{PR}` `{REPO}` `{HEAD}` `{BASE}` `{DIFF_RANGE}` `{ROUND_NOTE}` `{BRIEF}` `{SCHEMA}` `{WORKTREE}` (the review checkout's absolute path) |
+| `engine` | `claude` \| `codex` \| `cursor` | `engine` | primary engine. `cursor` falls back to `claude` |
 | `fallback` | bool | always (`OTHER`) | at the primary's usage limit, run on the other engine; label gets "· run on <Engine>" |
 | `needs_conventions` | bool | quality: true, others false | the reviewer reviews only against the project's own rules, so on a project with no conventions (§4.8) `pr_review.py` skips it: `{"posted": false, "stop": true, "reason": "no-conventions"}`, recorded clean at that head, no engine call |
 | `advisory` | bool | `note == "quality"` | when only advisory reviewers post findings, the verdict is `quality-only` (READY). The verdict string stays `quality-only`, because the delegator reads it |
@@ -820,6 +820,7 @@ Reviewer object:
 | `claude.incremental` | `{model, effort}` \| null | `fix_round` | used instead when the round diffs only the commits since the last round (`base_sha` set); null = same as above |
 | `codex.model` | string \| null | none | `codex exec -c model="<m>"`; null = Codex's own config |
 | `codex.effort` | codex effort \| null | none | `-c model_reasoning_effort="<e>"` |
+| `cursor.model` | string \| null | none | `cursor-agent -p --mode ask --model <m>`; null = Cursor's default (Grok 4.7 High, refused on the Free plan) |
 
 `claude effort` = a value of `choices.claude_efforts`; `codex effort` = a value of `choices.codex_efforts`.
 
