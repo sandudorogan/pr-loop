@@ -6,7 +6,8 @@ the PR head `{HEAD}`. The base branch is `{BASE}`.
 {CONVENTIONS}
 
 The feedback to address is in `{FEEDBACK}`: a JSON list. Each entry has a `ref`, a `kind`
-(`thread` = an inline review thread, `review` = a review body, `ci` = a failed CI job on the head),
+(`thread` = an inline review thread, `review` = a review body, `comment` = a colleague's PR comment,
+`ci` = a failed CI job on the head),
 its comments, body or log, and for a thread its `path`, `line` and `outdated` flag. A `ci` entry
 holds the tail of the failed step's log, with the job's `name`, `url` and `refuted_before`
 (the earlier refutations of that job, oldest first).
@@ -17,8 +18,9 @@ holds the tail of the failed step's log, with the job's `name`, `url` and `refut
    areas you touch.
 2. Verify every claim against the current code before you act on it. The reviewers are
    confident and often right, but not authoritative. An `outdated` thread was written against
-   an older head and is often already fixed. A review body can hold several findings; each is
-   one claim to verify.
+   an older head and is often already fixed. A review or comment body can hold several findings;
+   each is one claim to verify. A `comment` with nothing to act on (a question, a status note) is
+   deferred: the PR author answers it.
 3. Fix what is real. A claim the branch already addresses (an outdated thread, or a commit of an
    earlier pass) is fixed too, not refuted. Refute what is wrong or not worth acting on. Defer only a product decision
    that belongs to the PR author. When reviewers report the same issue several times, make one

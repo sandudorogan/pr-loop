@@ -109,6 +109,14 @@ class FeedbackKey(unittest.TestCase):
     def test_no_rollup(self):
         self.assertEqual(rq.feedback_key(pr(counts=None)), f"{HEAD}:0:0:0")
 
+    def test_counts_colleagues_comments_after_the_head_commit(self):
+        after, before = "2026-10-25T11:00:00+00:00", "2026-10-25T09:00:00+00:00"
+        talk = [(after, False, "User"), (after, False, "User"), (before, False, "User"), (after, True, "User"),
+                (after, False, "Bot")]
+        key = rq.feedback_key(pr(talk=talk, mergeable="CONFLICTING"))
+        self.assertEqual(key, f"{HEAD}:0:0:0:comments-2:conflict")
+        self.assertEqual(rq.feedback_key(pr(talk=talk[2:])), f"{HEAD}:0:0:0")
+
 
 class Lanes(unittest.TestCase):
     def reviewed(self, status="posted", sha=HEAD, **extra):

@@ -130,7 +130,16 @@ def feedback(pr, head, state):
                 and (login(r) != me or AGENT_MARKER in body)):
             items.append({"ref": f"review:{r['id']}", "kind": "review", "author": login(r), "body": body,
                           "url": r["html_url"], "id": r["id"]})
-    return items
+    return items + conversation(pr, head, me, state.get("handled_comments", []))
+
+
+def conversation(pr, head, me, handled):
+    """Colleagues' PR comments posted after the head commit. Bots (preview links, Linear backlinks) never count."""
+    since = gh(f"repos/{REPO}/commits/{head}")["commit"]["committer"]["date"]
+    return [{"ref": f"comment:{c['id']}", "kind": "comment", "author": login(c), "body": c["body"],
+             "url": c["html_url"], "id": c["id"]}
+            for page in gh(f"repos/{REPO}/issues/{pr}/comments?per_page=100", "--paginate", "--slurp") for c in page
+            if c["user"]["type"] == "User" and login(c) != me and c["created_at"] > since and c["id"] not in handled]
 
 
 def checks(head):
@@ -322,8 +331,8 @@ def respond(pr, items, answers, ci_notes):
         elif item["kind"] == "thread" and a["reply"].strip():
             gh("-X", "POST", f"repos/{REPO}/pulls/{pr}/comments/{item['top']}/replies", "-f", f"body={a['reply']}")
             gh("graphql", "-f", f"query={RESOLVE}", "-f", f"id={item['ref']}")
-        elif item["kind"] == "review" and a["disposition"] == "refuted" and a["reply"].strip():
-            refuted_bodies.append(f"- [{item['author']}'s review]({item['url']}): {a['reply']}")
+        elif item["kind"] in ("review", "comment") and a["disposition"] == "refuted" and a["reply"].strip():
+            refuted_bodies.append(f"- [{item['author']}'s {item['kind']}]({item['url']}): {a['reply']}")
         elif item["kind"] == "ci" and a["disposition"] == "refuted":
             refuted_bodies.append(f"- [{item['name']}]({item['url']}): {a['reply']} {ci_notes[item['ref']]}")
     if refuted_bodies:
@@ -427,6 +436,7 @@ def run(pr):
         for job, _ in refuted})
     state["ci_tries"] = tries
     state["handled_reviews"] = state.get("handled_reviews", []) + [i["id"] for i in items if i["kind"] == "review"]
+    state["handled_comments"] = state.get("handled_comments", []) + [i["id"] for i in items if i["kind"] == "comment"]
     state["handled_jobs"] = state.get("handled_jobs", []) + [i["id"] for i in items if i["kind"] == "ci"]
     state["reruns"] = state.get("reruns", []) if pushed else rerun(state.get("reruns", []) + [
         {"id": job["id"], "run": job["run"], "head": meta["headRefOid"]} for job in retry])

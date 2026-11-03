@@ -90,7 +90,7 @@ Rules for every front end, present and future:
 ```
 
 - **Review lane:** my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before.
-- **Fix lane:** my PRs only. Input: unresolved threads, review bodies on the head, failed Actions jobs, a base conflict.
+- **Fix lane:** my PRs only. Input: unresolved threads, review bodies on the head, colleagues' PR comments after the head commit, failed Actions jobs, a base conflict.
 - **Projects** are detected from those PRs, plus the keys of `projects` in the config. A project is worked only with a
   main checkout under `detect.roots/*/` (or `projects[repo].root`). Without one, it is `no-checkout` (api.md §4.7).
 - **Pools** are shared by default: one review pool and one fix pool, because the real limits are per machine.

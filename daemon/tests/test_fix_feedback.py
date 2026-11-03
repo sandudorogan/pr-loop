@@ -71,5 +71,21 @@ class FailedJobs(unittest.TestCase):
         self.assertEqual(len(items[0]["log"]), fix.CI_LOG_CHARS)
 
 
+class Conversation(unittest.TestCase):
+    def test_colleagues_comments_after_the_head_commit_not_yet_handled(self):
+        def issue(id, login, kind="User", at="2026-11-02T11:48:07Z"):
+            return {"id": id, "user": {"login": login, "type": kind}, "body": f"body {id}", "created_at": at,
+                    "html_url": f"https://github.com/o/r/pull/7#issuecomment-{id}"}
+        pages = [[issue(1, "rev"), issue(2, "me"), issue(3, "pvbctl", "Bot"), issue(4, "rev", at="2026-10-23T11:00:00Z")],
+                 [issue(5, "rev"), issue(6, "other")]]
+        commit = {"commit": {"committer": {"date": "2026-10-23T11:24:46Z"}}}
+        with patch.object(fix, "gh", side_effect=[commit, pages]) as gh:
+            items = fix.conversation(7, "abc", "me", [5])
+        self.assertEqual([i["id"] for i in items], [1, 6])
+        self.assertEqual(items[0], {"ref": "comment:1", "kind": "comment", "author": "rev", "body": "body 1",
+                                    "url": "https://github.com/o/r/pull/7#issuecomment-1", "id": 1})
+        gh.assert_any_call(f"repos/{fix.REPO}/commits/abc")
+
+
 if __name__ == "__main__":
     unittest.main()

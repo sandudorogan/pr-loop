@@ -63,6 +63,7 @@ fragment pr on PullRequest {
     contexts(first: 0) { checkRunCountsByState { state count } } } } } }
   reviews { totalCount }
   reviewThreads(first: 100) { nodes { isResolved comments { totalCount } } }
+  comments(last: 30) { nodes { createdAt viewerDidAuthor author { __typename } } }
 }"""
 WORKTREE_FRAGMENT = """
 fragment done on PullRequest {
@@ -498,16 +499,21 @@ def handle(pr, first, only, dry_run):
 
 
 def feedback_key(pr):
-    """Moves when a review, a thread comment or a resolve lands, the head moves, the base conflicts, a check
-    run fails or a red head's runs all finish (a refuted job reruns only then)."""
+    """Moves when a review, a thread comment or a resolve lands, a colleague comments on the PR after the head
+    commit, the head moves, the base conflicts, a check run fails or a red head's runs all finish (a refuted job
+    reruns only then)."""
     threads = [t["comments"]["totalCount"] for t in pr["reviewThreads"]["nodes"] if not t["isResolved"]]
+    commit = pr["commits"]["nodes"][0]["commit"]
+    talk = sum(c["createdAt"] > commit["committedDate"] and not c["viewerDidAuthor"]
+               and (c["author"] or {}).get("__typename") == "User" for c in pr["comments"]["nodes"])
+    talk = f":comments-{talk}" if talk else ""
     conflict = ":conflict" if pr["mergeable"] == "CONFLICTING" else ""
-    rollup = pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"] or {"contexts": {"checkRunCountsByState": []}}
+    rollup = commit["statusCheckRollup"] or {"contexts": {"checkRunCountsByState": []}}
     counts = {c["state"]: c["count"] for c in rollup["contexts"]["checkRunCountsByState"]}
     failed = counts.get("FAILURE", 0) + counts.get("TIMED_OUT", 0)
     running = "-running" if any(counts.get(s) for s in ("QUEUED", "PENDING", "WAITING", "IN_PROGRESS")) else ""
     ci = f":ci-red-{failed}{running}" if failed else ""
-    return f"{pr['headRefOid']}:{pr['reviews']['totalCount']}:{len(threads)}:{sum(threads)}{conflict}{ci}"
+    return f"{pr['headRefOid']}:{pr['reviews']['totalCount']}:{len(threads)}:{sum(threads)}{talk}{conflict}{ci}"
 
 
 def fixable(pr, state, fixes):

@@ -26,9 +26,10 @@ HEAD = "a" * 40
 
 
 def pr(number=1, repo=MONOREPO, mine=True, requested=False, head=HEAD, additions=1, labels=(), mergeable="MERGEABLE",
-       reviews=0, threads=(), counts=None, approvals=(), committed="2026-10-25T10:00:00+00:00"):
+       reviews=0, threads=(), counts=None, approvals=(), committed="2026-10-25T10:00:00+00:00", talk=()):
     """A queue PR as `queue()` returns it. `threads` = [(resolved, comment count)], `counts` = {check state: n},
-    `approvals` = [viewer_did_author] of each APPROVED opinionated review."""
+    `approvals` = [viewer_did_author] of each APPROVED opinionated review, `talk` = [(created, mine, typename)]
+    of each PR comment."""
     rollup = {"contexts": {"checkRunCountsByState": [{"state": s, "count": n} for s, n in counts.items()]}} \
         if counts is not None else None
     return {"number": number, "title": f"title {number}", "state": "OPEN", "isDraft": False, "headRefOid": head,
@@ -38,7 +39,9 @@ def pr(number=1, repo=MONOREPO, mine=True, requested=False, head=HEAD, additions
             "latestOpinionatedReviews": {"nodes": [{"state": "APPROVED", "viewerDidAuthor": a} for a in approvals]},
             "commits": {"nodes": [{"commit": {"committedDate": committed, "statusCheckRollup": rollup}}]},
             "reviews": {"totalCount": reviews},
-            "reviewThreads": {"nodes": [{"isResolved": r, "comments": {"totalCount": c}} for r, c in threads]}}
+            "reviewThreads": {"nodes": [{"isResolved": r, "comments": {"totalCount": c}} for r, c in threads]},
+            "comments": {"nodes": [{"createdAt": t, "viewerDidAuthor": m, "author": {"__typename": k}}
+                                   for t, m, k in talk]}}
 
 
 def finding(severity="medium", confidence=0.9, file="a.py", line_start=2, line_end=None, title="t"):

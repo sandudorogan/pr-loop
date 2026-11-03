@@ -45,7 +45,7 @@ One process serves every project. Clients (the CLI, the app) read and change its
   is listed `no-checkout`, and its PRs are `skipped` rows. The daemon logs `projects: …` when the list changes.
 - **New projects take the defaults:** both lanes on. Built-in overrides: `iprally/gitops` has review off, `iprally/iprally` has its fixer gates.
 - **Review lane:** my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before, in every active project.
-- **Fix lane:** my PRs only. Input = unresolved threads, review bodies on the head, failed Actions jobs, base conflict.
+- **Fix lane:** my PRs only. Input = unresolved threads, review bodies on the head, colleagues' PR comments after the head commit, failed Actions jobs, base conflict.
 - **Pools:** one shared review pool and one shared fix pool. `lanes.separate` gives each active project its own pair,
   sized by its effective `workers`. The switch is live: running passes finish in their old pool (`daemon/pr_wizard/pools.py`).
 - Every PR dict carries `repo`. Lanes, locks and state key on `(repo, number)`: PR numbers of two repos overlap.
@@ -236,7 +236,7 @@ Break one of these and something outside this file breaks quietly.
 - **Fix floor.** A finding counts when severity ≥ medium and confidence ≥ 0.6. From round 4: ≥ high.
 - **`stop`.** `pr_review.py run` prints JSON with `stop: true` only when nothing is left to fix.
   The queue maps "every enabled reviewer stops" to `clean`.
-- **`feedback_key`.** `head:reviews:unresolved-threads:their-comments[:conflict][:ci-red-N[-running]]`.
+- **`feedback_key`.** `head:reviews:unresolved-threads:their-comments[:comments-N][:conflict][:ci-red-N[-running]]`.
   The fix lane runs when the key differs from the last recorded one. Any new kind of input must move the key.
 - **Codex never writes git.** It runs `workspace-write` with no network. `pr_fix.py` commits, pushes, replies, resolves.
 - **No AI attribution.** `land()` strips `Co-Authored-By` and "Generated with Claude" lines from commit messages.

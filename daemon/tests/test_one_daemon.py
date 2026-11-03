@@ -20,7 +20,7 @@ def node(repo, number, mine=True, title="t"):
             "author": {"login": "me"}, "updatedAt": "2026-10-25T10:00:00Z",
             "labels": {"nodes": []}, "latestOpinionatedReviews": {"nodes": []},
             "commits": {"nodes": [{"commit": {"committedDate": "2026-10-25T10:00:00Z", "statusCheckRollup": None}}]},
-            "reviews": {"totalCount": 0}, "reviewThreads": {"nodes": []}}
+            "reviews": {"totalCount": 0}, "reviewThreads": {"nodes": []}, "comments": {"nodes": []}}
 
 
 def search(mine=(), requested=(), assigned=(), reviewed=()):
