@@ -187,11 +187,11 @@ menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAft
 │                   All repos · fetched 12:00                                                        │
 ├──────────────────┬──────────────────────────────────────────────────────────┬─┬──────────────────┤
 │ All repos      4 │    PR     Project  Title                Author  Status   Detail │▏│ Status       ⚙   │
-│ Repos            │ ▾ To Approve  2                                          │▏│ iprally #17190   │
-│ iprally/iprally 3│ ✓  #17166 iprally  refactor(ui): one…   colleague Ready to approve │▏│ Live run         │
-│   review · fix   │ ▾ My PRs  2                                              │▏│ Review           │
-│ iprally/gitops  1│ ▶  #17190 iprally  feat(search): keep…  you     Reviewing 02:08 │▏│ Findings         │
-│   fix only       │ ▸ Done  1                                                │▏│ Fix              │
+│ Repos            │ ⌄ To Approve  2                                          │▏│ iprally #17190   │
+│ iprally/iprally 3│     ⌄ ✓ Ready to approve  1                              │▏│ Live run         │
+│   review · fix   │ ✓  #17166 iprally  refactor(ui): one…   Aino V… Ready to approve │▏│ Review           │
+│ iprally/gitops  1│     › ◷ Up next  1                                       │▏│ Findings         │
+│   fix only       │ ⌄ My PRs  2  …  › Done  1                                 │▏│ Fix              │
 └──────────────────┴──────────────────────────────────────────────────────────┴─┴──────────────────┘
    NavigationSplitView sidebar        detail = HStack [ table | ResizeHandle | PRInspector ]
 ```
@@ -200,8 +200,8 @@ menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAft
 | --- | --- |
 | Sidebar | `ProjectSidebar`: "All repos" with the total ready badge, then a "Repos" section in the snapshot's order. A row shows `owner/name` (middle-truncated), the lane line and the ready badge. `error` and `no-checkout` rows show a warning badge; `.help` gives the reason. They stay selectable: their PRs are real `skipped` rows. Selection is `@SceneStorage("sidebar")`. ⌘0 selects All repos, ⌘1…⌘9 the nth repo. |
 | Sidebar toggle | Our own button in the sidebar's toolbar. The system toggle is removed (`.toolbar(removing: .sidebarToggle)`) because it shows no on state. It drives `NavigationSplitView(columnVisibility:)` from `@SceneStorage("sidebarShown")`. |
-| Sections | A to-do list (`QueueFilter.sections`, decisions D31): To Approve (colleagues' items), My PRs (`mine` items), Done (the `done` entries of `GET /v1/history?limit=200&repo=`, `api.md §3.13`). Items with `done: true` (a done PR whose run still finishes) stay out of the first two. Each section collapses; the collapsed set is `@SceneStorage("collapsed")`, Done by default. Empty sections hide. A row is a `TodoRow`: `.open(QueueItem)` or `.done(HistoryEntry)`. |
-| Order | What needs me first: ready, then active, queued, idle (and unknown), paused (`Group.attention`); inside a group the daemon's `items` order. Done keeps the history order (`at` descending). No column sort. Ranks come from the daemon. |
+| Sections | A to-do list (`QueueFilter.sections`, decisions D32): To Approve (colleagues' items), My PRs (`mine` items), Done (the `done` entries of `GET /v1/history?limit=200&repo=`, `api.md §3.13`). Items with `done: true` (a done PR whose run still finishes) stay out of the first two. To Approve and My PRs split into stages (`QueueStage`): Ready ("Ready to approve" / "Ready for review"), In work (`active`), Up next (`queued`), Waiting (`idle`, unknown), Paused. Done has no stages. Every section and stage is a `Section` with its own header (`QueueHeader`: chevron, stage symbol, title, count); a folded one emits no rows. The folded ids (`toApprove`, `mine.ready`, …) are `@SceneStorage("folded")`, Done by default. Empty sections and stages hide. A row is a `TodoRow`: `.open(QueueItem)` or `.done(HistoryEntry)`. |
+| Order | `QueueLayout` in `@AppStorage("queueLayout")` (JSON): the section order and each section's stage order, by default To Approve, My PRs, Done and Ready, In work, Up next, Waiting, Paused. A header drags onto another header of its level (`.draggable` / `.dropDestination` with its `dragID`, `section:mine` or `stage:mine.ready`), or moves from its menu (Move Up / Move Down, to the next visible header). Inside a stage the daemon's `items` order; Done keeps the history order (`at` descending). No column sort. |
 | Columns | mark (▶ / rank / ✓ / pause; a done row ◯✓) · PR · Project (All repos only) · Title (`[Draft]` tag) · Author (`you` when `mine`, else `author_name`, else the login; `.help` shows `@login`) · Status (badge + override cue; a done row shows its `outcome`) · Detail (a timer while `active`; a done row "Merged · 2 days ago"). A ready row is green "Ready to approve" for a colleague's PR and purple "Ready for review" for mine (`StatusStyle(item)`, `Tone.mine`). Minimums sum to `QueueTable.minWidth` = 566 pt. Customization is `@SceneStorage("todoColumns")`. |
 | Selection | Multi, keyed by `PRRef.id`. ⏎ or double-click opens the PR. **A non-empty selection opens the inspector.** Deselect leaves it as it is. |
 | Override cue | `items[].override` non-empty → `slider.horizontal.3` after the status badge, with the paths in `.help` and the accessibility label. |
@@ -411,7 +411,7 @@ The Settings window edits two levels (defaults and projects) of one config file 
 
 | Lives in | Settings |
 | --- | --- |
-| `@AppStorage` (`AppStorageKey`, domain `local.pr-loop.app`) | `showsMenuBarExtra`, `notifiesReady`, `settingsPane`, `settingsScope`, `socket`, `eventCursor` (no UI) |
+| `@AppStorage` (`AppStorageKey`, domain `local.pr-loop.app`) | `showsMenuBarExtra`, `notifiesReady`, `settingsPane`, `settingsScope`, `socket`, `queueLayout`, `eventCursor` (no UI) |
 | `@SceneStorage` | `sidebar`, `sidebarShown`, `columns`, `inspector`, `inspectorTab`, `inspectorWidth` |
 | System | Open at login (`SMAppService`) · notification permission and alert style (`UNUserNotificationCenter`) |
 | Daemon `state.db` | per-PR overrides (`pr_overrides`), via `…/prs/{o}/{n}/{N}/config` |

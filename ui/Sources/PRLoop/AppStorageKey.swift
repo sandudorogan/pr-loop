@@ -5,4 +5,5 @@ nonisolated enum AppStorageKey {
     static let settingsPane = "settingsPane"
     static let settingsScope = "settingsScope"
     static let socket = "socket"
+    static let queueLayout = "queueLayout"
 }

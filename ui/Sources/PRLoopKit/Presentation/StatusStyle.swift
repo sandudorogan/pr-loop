@@ -44,7 +44,7 @@ public struct StatusStyle: Hashable, Sendable {
         }
     }
 
-    private init(symbol: String, tone: Tone, label: String) {
+    init(symbol: String, tone: Tone, label: String) {
         (self.symbol, self.tone, self.label) = (symbol, tone, label)
     }
 }

@@ -115,13 +115,17 @@ and said little.
 **D27. Releases: a `v*` tag publishes a dmg and a zip.** CI builds them from the tag. *Why:* there was no way to
 get the app without cloning and building it.
 
-**D31. The queue reads as a to-do list: To Approve, My PRs, Done.** Colleagues' PRs come first, since a
+**D32. The queue reads as a to-do list: To Approve, My PRs, Done.** Colleagues' PRs come first, since a
 colleague waits on them; then mine; then Done, collapsed by default. A colleague's ready PR is green ("Ready to
 approve"), mine is purple ("Ready for review"). *Why:* both were the same green "Ready", and the owner acts on them
 in different ways. Done holds every §3.13 history entry off the to-do list (merged, closed, approved by me, marked
 done), so the empty-state history view went away. The owner marks a PR done or moves it back (`api.md §3.18`).
 A done PR takes no new pass: done means off my plate. A new review request does not undo a manual mark; my
 approval is done only until a re-request, as before.
+Each of To Approve and My PRs splits into stages (Ready, In work, Up next, Waiting, Paused), and every section and
+stage collapses. The owner orders both levels: drag a header onto another one of its level, or Move Up/Down
+from its menu. *Why:* the stages were already there as an order, without headers, and the owner wanted to fold
+them and choose what comes first.
 
 ## Process of work
 

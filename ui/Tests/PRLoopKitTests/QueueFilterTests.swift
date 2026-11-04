@@ -35,10 +35,14 @@ import Testing
         #expect(try keys(QueueFilter(text: text)) == expected)
     }
 
-    @Test("colleagues' PRs, then mine, each with the ready ones first, then Done")
+    @Test("colleagues' PRs, then mine, each split into stages with the ready one first, then Done")
     func sections() throws {
         let all = QueueFilter().sections(try Snapshots.queue().items, done: [try Snapshots.historyEntry()])
         #expect(all.map(\.title) == ["To Approve", "My PRs", "Done"])
+        #expect(
+            all.map { $0.stages.map(\.id) } == [
+                ["toApprove.ready", "toApprove.queued"], ["mine.active", "mine.waiting"], [],
+            ])
         #expect(
             all.map { $0.rows.map(\.id) } == [
                 ["iprally/iprally#17166", "iprally/iprally#17201"],

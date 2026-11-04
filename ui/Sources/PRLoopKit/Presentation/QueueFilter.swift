@@ -15,16 +15,24 @@ public struct QueueFilter: Hashable, Sendable {
         items.filter { matches($0.repo, $0.key, $0.title) }
     }
 
-    /// To Approve, then My PRs, each with what needs me on top, then Done. Empty sections hide.
-    public func sections(_ items: [QueueItem], done: [HistoryEntry] = []) -> [QueueSection] {
-        let open = self.items(items).filter { !$0.isDone }.sorted { $0.group.attention < $1.group.attention }
-        let rows: [QueueSection.Kind: [TodoRow]] = [
-            .toApprove: open.filter { !$0.isMine }.map(TodoRow.open),
-            .mine: open.filter(\.isMine).map(TodoRow.open),
-            .done: done.filter { $0.isDone && matches($0.repo, $0.key, $0.title) }.map(TodoRow.done),
-        ]
-        return QueueSection.Kind.allCases.compactMap { kind in
-            rows[kind].flatMap { $0.isEmpty ? nil : QueueSection(kind: kind, rows: $0) }
+    /// To Approve, My PRs and Done in the layout's order. The first two split into stages, also in the layout's
+    /// order; rows keep the daemon's order inside a stage. Empty sections and stages hide.
+    public func sections(_ items: [QueueItem], done: [HistoryEntry] = [], layout: QueueLayout = QueueLayout())
+        -> [QueueSection]
+    {
+        let open = self.items(items).filter { !$0.isDone }
+        let finished = done.filter { $0.isDone && matches($0.repo, $0.key, $0.title) }.map(TodoRow.done)
+        return layout.sectionOrder.compactMap { kind in
+            let mine = open.filter { $0.isMine == (kind == .mine) }
+            let stages: [QueueStage] =
+                kind == .done
+                ? []
+                : layout.stageOrder(of: kind).compactMap { stage in
+                    let rows = mine.filter { QueueStage.Kind($0.group) == stage }.map(TodoRow.open)
+                    return rows.isEmpty ? nil : QueueStage(section: kind, kind: stage, rows: rows)
+                }
+            let rows = kind == .done ? finished : stages.flatMap(\.rows)
+            return rows.isEmpty ? nil : QueueSection(kind: kind, stages: stages, rows: rows)
         }
     }
 

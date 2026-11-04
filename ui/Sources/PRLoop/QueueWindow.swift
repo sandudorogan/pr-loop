@@ -6,6 +6,7 @@ struct QueueWindow: View {
     let socket: String
     @Environment(QueueStore.self) private var store
     @Environment(HistoryStore.self) private var history
+    @AppStorage(AppStorageKey.queueLayout) private var layout = QueueLayout()
     @SceneStorage("sidebar") private var sidebar = SidebarSelection.all
     @SceneStorage("todoColumns") private var columns = TableColumnCustomization<TodoRow>()
     @SceneStorage("inspector") private var showsInspector = false
@@ -18,7 +19,9 @@ struct QueueWindow: View {
     @State private var peek = PeekModel()
 
     private var filter: QueueFilter { QueueFilter(repo: sidebar.repo, text: search) }
-    private var sections: [QueueSection] { filter.sections(store.snapshot?.items ?? [], done: history.entries) }
+    private var sections: [QueueSection] {
+        filter.sections(store.snapshot?.items ?? [], done: history.entries, layout: layout)
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
@@ -92,7 +95,8 @@ struct QueueWindow: View {
             EmptyStateView(filter: filter, socket: socket, sidebar: $sidebar)
         } else {
             QueueTable(
-                sections: sections, showsProject: sidebar == .all, selection: $selection, columns: $columns,
+                sections: sections, layout: $layout, showsProject: sidebar == .all, selection: $selection,
+                columns: $columns,
                 showSettings: { showSettings([$0]) }
             )
             .opacity(store.phase.isDisconnected ? 0.5 : 1)
