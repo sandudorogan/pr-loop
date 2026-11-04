@@ -74,6 +74,10 @@ private struct DaemonStatus: View {
     let repo: String?
 
     var body: some View {
+        content.padding(.horizontal, 10)
+    }
+
+    @ViewBuilder private var content: some View {
         switch store.phase {
         case .idle, .connecting: status("Connecting…", .neutral)
         case .incompatible: status("Incompatible daemon", .bad)
