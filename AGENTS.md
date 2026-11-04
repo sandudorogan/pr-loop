@@ -106,8 +106,6 @@ The daemon and each UI are separate trees. They share only the API contract.
  docs/        the design
  claude/      the pr-review-loop skill for agent-delegator
  install.py   links.json: installs both sides into $HOME
- bin review pr_loop   temporary symlinks into daemon/, for a checkout that still runs the old links;
-                        drop them once install.py has re-linked (docs/status.md)
 ```
 
 | Path | Role |
