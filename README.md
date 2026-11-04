@@ -1,4 +1,4 @@
-# PR Wizard
+# PR Loop
 
 A macOS daemon that reviews and fixes your GitHub PRs with Claude Code and Codex. MIT licensed.
 
@@ -26,27 +26,27 @@ After 8 rounds in a row with findings, the PR waits for a human.
 ## How it works
 
 ```text
- PR Wizard.app · pr-wizard CLI · curl
+ PR Loop.app · pr-loop CLI · curl
         │  HTTP/1.1 + JSON
         ▼
- ~/.local/state/pr-wizard/api.sock ──▶ pr-wizard --daemon (launchd local.pr-wizard, the only process)
+ ~/.local/state/pr-loop/api.sock ──▶ pr-loop --daemon (launchd local.pr-loop, the only process)
                                           │ detects projects from your PRs, finds their checkouts under ~/workdir
                                           │ review pool ×3 · fix pool ×3 (threads), prune every 30 min
                                           ▼
-                                 ~/.local/state/pr-wizard/state.db (SQLite)
+                                 ~/.local/state/pr-loop/state.db (SQLite)
 ```
 
-- **Projects.** A repo becomes a project when one of your PRs is in it. PR Wizard works it when it finds a main
+- **Projects.** A repo becomes a project when one of your PRs is in it. PR Loop works it when it finds a main
   checkout of that repo under `~/workdir/*/`. A new project gets the defaults: review and fix on.
 - **Conventions.** The prompts are generic. Each run reads the project's own `AGENTS.md` / `CLAUDE.md`,
   contributing doc, editorconfig, formatter and linter configs and skills from the checkout at the PR head.
 - **Gates.** After Codex, the fix pass runs the project's `fix.gates` (format, then test). A project without gates
   runs none, and its CI stays the gate.
-- **Config.** `~/.config/pr-wizard/config.json` is a chezmoi-managed symlink to `.pr-wizard/config.json` in your
+- **Config.** `~/.config/pr-loop/config.json` is a chezmoi-managed symlink to `.pr-loop/config.json` in your
   chezmoi source. Three levels: all repos → project → PR. The PR level lives in `state.db` and drops when the PR closes.
   Labels opt a PR out: `no-auto-review` skips the reviewers, `no-auto-fix` skips the fix lane.
 - **API.** The daemon has no UI. It serves the queue, history, config and `ready_for_approval` events on its socket.
-- **App.** `PR Wizard.app` shows the queue and the PRs it worked on recently, edits the config, and posts the
+- **App.** `PR Loop.app` shows the queue and the PRs it worked on recently, edits the config, and posts the
   "Ready for your approval" notification for a colleague's PR.
 
 ## Install
@@ -55,50 +55,50 @@ Requirements: macOS 26, the Command Line Tools (`xcode-select --install`), Pytho
 Claude Code, Codex.
 
 ```sh
-git clone git@github.com:sandudorogan/pr-wizard.git ~/workdir/pr-wizard
-~/workdir/pr-wizard/install.py
+git clone git@github.com:sandudorogan/pr-loop.git ~/workdir/pr-loop
+~/workdir/pr-loop/install.py
 ```
 
 ```text
  install.py
    1 check   python3 ≥ 3.10 · git · gh logged in · claude · codex      on the daemon's PATH, not your shell's
    2 link    commands, runners, launchd plist, config → $HOME          replaced files → ~/.local/state/review-queue/backups/
-   3 start   launchd local.pr-wizard                                   restart when it already runs
-   4 app     build PR Wizard.app → /Applications, open it
+   3 start   launchd local.pr-loop                                   restart when it already runs
+   4 app     build PR Loop.app → /Applications, open it
 ```
 
 Step 1 stops on any gap and prints the command that fixes it. Run the installer again after a `git pull`:
-it restarts the daemon (a restart kills passes in work, see `pr-wizard -l`) and rebuilds the app.
+it restarts the daemon (a restart kills passes in work, see `pr-loop -l`) and rebuilds the app.
 
 - `--dry-run` prints each step and changes nothing.
 - With chezmoi set up (`chezmoi source-path`), the installer writes the default config into the source once and
   applies only the paths it owns. `--no-chezmoi` links straight into `$HOME`.
 - `--no-app` installs the daemon only.
 
-Each [release](https://github.com/sandudorogan/pr-wizard/releases) also carries the app as a `.dmg`. It is ad-hoc
+Each [release](https://github.com/sandudorogan/pr-loop/releases) also carries the app as a `.dmg`. It is ad-hoc
 signed, so allow its first launch in System Settings → Privacy & Security → **Open Anyway**. The installer builds the
 same app from the checkout, with no such step.
 
 The task briefs come from [agent-delegator](https://github.com/sandudorogan/agent-delegator), which also uses the PR watch skill in `claude/`.
-PR Wizard runs without either.
+PR Loop runs without either.
 
 ## Use
 
 ```sh
-pr-wizard -l                 # the queue: ▶ in work, 1..n review order, ✓ ready to approve
-pr-wizard --pr 16400         # review one PR now (owner/name#N for another repo)
-pr-wizard --next 16400       # move a PR to the front
-pr-wizard --wait 16400       # block until the PR settles at its head, print JSON
-pr-wizard --pause            # workers take no new PR until --resume
-pr-wizard config             # print the config (--patch JSON, --put FILE)
-pr-wizard -n                 # dry run: print each PR's gate decision
-pr-wizard --prune            # remove worktrees of merged or approved PRs (the daemon does it every 30 min)
+pr-loop -l                 # the queue: ▶ in work, 1..n review order, ✓ ready to approve
+pr-loop --pr 16400         # review one PR now (owner/name#N for another repo)
+pr-loop --next 16400       # move a PR to the front
+pr-loop --wait 16400       # block until the PR settles at its head, print JSON
+pr-loop --pause            # workers take no new PR until --resume
+pr-loop config             # print the config (--patch JSON, --put FILE)
+pr-loop -n                 # dry run: print each PR's gate decision
+pr-loop --prune            # remove worktrees of merged or approved PRs (the daemon does it every 30 min)
 ```
 
-`review-queue` is the same command. A bare `N` is a PR of `--repo`, else `$PR_WIZARD_REPO`, else `iprally/iprally`.
+`review-queue` and `pr-wizard` are the same command. A bare `N` is a PR of `--repo`, else `$PR_LOOP_REPO`, else `iprally/iprally`.
 
-PR Wizard posts reviews, replies and commits with your GitHub credentials.
-Log: `~/Library/Logs/pr-wizard.log`. State: `~/.local/state/pr-wizard/`.
+PR Loop posts reviews, replies and commits with your GitHub credentials.
+Log: `~/Library/Logs/pr-loop.log`. State: `~/.local/state/pr-loop/`.
 
 ## Develop
 
@@ -118,8 +118,8 @@ A `v*` tag publishes a GitHub release:
 ```text
  git push origin v1.2.0 ──▶ .github/workflows/release.yml (macos-26)
                               ui/script/test · lint
-                              VERSION=1.2.0 ui/script/package ──▶ PR-Wizard-1.2.0.dmg   app + Applications link
-                                                                  PR-Wizard-1.2.0.zip
+                              VERSION=1.2.0 ui/script/package ──▶ PR-Loop-1.2.0.dmg   app + Applications link
+                                                                  PR-Loop-1.2.0.zip
                                                                   SHA256SUMS
                               ui/script/notes v1.2.0 ──▶ install steps + commits since the last tag
                               gh release create v1.2.0

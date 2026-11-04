@@ -3,8 +3,8 @@
 What is still open after the overhaul. Each item says who acts. Remove an item when it is done, and record any
 decision it produced in [decisions.md](decisions.md).
 
-The build of the overhaul is complete: plan units 1–27, app units U1–U18, cutover A (the `local.pr-wizard` label)
-and the GitHub half of cutover B (the repo is `sandudorogan/pr-wizard`).
+The build of the overhaul is complete: plan units 1–27, app units U1–U18, cutover A (one launchd label), the GitHub
+half of cutover B, the `daemon/` + `ui/` layout and the rename to PR Loop (D31; the repo is `sandudorogan/pr-loop`).
 
 ## Owner: needs a decision
 
@@ -13,45 +13,35 @@ summary like "No ship: the round 5 blocker remains". `post()` records `no-findin
 checks only the summary's length and error words, so the run can count toward clean and the ready alert.
 Option: treat a non-ship verdict with zero findings as a false clean, and retry with `--force`.
 
-## Owner: deploy the daemon/ and ui/ layout
-
-The repo now keeps the backend in `daemon/` and the macOS app in `ui/`. Root symlinks `bin`, `review` and
-`pr_wizard` point into `daemon/`, so a plain pull keeps the installed links and the running daemon working.
-
-1. Wait until `pr-wizard -l` shows no ▶ rows.
-2. `git -C ~/workdir/review-queue pull --ff-only`, then `python3 ~/workdir/review-queue/install.py`. It re-links
-   into `daemon/`, restarts the daemon and rebuilds the app.
-3. `rm -rf ~/workdir/review-queue/app`: only ignored build output is left there.
-4. Then drop the three root symlinks in one commit.
-
 ## Owner: cutover B, the checkout half
 
 The checkout and the install backups keep the old name until then: `~/workdir/review-queue`,
 `~/.local/state/review-queue/backups`.
 
-1. Wait until `pr-wizard -l` shows no ▶ rows, then `launchctl bootout gui/$(id -u)/local.pr-wizard`.
-2. `mv ~/workdir/review-queue ~/workdir/pr-wizard`, then `git -C ~/workdir/pr-wizard worktree repair`.
-3. `ln -s pr-wizard ~/workdir/review-queue`. The link is temporary. The checkout scan reads only real directories,
+1. Wait until `pr-loop -l` shows no ▶ rows, then `launchctl bootout gui/$(id -u)/local.pr-loop`.
+2. `mv ~/workdir/review-queue ~/workdir/pr-loop`, then `git -C ~/workdir/pr-loop worktree repair`.
+3. `ln -s pr-loop ~/workdir/review-queue`. The link is temporary. The checkout scan reads only real directories,
    so the link adds no second match.
-4. `python3 ~/workdir/pr-wizard/install.py`, then commit and push the dotfiles repo.
-5. Check: `pgrep -fl -- '--daemon'` shows one process; `curl -s --unix-socket ~/.local/state/pr-wizard/api.sock
-   http://x/v1/info` shows `"label": "local.pr-wizard"`; `review-queue --wait <settled N>` returns at once.
+4. `python3 ~/workdir/pr-loop/install.py`, then commit and push the dotfiles repo.
+5. Check: `pgrep -fl -- '--daemon'` shows one process; `curl -s --unix-socket ~/.local/state/pr-loop/api.sock
+   http://x/v1/info` shows `"label": "local.pr-loop"`; `review-queue --wait <settled N>` returns at once.
 6. Optional: point agent-delegator at the new path. The alias keeps it working without this.
 7. A week later: when `grep -rn workdir/review-queue ~/.local/share/chezmoi ~/.claude ~/Library/LaunchAgents`
    finds nothing, remove the symlink.
 
 ## Owner: dotfiles and system settings
 
-- Commit the dotfiles repo: `symlink_local.pr-wizard.plist.tmpl` (new), the deleted review-queue plist template,
-  `.pr-wizard/config.json` and the two `symlink_*` templates.
-- System Settings › Notifications › PR Wizard: alert style **Persistent**. General shows a fix-it row while it is Temporary.
+- Commit and push the dotfiles repo: the PR Loop rename (`dot_local/bin/symlink_pr-loop.tmpl`,
+  `Library/LaunchAgents/symlink_local.pr-loop.plist.tmpl`, `dot_config/pr-loop/`, `.pr-loop/config.json`) and the
+  delegator links that now point into `daemon/review/`.
+- System Settings › Notifications › PR Loop: alert style **Persistent**. General shows a fix-it row while it is Temporary.
 - Settings › General › **Open at login** on.
 
 ## Owner: checks at the screen
 
 An agent session cannot activate apps or capture the screen, so these wait for the owner.
 
-1. `open "/Applications/PR Wizard.app"`: the window shows the live queue.
+1. `open "/Applications/PR Loop.app"`: the window shows the live queue.
 2. Menu bar extra › Settings… brings Settings to the front, with the main window open and closed.
 3. Select a row, press Space and ⌘Y: the findings peek toggles. Click the table, then type in Filter: spaces type.
 4. ⌘0…⌘9, ⏎ opens the PR, the context menu works, VoiceOver reads the sidebar badges.
@@ -76,9 +66,9 @@ An agent session cannot activate apps or capture the screen, so these wait for t
 
 | Where | What |
 | --- | --- |
-| `daemon/pr_wizard/names.py` `MONOREPO` | the default repo of a bare `N` on the CLI and in the scripts |
-| `daemon/pr_wizard/names.py` `REPOS` | the two repos of the old JSON layout, for `migrate()` / `--reverse` only |
-| `daemon/pr_wizard/config.py` `DEFAULTS` | iprally's gates and gitops' review-off, as built-in project overrides |
+| `daemon/pr_loop/names.py` `MONOREPO` | the default repo of a bare `N` on the CLI and in the scripts |
+| `daemon/pr_loop/names.py` `REPOS` | the two repos of the old JSON layout, for `migrate()` / `--reverse` only |
+| `daemon/pr_loop/config.py` `DEFAULTS` | iprally's gates and gitops' review-off, as built-in project overrides |
 | `claude/skills/pr-review-loop/scan.py` | hard-coded `iprally/iprally`; reads `IPR_REPO_ROOT` only |
 | `daemon/review/pr_review.py` | briefs under `~/.claude/skills/delegator/briefs/`, by bare PR number or branch |
 | `claude/skills/pr-review-loop/SKILL.md` | needs agent-delegator's `pr-fixer` and `github` agents |

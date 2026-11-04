@@ -1,4 +1,4 @@
-"""The command line of the one PR Loop daemon. review-queue is the same command.
+"""The command line of the one PR Loop daemon. review-queue and pr-wizard are the same command.
 
 Usage:
   pr-loop --daemon     launchd job local.pr-loop: 3 workers review, 3 fix my PRs, the queue refreshes every 5 min

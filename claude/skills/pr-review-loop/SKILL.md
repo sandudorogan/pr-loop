@@ -1,6 +1,6 @@
 ---
 name: pr-review-loop
-description: Watch a set of open PRs and keep them green. Polls each PR for new review feedback (human + bots like cursor[bot] + the fresh-context agent reviewers) or failing CI, dispatches the pr-fixer subagent per actionable PR (PR Wizard reviews each push on its own), and self-paces the interval. Periodically merges origin/main into each branch and resolves any conflicts so branches don't go stale. Caps attempts per PR, then surfaces it as needs-human. The orchestrator never fixes code itself.
+description: Watch a set of open PRs and keep them green. Polls each PR for new review feedback (human + bots like cursor[bot] + the fresh-context agent reviewers) or failing CI, dispatches the pr-fixer subagent per actionable PR (PR Loop reviews each push on its own), and self-paces the interval. Periodically merges origin/main into each branch and resolves any conflicts so branches don't go stale. Caps attempts per PR, then surfaces it as needs-human. The orchestrator never fixes code itself.
 compatibility: Claude Code
 ---
 
@@ -10,7 +10,7 @@ The external watch loop: given a list of open PRs, keep them moving toward merge
 addressing every new piece of feedback (reviewers, bots, the agent reviewers, CI) as it
 lands. You **orchestrate and track** — you never edit code, investigate, or comment on PRs
 yourself. All fixing is delegated to the `pr-fixer` subagent, which pushes its own fix; review
-happens after that push, on the PR, by PR Wizard, the review daemon (see **The review queue** in the
+happens after that push, on the PR, by PR Loop, the review daemon (see **The review queue** in the
 `delegator` skill).
 
 Correctness lives in `scan.py` (shipped beside this skill), not in your judgement of "did I
@@ -21,7 +21,7 @@ Subagent models: dispatch `pr-fixer` on `opus`; anything else goes to the tier t
 matches its difficulty (`haiku` / `haiku-high` / `haiku-xhigh` / `sonnet-high`, `github` for any `gh` or push, or
 `source-fetcher` for extra context), per the delegator skill's tiering table. Never dispatch on `fable` unless the user explicitly asks.
 
-The agent reviewers are not subagents — the PR Wizard daemon runs them (see **After a fix
+The agent reviewers are not subagents — the PR Loop daemon runs them (see **After a fix
 lands** below).
 
 ## Setup (once per run)
@@ -39,7 +39,7 @@ from the committed skill dir:
 
 ## The loop
 
-On the user's own PRs, reviews and review threads (agent, bot, or human) belong to PR Wizard's
+On the user's own PRs, reviews and review threads (agent, bot, or human) belong to PR Loop's
 fix lane, which runs `pr_fix.py` on them. `scan.py` reports only failing CI and PR
 conversation comments for those PRs, so PR Watch never races the lane.
 
@@ -69,9 +69,9 @@ Each tick:
    scanner flips its status to `needs-human` and stops returning it. Surface these to the user
    — they need a human, not another loop iteration.
 
-## After a fix lands — PR Wizard reviews it
+## After a fix lands — PR Loop reviews it
 
-A push changes the head, and PR Wizard reviews each new head of the user's own PRs and of PRs
+A push changes the head, and PR Loop reviews each new head of the user's own PRs and of PRs
 that request their review or are assigned to them, with no call from you. Its findings land on the PR as
 ordinary review comments and come back to you through the normal scan on a later tick. You
 never read the findings yourself, and you never run `pr_review.py`.
@@ -86,7 +86,7 @@ never read the findings yourself, and you never run `pr_review.py`.
   colleague's comment, gets no review (`held`). Only the user's ask re-opens it:
   `review-queue --next <N>` or `--pr <N>`.
 
-To see where a PR stands, have `github` run `review-queue --wait <N>` (`pr-wizard` is the same command; it returns at once when
+To see where a PR stands, have `github` run `review-queue --wait <N>` (`pr-loop` is the same command; it returns at once when
 the PR already settled on its current head: reviewed, and fixed when the reviewers posted). A watched PR outside the queue (not the
 user's, no review request, not assigned) gets a review only when the user asks: "Review PR #N now".
 
@@ -105,7 +105,7 @@ Dispatch `github` with "Main sync of <worktree>". It returns one of:
      feedback poll catches any breakage through the normal fix path.
    - `conflict` (it already ran `git merge --abort`) → dispatch **`pr-fixer`** to merge origin/main itself in
      that worktree, resolve the conflicts preserving the PR's intent, commit it, and push. The
-     PR Wizard reviews the resolved head if the resolution changed the PR's own diff.
+     PR Loop reviews the resolved head if the resolution changed the PR's own diff.
      If `pr-fixer` can't resolve it confidently, have it `git merge --abort` and surface the PR
      to the user.
 
@@ -145,7 +145,7 @@ which ones and what they returned. State what's still open rather than rounding 
 
 - Never edit code, run the fix, resolve merge conflicts, or reply to/resolve PR comments
   yourself — that's `pr-fixer`. A clean main-merge goes to `github`.
-- Never run the reviewers yourself — PR Wizard reviews every push. Never dispatch a fixer on a
+- Never run the reviewers yourself — PR Loop reviews every push. Never dispatch a fixer on a
   round that posted nothing or notes only.
 - Never read the reviewers' findings into your own context. They live on the PR; `pr-fixer`
   reads them from there on the next tick.

@@ -2,23 +2,23 @@
 
 Every settled design decision, with its reason. The owner made or approved each one. Change a decision only with a
 stated reason, and record the change here. Most date from the overhaul of 2026-10-25, which turned the
-`review-queue` script (`review-queue@3dc9b3f`) into PR Wizard.
+`review-queue` script (`review-queue@3dc9b3f`) into PR Wizard, renamed PR Loop on 2026-11-04 (D31).
 
 ## Before and after the overhaul
 
 | What | Before | Now |
 | --- | --- | --- |
-| Processes | 2 daemons (`IPR_REPO` per process) + a prune job | 1 daemon (`local.pr-wizard`), prune is a thread |
+| Processes | 2 daemons (`IPR_REPO` per process) + a prune job | 1 daemon (`local.pr-loop`), prune is a thread |
 | Repos | `iprally/iprally`, `iprally/gitops`, hard-coded | detected from my PRs, worked where a checkout exists |
 | Knobs | constants in 3 files | one config file in chezmoi, three override levels |
 | Conventions | iprally's, in the prompts | each project's own files, read at the PR head |
 | Fixer checks | cljfmt + Karma in `pr_fix.py` | per-project `fix.gates`; iprally's are its built-in override |
-| State | `review-queue*.json`, `pr-fix*/`, `.clean-reviews.json`, `now.d/` | `~/.local/state/pr-wizard/state.db` |
+| State | `review-queue*.json`, `pr-fix*/`, `.clean-reviews.json`, `now.d/` | `~/.local/state/pr-loop/state.db` |
 | Control | SIGUSR1, a shell snippet to re-arm | HTTP/1.1 + JSON on `api.sock` |
 | Ready alert | terminal-notifier | `ready_for_approval` events; the app notifies |
-| UI | `review-queue -l` | `pr-wizard -l` and `PR Wizard.app` |
-| Code | `daemon/bin/review-queue`, 841 lines | `daemon/pr_wizard/` package; `daemon/bin/review-queue` → `daemon/bin/pr-wizard` |
-| Name | review-queue (repo, label, paths) | PR Wizard; `review-queue` stays as a CLI alias |
+| UI | `review-queue -l` | `pr-loop -l` and `PR Loop.app` |
+| Code | `daemon/bin/review-queue`, 841 lines | `daemon/pr_loop/` package; `daemon/bin/review-queue` → `daemon/bin/pr-loop` |
+| Name | review-queue (repo, label, paths) | PR Loop (D31); `review-queue` and `pr-wizard` stay as CLI aliases |
 
 ## Process and transport
 
@@ -56,14 +56,14 @@ owner overrides them. Built-in overrides: `iprally/gitops` has review off; `ipra
 
 **D10. Project conventions, not iprally conventions.** The prompts are generic. Each run reads the project's own
 agent files, contributing doc, editorconfig, formatter and linter configs and skill list at the PR head. No iprally
-rule applies to another project. *Why:* PR Wizard now works any repo.
+rule applies to another project. *Why:* PR Loop now works any repo.
 
 **D11. Fixer gates are per-project config (`fix.gates`).** iprally's cljfmt and Karma are config in its built-in
 override, not code. A project without gates runs none, and CI stays its gate.
 
 ## Config and state
 
-**D12. One JSON config file; the chezmoi source is the source of truth.** `~/.config/pr-wizard/config.json` is a
+**D12. One JSON config file; the chezmoi source is the source of truth.** `~/.config/pr-loop/config.json` is a
 chezmoi symlink. The daemon saves with temp + rename beside the real file, so the link survives. The daemon never
 runs git or chezmoi: the owner commits the dotfiles. *Why:* the config is durable policy and belongs in dotfiles.
 
@@ -122,5 +122,12 @@ checkout only fast-forwards, because the live daemon runs it.
 
 **D29. Commits of about 700 changed lines or less, tests included.**
 
-**D30. The GitHub repo is `sandudorogan/pr-wizard`** (renamed from `review-queue`; GitHub redirects the old URL).
-The local checkout moves to `~/workdir/pr-wizard` in the second half of cutover B ([status.md](status.md)).
+**D30. The GitHub repo is `sandudorogan/pr-loop`** (renamed from `review-queue`, then `pr-wizard`; GitHub
+redirects the old URLs). It is public. The local checkout moves to `~/workdir/pr-loop` in the second half of
+cutover B ([status.md](status.md)).
+
+**D31. The name is PR Loop** (was PR Wizard): package `pr_loop`, CLI `pr-loop`, label `local.pr-loop`, state
+`~/.local/state/pr-loop`, app `PR Loop.app` (`local.pr-loop.app`), icon `arrow.triangle.2.circlepath`. *Why:* in
+software a wizard is a step-by-step setup dialog; this is a daemon that loops review → fix → push → review.
+`pr-wizard` stays a CLI alias. The daemon still holds `review-queue.lock`, so an old daemon and a new one never run
+together. The name sits close to the `pr-review-loop` skill, which is the delegator's watch loop, not this daemon.

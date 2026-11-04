@@ -1,6 +1,6 @@
-# PR Wizard.app
+# PR Loop.app
 
-PR Wizard.app is the macOS UI of the PR Wizard daemon. It shows the queue, edits the config and posts the
+PR Loop.app is the macOS UI of the PR Loop daemon. It shows the queue, edits the config and posts the
 "Ready for your approval" notification. It is one client of the control API on `api.sock`. It never runs reviews
 or fixes itself. Other OS UIs can come later. Each one is its own client of the same API (`docs/api.md`).
 
@@ -23,7 +23,7 @@ Hard rules:
 - **Never run plain `swift test`.** Under the CLT it builds the tests, runs zero, and exits 0. `ui/script/test`
   adds `-Xswiftc -F <CLT>/Library/Developer/Frameworks` and the rpaths. The same flags in `Package.swift` do not help.
 - **No SwiftUI macros.** The CLT has no `SwiftUIMacros` plugin, so `@Entry` fails. Write `FocusedValueKey` and
-  `EnvironmentKey` by hand (see `ui/Sources/PRWizard/FocusedValues+QueueFocus.swift`).
+  `EnvironmentKey` by hand (see `ui/Sources/PRLoop/FocusedValues+QueueFocus.swift`).
 - **No dependencies.** Apple frameworks only: SwiftUI, AppKit, Network, Observation, ServiceManagement, UserNotifications.
 
 ## 2. Conventions
@@ -33,7 +33,7 @@ A reviewer rejects a change that breaks one of these.
 | Topic | Rule |
 | --- | --- |
 | Language | Upcoming features on every target: `NonisolatedNonsendingByDefault`, `InferIsolatedConformances`, `ExistentialAny`, `MemberImportVisibility` (`ui/Package.swift`). |
-| Isolation | App target: `.defaultIsolation(MainActor.self)`. `PRWizardKit`: nonisolated by default. Stores are `@MainActor @Observable final class`. Models are `Codable, Sendable, Hashable` structs. Transport and client are `Sendable` structs. |
+| Isolation | App target: `.defaultIsolation(MainActor.self)`. `PRLoopKit`: nonisolated by default. Stores are `@MainActor @Observable final class`. Models are `Codable, Sendable, Hashable` structs. Transport and client are `Sendable` structs. |
 | Concurrency | `async`/`await` only. No `DispatchQueue`, completion handlers, `Task.detached`, `@unchecked Sendable` or `nonisolated(unsafe)`. A store owns its long-lived `Task` and cancels it in `stop()`. Cancellation closes the socket. |
 | Observation | `@Observable` with `@State`, `@Environment(Type.self)`, `@Bindable`. No `ObservableObject`, no Combine. |
 | Identity | A PR is `PRRef(repo:number:)`. Its `id` is the wire `key` (`"iprally/iprally#17190"`). PR numbers repeat across repos, so tables, selection, actions and notifications never key on a bare `Int`. |
@@ -55,17 +55,17 @@ One SwiftPM package at `ui/`. XcodeGen and Tuist only make projects for `xcodebu
 
 ```text
 ui/
-├── Package.swift            PRWizardKit (library) · PRWizard (executable) · PRWizardKitTests
+├── Package.swift            PRLoopKit (library) · PRLoop (executable) · PRLoopKitTests
 ├── .swift-format
-├── Resources/               Info.plist (bundle id local.pr-wizard.app) · AppIcon.icns (script/icon)
+├── Resources/               Info.plist (bundle id local.pr-loop.app) · AppIcon.icns (script/icon)
 ├── script/                  test · lint · bundle · run · install · contract · package · notes · icon
 ├── Sources/
-│   ├── PRWizardKit/         models, transport, client, feeds, stores, presentation. No SwiftUI.
-│   └── PRWizard/            App, scenes, views, system adapters. Thin: no logic a test needs.
-└── Tests/PRWizardKitTests/  Swift Testing; fixtures from contract/api/v1/ at the repo root
+│   ├── PRLoopKit/         models, transport, client, feeds, stores, presentation. No SwiftUI.
+│   └── PRLoop/            App, scenes, views, system adapters. Thin: no logic a test needs.
+└── Tests/PRLoopKitTests/  Swift Testing; fixtures from contract/api/v1/ at the repo root
 ```
 
-The split is the design. Every decision a test can check lives in `PRWizardKit`: what a row shows, which action is
+The split is the design. Every decision a test can check lives in `PRLoopKit`: what a row shows, which action is
 on, which marker a setting gets, what a patch holds. A view reads a Kit value and draws it.
 
 ## 4. Build, run, install, release
@@ -78,11 +78,11 @@ All commands run from `ui/`.
 | Coverage | `script/test --enable-code-coverage`, then `swift test --show-codecov-path` |
 | Lint | `script/lint` · fix: `swift format --in-place --recursive Sources Tests` |
 | Contract | `script/contract`: the fake daemon on a temp socket, then `ContractTests` against it |
-| Bundle | `script/bundle` → `build/PR Wizard.app` (release build, `Info.plist`, icon, ad-hoc sign, verify) |
+| Bundle | `script/bundle` → `build/PR Loop.app` (release build, `Info.plist`, icon, ad-hoc sign, verify) |
 | Run | `script/run` · against a fake: `script/run -- -socket /tmp/prw.sock` |
-| Fake daemon | `python3 -m pr_wizard.api --fake --socket /tmp/prw.sock` (from `daemon/`; `api.md §7`) |
-| Install | `script/install` → `/Applications/PR Wizard.app` |
-| Package | `VERSION=X.Y.Z script/package` → `build/PR-Wizard-X.Y.Z.{dmg,zip}` + `build/SHA256SUMS` |
+| Fake daemon | `python3 -m pr_loop.api --fake --socket /tmp/prw.sock` (from `daemon/`; `api.md §7`) |
+| Install | `script/install` → `/Applications/PR Loop.app` |
+| Package | `VERSION=X.Y.Z script/package` → `build/PR-Loop-X.Y.Z.{dmg,zip}` + `build/SHA256SUMS` |
 | Notes · icon | `script/notes vX.Y.Z` (release body) · `script/icon` → `Resources/AppIcon.icns` (commit it) |
 
 - The version is `1.0.<commit count>` unless `VERSION` is set. `CFBundleVersion` is the commit count.
@@ -95,7 +95,7 @@ All commands run from `ui/`.
 ## 5. Architecture
 
 ```text
- views (PRWizard) ──@Environment──▶ stores (PRWizardKit, @MainActor @Observable)
+ views (PRLoop) ──@Environment──▶ stores (PRLoopKit, @MainActor @Observable)
                                       │ QueueStore · HistoryStore · SettingsStore · PRSettingsStore · ReadyNotifications
                                       ▼
                                     DaemonClient : DaemonAPI        one method per endpoint, PRRef → path
@@ -104,17 +104,17 @@ All commands run from `ui/`.
                                     UnixSocketTransport : HTTPTransport   NetworkConnection(.unix), read to EOF
                                       │ HTTP/1.1 + JSON, one request per connection
                                       ▼
-                     ~/.local/state/pr-wizard/api.sock ── the one daemon (launchd local.pr-wizard), every repo
+                     ~/.local/state/pr-loop/api.sock ── the one daemon (launchd local.pr-loop), every repo
 ```
 
-- `AppDelegate` (`ui/Sources/PRWizard/AppDelegate.swift`) builds one `DaemonClient` and every store on it. It
+- `AppDelegate` (`ui/Sources/PRLoop/AppDelegate.swift`) builds one `DaemonClient` and every store on it. It
   calls `store.start()` and `notifications.start()` in `applicationDidFinishLaunching`. State restoration can
   launch the app with the main window closed, so a window `.task` must not start a feed.
-- The app talks to the daemon through the API only. It never reads `state.db`, never runs the `pr-wizard` CLI, and
+- The app talks to the daemon through the API only. It never reads `state.db`, never runs the `pr-loop` CLI, and
   never runs git or chezmoi. A GUI app gets a minimal PATH in which `/usr/bin/python3` is too old.
 - **Start Daemon** runs `/bin/launchctl kickstart gui/<uid>/<label>` through `DaemonLauncher`
-  (`ui/Sources/PRWizardKit/Daemon/DaemonLauncher.swift`). The label is the one line of
-  `~/.local/state/pr-wizard/launchd-label`, which survives a stop. Without the file it is `local.pr-wizard`.
+  (`ui/Sources/PRLoopKit/Daemon/DaemonLauncher.swift`). The label is the one line of
+  `~/.local/state/pr-loop/launchd-label`, which survives a stop. Without the file it is `local.pr-loop`.
   Paths live in `DaemonLocation`.
 
 **Seams.** Every system or daemon edge is a Kit protocol. Tests fake the protocol, never the store.
@@ -128,7 +128,7 @@ All commands run from `ui/`.
 | `DaemonLauncher` | `ProcessDaemonLauncher` (app) | a recording `run` |
 | `LoginItemService` | `SMAppService` extension (app) | a scripted status |
 
-**Errors.** `APIError` (`ui/Sources/PRWizardKit/APIError.swift`): `.down` (ENOENT, ECONNREFUSED), `.timeout`,
+**Errors.** `APIError` (`ui/Sources/PRLoopKit/APIError.swift`): `.down` (ENOENT, ECONNREFUSED), `.timeout`,
 `.http(status:code:message:details:)`, `.decoding`, `.incompatible(api:)`. Views switch on it. No string errors.
 
 - `NetworkConnection` waits forever on a missing or stale socket. `UnixSocketTransport` checks ENOENT and
@@ -137,7 +137,7 @@ All commands run from `ui/`.
 
 ### 5.1 Live updates
 
-The queue and the events use one loop, `LongPoll<Value>` (`ui/Sources/PRWizardKit/Feeds/LongPoll.swift`).
+The queue and the events use one loop, `LongPoll<Value>` (`ui/Sources/PRLoopKit/Feeds/LongPoll.swift`).
 A store never sees the transport.
 
 ```text
@@ -175,7 +175,7 @@ A store never sees the transport.
 
 ## 6. Scenes
 
-`ui/Sources/PRWizard/PRWizardApp.swift` declares three scenes: the `Window` "PR Wizard" (id `queue`), `Settings`
+`ui/Sources/PRLoop/PRLoopApp.swift` declares three scenes: the `Window` "PR Loop" (id `queue`), `Settings`
 and the `MenuBarExtra`. The activation policy is `.regular`. Closing the window keeps the app running while the
 menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAfterLastWindowClosed`).
 
@@ -183,7 +183,7 @@ menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAft
 
 ```text
 ┌─ toolbar ─────────────────────────────────────────────────────────────────────────────────────────┐
-│ ● ● ●  [sidebar]  PR Wizard            ● Running · review 1/3 · fix 0/3    [Filter…] ⏸  ⟳  [inspector] │
+│ ● ● ●  [sidebar]  PR Loop            ● Running · review 1/3 · fix 0/3    [Filter…] ⏸  ⟳  [inspector] │
 │                   All repos · fetched 12:00                                                        │
 ├──────────────────┬──────────────────────────────────────────────────────────┬─┬──────────────────┤
 │ All repos      4 │    PR     Project  Title                Author  Status   Detail │▏│ Status       ⚙   │
@@ -245,8 +245,8 @@ The table area shows these. The toolbar stays usable.
 
 | State | The table area shows |
 | --- | --- |
-| connecting, no snapshot | `ProgressView` "Connecting to PR Wizard…" |
-| down, never connected | "PR Wizard is not running", socket path, last error · Start Daemon · Retry |
+| connecting, no snapshot | `ProgressView` "Connecting to PR Loop…" |
+| down, never connected | "PR Loop is not running", socket path, last error · Start Daemon · Retry |
 | stale | the last table, dimmed; the toolbar says Disconnected |
 | incompatible | "The daemon speaks API vN. This app speaks v1." |
 | empty queue, or no rows in the selected repo | "Recently worked on": `HistoryTable` from `GET /v1/history?limit=20&repo=` (`api.md §3.13`) |
@@ -289,7 +289,7 @@ The menu marks a scope with unsaved edits (pencil) or 422 errors (warning).
 - `GateDraft` checks regexes with `NSRegularExpression` after it rewrites `(?P<n>` and `(?P=n)`. ICU and Python
   differ at the edges, so the daemon's 422 on Apply stays the final check.
 
-**General › Notifications** shows a fix-it row when System Settings has PR Wizard off ("Open…"), and when the alert
+**General › Notifications** shows a fix-it row when System Settings has PR Loop off ("Open…"), and when the alert
 style is not Persistent (`NotificationAuthorization.temporary`). `Info.plist` sets `NSUserNotificationAlertStyle =
 alert`, so Persistent is the default at the first registration.
 
@@ -338,13 +338,13 @@ the inspector's Settings tab.
 
 ### 6.5 Menu bar extra
 
-`MenuBarExtra("PR Wizard", systemImage: "wand.and.stars", isInserted:)` with `.menuBarExtraStyle(.menu)`.
+`MenuBarExtra("PR Loop", systemImage: "arrow.triangle.2.circlepath", isInserted:)` with `.menuBarExtraStyle(.menu)`.
 `showsMenuBarExtra` defaults to true through `register(defaults:)`, because the quit rule reads `UserDefaults.bool`.
 
 - Top 5 = the first five `items` across every repo, in the daemon's order (`MenuItems.top(_:in:)`), title cut at 44
   characters. It ignores the sidebar: the extra is a glance at the whole system. `stale` shows as down, because old
   rows would look current.
-- Open PR Wizard (⌘O) and Settings… (⌘,) call `NSApp.activate()`, then `openWindow(id: "queue")` or `openSettings()`.
+- Open PR Loop (⌘O) and Settings… (⌘,) call `NSApp.activate()`, then `openWindow(id: "queue")` or `openSettings()`.
   No bridge window is needed: Settings… opened with the main window open, closed and hidden.
 
 ### 6.6 Notifications
@@ -410,7 +410,7 @@ The Settings window edits two levels (defaults and projects) of one config file 
 
 | Lives in | Settings |
 | --- | --- |
-| `@AppStorage` (`AppStorageKey`, domain `local.pr-wizard.app`) | `showsMenuBarExtra`, `notifiesReady`, `settingsPane`, `settingsScope`, `socket`, `eventCursor` (no UI) |
+| `@AppStorage` (`AppStorageKey`, domain `local.pr-loop.app`) | `showsMenuBarExtra`, `notifiesReady`, `settingsPane`, `settingsScope`, `socket`, `eventCursor` (no UI) |
 | `@SceneStorage` | `sidebar`, `sidebarShown`, `columns`, `inspector`, `inspectorTab`, `inspectorWidth` |
 | System | Open at login (`SMAppService`) · notification permission and alert style (`UNUserNotificationCenter`) |
 | Daemon `state.db` | per-PR overrides (`pr_overrides`), via `…/prs/{o}/{n}/{N}/config` |
@@ -433,11 +433,11 @@ notification center.
 | Resolver oracle | `OverrideResolver` on `config.json` equals the daemon's `effective` for every project; patches checked with `merge_patch` | `contract/oracle/config.json` |
 | Notifications | catch-up, live, cursor, permission, content | `FakeNotifier`, `MemoryCursor`, `events.json` |
 | Presentation | `StatusStyle`, `SeverityStyle`, `ActionAvailability`, `ConfigPatch`, `ReviewerSummary`, `WorkerTotals`, `LanesLayout`, `ConventionsLine`, `GateDraft`, `MenuItems`, `FindingsSpeech`, … | pure, parameterized |
-| Contract | the real `DaemonClient` against `python3 -m pr_wizard.api --fake`, every endpoint | `script/contract` sets `PR_WIZARD_CONTRACT_SOCKET`; `ContractTests` is disabled without it |
+| Contract | the real `DaemonClient` against `python3 -m pr_loop.api --fake`, every endpoint | `script/contract` sets `PR_LOOP_CONTRACT_SOCKET`; `ContractTests` is disabled without it |
 
 - Run the suite a change touches: `script/test --filter <Suite>`. Run `script/contract` after any wire-shape change,
   on either side.
-- Coverage target: `PRWizardKit` ≥ 85 % lines. The app target is not measured.
+- Coverage target: `PRLoopKit` ≥ 85 % lines. The app target is not measured.
 - Not tested: SwiftUI view bodies and the thin adapters (`UserNotificationsNotifier`, `ProcessDaemonLauncher`,
   `SMAppService+LoginItemService`). XCUITest needs Xcode, and snapshot libraries need XCTest. Keep logic out of them.
 
@@ -470,7 +470,7 @@ notification center.
 - macOS 26 draws its own glass rim around the icns in Finder and the Dock.
 
 **Agent checks.** An agent shell cannot activate the app (`NSApp.isActive` stays false): no key window, no focused
-values, no key events, no `screencapture`. Drive the app against `python3 -m pr_wizard.api --fake --fake-speed 0
+values, no key events, no `screencapture`. Drive the app against `python3 -m pr_loop.api --fake --fake-speed 0
 --socket /tmp/<x>.sock` and probe in process with an uncommitted file called from `applicationDidFinishLaunching`.
 
 - Host a view in its own `NSWindow` (`isReleasedWhenClosed = false`, or `close()` crashes) and `cacheDisplay`

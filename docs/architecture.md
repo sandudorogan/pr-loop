@@ -1,14 +1,14 @@
 # Architecture
 
-PR Wizard is one backend and many front ends. The backend is one daemon process. It owns all work and all state.
+PR Loop is one backend and many front ends. The backend is one daemon process. It owns all work and all state.
 Each front end (the CLI, the macOS app, a later UI for another OS) is a client. A client reads and changes the
 daemon's state through the control API ([api.md](api.md)), and through nothing else.
 
 ```text
  front ends (clients)                                    backend (one process)
  ───────────────────────                                 ─────────────────────────────────────────────────────────
- PR Wizard.app   (macOS)  ┐                              pr-wizard --daemon   launchd local.pr-wizard
- pr-wizard CLI            ├─ HTTP/1.1 + JSON ──▶ api.sock ──▶ api.py ──▶ Runtime
+ PR Loop.app   (macOS)  ┐                              pr-loop --daemon   launchd local.pr-loop
+ pr-loop CLI            ├─ HTTP/1.1 + JSON ──▶ api.sock ──▶ api.py ──▶ Runtime
  curl, later UIs          ┘   one request per connection        │
                                                                 ├─ refresh thread  one GraphQL call / 5 min
                                                                 ├─ review pool ×3  ─▶ pr_review.py × {opus, codex, quality}
@@ -16,8 +16,8 @@ daemon's state through the control API ([api.md](api.md)), and through nothing e
                                                                 └─ prune thread    every 30 min
                                                                         │
                                                                         ▼
-                                              ~/.local/state/pr-wizard/state.db   (SQLite, WAL)
-                                              ~/.config/pr-wizard/config.json     (chezmoi symlink)
+                                              ~/.local/state/pr-loop/state.db   (SQLite, WAL)
+                                              ~/.config/pr-loop/config.json     (chezmoi symlink)
 ```
 
 ## 1. The one rule
@@ -28,7 +28,7 @@ daemon's state through the control API ([api.md](api.md)), and through nothing e
 - `pr_review.py`, `pr_fix.py`, `claude -p` and `codex exec` are child processes of one pass. They are not daemons.
 - To support a new repo, add it to the one daemon. Do not add a second launchd job, a per-repo process or a per-repo socket.
 
-Two locks enforce it. The daemon takes `pr-wizard/daemon.lock` and the pre-rename `review-queue.lock` with
+Two locks enforce it. The daemon takes `pr-loop/daemon.lock` and the pre-rename `review-queue.lock` with
 `flock(LOCK_NB)`. A second daemon, of new or old code, fails to take them and exits.
 
 ## 2. Backend and front ends
@@ -38,7 +38,7 @@ Two locks enforce it. The daemon takes `pr-wizard/daemon.lock` and the pre-renam
 | Owns | the queue, the lanes, `state.db`, the config file, the GitHub calls, every child process | nothing durable; only view state and per-viewer settings (`UserDefaults`) |
 | Talks | serves `api.sock` | calls `api.sock` |
 | UI | none. It is system-agnostic: no notification, no window, no OS UI call | all UI, including the "Ready for your approval" notification |
-| Started by | launchd (`KeepAlive`) | the owner. A client starts a stopped daemon with `launchctl kickstart gui/<uid>/<label>`; the label is in `~/.local/state/pr-wizard/launchd-label` |
+| Started by | launchd (`KeepAlive`) | the owner. A client starts a stopped daemon with `launchctl kickstart gui/<uid>/<label>`; the label is in `~/.local/state/pr-loop/launchd-label` |
 | Language | Python 3.10+, standard library only | per OS. macOS: Swift 6, SwiftUI ([ui-macos.md](ui-macos.md)) |
 
 Rules for every front end, present and future:
@@ -55,19 +55,19 @@ Rules for every front end, present and future:
 
 | Module | Role |
 | --- | --- |
-| `daemon/pr_wizard/queue.py` | the daemon: `Runtime`, the refresh, the gates, both lanes, prune; and the CLI's local paths |
-| `daemon/pr_wizard/pools.py` | the worker pools: shared, or one review + fix pair per project; `held` spans every pool, so no PR runs twice |
-| `daemon/pr_wizard/projects.py` | project detection and the checkout scan of `detect.roots` |
-| `daemon/pr_wizard/api.py` | the control API server and its route table; `--fake` serves `fake.py` |
-| `daemon/pr_wizard/fake.py` | a stateful in-memory runtime for client tests and UI work without the live daemon |
-| `daemon/pr_wizard/snapshot.py` | the queue snapshot (`GET /v1/queue`, `-l`) |
-| `daemon/pr_wizard/history.py` | `GET /v1/history` and the merged/closed lookup of PRs that left the fetch |
-| `daemon/pr_wizard/config.py` | defaults, load (never raises), validate, atomic save, `effective_for()` |
-| `daemon/pr_wizard/db.py` | `state.db`: schema by `user_version`, one connection per thread, `BEGIN IMMEDIATE` writes |
-| `daemon/pr_wizard/conventions.py` | a project's own conventions, read from the checkout at the PR head → `{CONVENTIONS}` |
-| `daemon/pr_wizard/gates.py` | the project's fixer gates (format, then test) |
-| `daemon/pr_wizard/names.py` | repos, the label, every state, log and skill path; the one-time JSON → SQLite migration |
-| `daemon/pr_wizard/cli.py`, `client.py` | the CLI and its socket client |
+| `daemon/pr_loop/queue.py` | the daemon: `Runtime`, the refresh, the gates, both lanes, prune; and the CLI's local paths |
+| `daemon/pr_loop/pools.py` | the worker pools: shared, or one review + fix pair per project; `held` spans every pool, so no PR runs twice |
+| `daemon/pr_loop/projects.py` | project detection and the checkout scan of `detect.roots` |
+| `daemon/pr_loop/api.py` | the control API server and its route table; `--fake` serves `fake.py` |
+| `daemon/pr_loop/fake.py` | a stateful in-memory runtime for client tests and UI work without the live daemon |
+| `daemon/pr_loop/snapshot.py` | the queue snapshot (`GET /v1/queue`, `-l`) |
+| `daemon/pr_loop/history.py` | `GET /v1/history` and the merged/closed lookup of PRs that left the fetch |
+| `daemon/pr_loop/config.py` | defaults, load (never raises), validate, atomic save, `effective_for()` |
+| `daemon/pr_loop/db.py` | `state.db`: schema by `user_version`, one connection per thread, `BEGIN IMMEDIATE` writes |
+| `daemon/pr_loop/conventions.py` | a project's own conventions, read from the checkout at the PR head → `{CONVENTIONS}` |
+| `daemon/pr_loop/gates.py` | the project's fixer gates (format, then test) |
+| `daemon/pr_loop/names.py` | repos, the label, every state, log and skill path; the one-time JSON → SQLite migration |
+| `daemon/pr_loop/cli.py`, `client.py` | the CLI and its socket client |
 | `daemon/review/pr_review.py` | one reviewer on one PR: scope the round, run the engine, post the review |
 | `daemon/review/pr_fix.py` | one fix pass on one PR: collect feedback, run Codex, run the gates, commit, push, reply, resolve |
 | `daemon/review/prompts/*.md`, `daemon/review/*-schema.json` | prompt templates and the JSON the engines must return |
@@ -96,11 +96,11 @@ Rules for every front end, present and future:
 - **Pools** are shared by default: one review pool and one fix pool, because the real limits are per machine.
   `lanes.separate` gives each project its own pair. The switch is live: running passes finish in their old pool.
 - **PR identity** is `(repo, number)`. PR numbers of two repos overlap, so every lock, row and key carries `repo`.
-- Children run with `cwd` = the PR's checkout and `PR_WIZARD_REPO` / `PR_WIZARD_REPO_ROOT` set.
+- Children run with `cwd` = the PR's checkout and `PR_LOOP_REPO` / `PR_LOOP_REPO_ROOT` set.
 
 ## 5. State
 
-`~/.local/state/pr-wizard/state.db` holds every piece of state. Schema and tables: AGENTS.md › Installed paths and state.
+`~/.local/state/pr-loop/state.db` holds every piece of state. Schema and tables: AGENTS.md › Installed paths and state.
 
 | Rule | Why |
 | --- | --- |
@@ -123,7 +123,7 @@ and `runs`. `pr_review.py scope` and `pr_fix.py dump` read their own tables.
 One JSON file. The chezmoi source is the source of truth (api.md §4.1):
 
 ```text
- ~/.config/pr-wizard/config.json ──symlink──▶ ~/.local/share/chezmoi/.pr-wizard/config.json (dotfiles git)
+ ~/.config/pr-loop/config.json ──symlink──▶ ~/.local/share/chezmoi/.pr-loop/config.json (dotfiles git)
 ```
 
 ```text

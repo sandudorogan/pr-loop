@@ -1,6 +1,6 @@
-# PR Wizard control API, v1
+# PR Loop control API, v1
 
-This file is the contract between the daemon (`pr-wizard --daemon`, Python) and its clients: the CLI, the SwiftUI app and
+This file is the contract between the daemon (`pr-loop --daemon`, Python) and its clients: the CLI, the SwiftUI app and
 later UIs. Code cites it by section (`api.md §3.14`): keep the numbers stable. Where a row says *today*, it names the
 code before the overhaul (`review-queue@3dc9b3f`, `queue.py` was `daemon/bin/review-queue`). With no config file, the defaults
 reproduce that behaviour.
@@ -12,25 +12,25 @@ pass, not daemons.
 ## 1. Transport
 
 ```text
- client ──HTTP/1.1 + JSON──▶ ~/.local/state/pr-wizard/api.sock ──▶ pr-wizard --daemon (launchd local.pr-wizard)
+ client ──HTTP/1.1 + JSON──▶ ~/.local/state/pr-loop/api.sock ──▶ pr-loop --daemon (launchd local.pr-loop)
         one request per connection, server closes after the response
 ```
 
 | Item | Rule |
 | --- | --- |
-| Socket | `~/.local/state/pr-wizard/api.sock`. One fixed path: clients need no discovery. |
+| Socket | `~/.local/state/pr-loop/api.sock`. One fixed path: clients need no discovery. |
 | Permissions | Directory `0700`, socket `0600` (bind under `umask 0o177`). No other auth: only the owner's uid can connect. No TCP port. |
 | Create | The daemon, after it holds `daemon.lock` (`flock`, one daemon). It holds the lock, so a socket file already there is stale: unlink, then bind. |
 | Remove | On SIGTERM (launchd `bootout`, `kickstart -k`): unlink the socket, then `os._exit(143)`. Do not raise `SystemExit`: `ThreadPoolExecutor.__exit__` would wait hours for running passes, and today SIGTERM kills at once. A crash or SIGKILL leaves the file; the next start unlinks it. |
 | Daemon down | `connect()` fails with `ENOENT` (no file) or `ECONNREFUSED` (stale file). Both mean "down". |
-| Start it | `launchctl kickstart gui/<uid>/<label>`. `<label>` is the one line in `~/.local/state/pr-wizard/launchd-label`. The daemon writes that file at every start, and it stays when the daemon stops. When the file is missing (the daemon has never run API code), the client uses `local.pr-wizard`. `GET /v1/info` also returns `label`. |
+| Start it | `launchctl kickstart gui/<uid>/<label>`. `<label>` is the one line in `~/.local/state/pr-loop/launchd-label`. The daemon writes that file at every start, and it stays when the daemon stops. When the file is missing (the daemon has never run API code), the client uses `local.pr-loop`. `GET /v1/info` also returns `label`. |
 | Server | stdlib `socketserver.ThreadingUnixStreamServer` (`daemon_threads = True`) + `http.server.BaseHTTPRequestHandler`. Override `log_message` (`client_address` is `''` on AF_UNIX, the default logger crashes). |
 | Request | `Host:` any value (ignored). Body: JSON, `Content-Type: application/json`, `Content-Length` required, max 1 MiB (else 413). |
 | Response | Always a JSON body, `Content-Type: application/json; charset=utf-8`, `Content-Length` set, `Connection: close`, never chunked. No 204, no 304. A client reads to EOF and decodes. |
 | PR identity | `repo` (`"owner/name"`) + `number`. String form `key` = `"iprally/iprally#17190"`. Numbers alone collide across repos. |
 | Times | ISO 8601 with the local offset, seconds precision: `"2026-10-25T12:01:02+03:00"`. `state.db` stores the same ISO strings. The migration converts today's naive local `"%F %T"` values by attaching the local offset. |
 | Versioning | Routes under `/v1`. Within v1 the daemon only adds fields and enum values. Clients ignore unknown fields and keep unknown enum strings (Swift: enums with an `.unknown(String)` case). A breaking change is `/v2`. |
-| Smoke test | `curl -s --unix-socket ~/.local/state/pr-wizard/api.sock http://pr-wizard/v1/info` |
+| Smoke test | `curl -s --unix-socket ~/.local/state/pr-loop/api.sock http://pr-loop/v1/info` |
 
 Live updates use **long-polls** (`GET /v1/queue?since=<rev>&wait=<s>`, `GET /v1/events?since=<cursor>&wait=<s>`).
 A long-poll is one ordinary request and one ordinary response, so a hand-rolled `NWConnection` client needs no
@@ -80,7 +80,7 @@ Every 4xx/5xx body:
 | GET | `/v1/config` | effective config, defaults, choices | — |
 | PUT | `/v1/config` | replace the config | — |
 | PATCH | `/v1/config` | merge-patch the config | — |
-| GET | `/v1/history` | PRs the wizard worked on that settled, merged or closed | — |
+| GET | `/v1/history` | PRs PR Loop worked on that settled, merged or closed | — |
 | GET | `/v1/prompts/{name}` | one prompt template's text | — |
 | POST | `/v1/refresh` | refetch the queue now | `--bg` (SIGUSR1) |
 | POST | `/v1/next` | move PRs to the front of the review order | `--next`, `--wait` bump |
@@ -101,7 +101,7 @@ Every write wakes all long-pollers.
 
 ```json
 {
-  "name": "pr-wizard",
+  "name": "pr-loop",
   "version": "1.0.0",
   "commit": "3dc9b3f",
   "api": 1,
@@ -113,21 +113,21 @@ Every write wakes all long-pollers.
   "projects": ["…same objects as in GET /v1/queue…"],
   "lanes": {"separate": false, "pools": ["…same as in GET /v1/queue…"]},
   "refresh": {"interval_s": 300, "idle_s": 60, "last_at": "2026-10-25T12:00:41+03:00", "last_error": null},
-  "config": {"path": "/Users/sandu.dorogan/.config/pr-wizard/config.json",
-             "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-wizard/config.json",
+  "config": {"path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
+             "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json",
              "rev": "3f9a0c1d2e4b", "error": null},
   "paths": {
-    "socket": "/Users/sandu.dorogan/.local/state/pr-wizard/api.sock",
-    "state": "/Users/sandu.dorogan/.local/state/pr-wizard",
-    "db": "/Users/sandu.dorogan/.local/state/pr-wizard/state.db",
-    "log": "/Users/sandu.dorogan/Library/Logs/pr-wizard.log"
+    "socket": "/Users/sandu.dorogan/.local/state/pr-loop/api.sock",
+    "state": "/Users/sandu.dorogan/.local/state/pr-loop",
+    "db": "/Users/sandu.dorogan/.local/state/pr-loop/state.db",
+    "log": "/Users/sandu.dorogan/Library/Logs/pr-loop.log"
   }
 }
 ```
 
 | Field | Type | Source |
 | --- | --- | --- |
-| `version` | string | `pr_wizard.__version__` |
+| `version` | string | `pr_loop.__version__` |
 | `commit` | string \| null | `git rev-parse --short HEAD` of the checkout at start |
 | `api` | int | always `1` in v1 |
 | `label` | string | the launchd label this daemon runs under (also in `launchd-label`) |
@@ -433,8 +433,8 @@ catch-up, a UI checks `GET /v1/queue`: post it only when that `key` is still `gr
 ```json
 {
   "rev": "3f9a0c1d2e4b",
-  "path": "/Users/sandu.dorogan/.config/pr-wizard/config.json",
-  "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-wizard/config.json",
+  "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
+  "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json",
   "source": "file",
   "error": null,
   "config": { "...": "the effective config, schema in §4" },
@@ -673,15 +673,15 @@ closes. A PR outside the last fetch is 404 `not_in_queue`.
 ### 4.1 Where it lives (chezmoi is the source of truth)
 
 ```text
- ~/.config/pr-wizard/config.json ──symlink (chezmoi-managed)──▶ <chezmoi source>/.pr-wizard/config.json
+ ~/.config/pr-loop/config.json ──symlink (chezmoi-managed)──▶ <chezmoi source>/.pr-loop/config.json
         daemon reads this path                                      real file, in the dotfiles git repo
 ```
 
 | Piece | Path |
 | --- | --- |
-| Real file | `{{ .chezmoi.sourceDir }}/.pr-wizard/config.json`, here `~/.local/share/chezmoi/.pr-wizard/config.json`. chezmoi ignores source entries that start with `.`, so it treats the file as data, not as a target. The file still lives in the dotfiles git repo. |
-| Symlink template | `{{ .chezmoi.sourceDir }}/dot_config/pr-wizard/symlink_config.json.tmpl`, one line: `{{ .chezmoi.sourceDir }}/.pr-wizard/config.json` |
-| What the daemon opens | `~/.config/pr-wizard/config.json` (`PR_WIZARD_CONFIG` env overrides it, for tests) |
+| Real file | `{{ .chezmoi.sourceDir }}/.pr-loop/config.json`, here `~/.local/share/chezmoi/.pr-loop/config.json`. chezmoi ignores source entries that start with `.`, so it treats the file as data, not as a target. The file still lives in the dotfiles git repo. |
+| Symlink template | `{{ .chezmoi.sourceDir }}/dot_config/pr-loop/symlink_config.json.tmpl`, one line: `{{ .chezmoi.sourceDir }}/.pr-loop/config.json` |
+| What the daemon opens | `~/.config/pr-loop/config.json` (`PR_LOOP_CONFIG` env overrides it, for tests) |
 | Setup | `install.py --chezmoi-source <dir>` writes the template and, when the real file is missing, seeds it with the defaults, then `chezmoi apply`s the link. Without chezmoi, `install.py` writes a plain file at the target. |
 
 ### 4.2 Defaults: today's behaviour exactly
@@ -848,8 +848,8 @@ No config change needs a daemon restart.
 
 ### 4.6 Scripts and repos
 
-The daemon runs each `pr_review.py` / `pr_fix.py` child with `PR_WIZARD_REPO=<owner/name>` and
-`PR_WIZARD_REPO_ROOT=<checkout path>` in its env (`IPR_REPO` / `IPR_REPO_ROOT` until the rename unit). The scripts
+The daemon runs each `pr_review.py` / `pr_fix.py` child with `PR_LOOP_REPO=<owner/name>` and
+`PR_LOOP_REPO_ROOT=<checkout path>` in its env (`IPR_REPO` / `IPR_REPO_ROOT` until the rename unit). The scripts
 read and write their own `state.db` tables (`pr_review.py`: `clean_reviews`, `pr_fix.py`: `fix_state`), and use `config.effective_for(repo, number)` (§4.10). Their args stay as they are today.
 `pr_review.py run` adds one key to its stdout JSON, `digest` (`{counts, at_floor, top}`), from which the daemon builds `findings`. Its other keys are unchanged.
 
@@ -978,17 +978,17 @@ red; test gates go red and feed their logs back to Codex (`test_retries`).
   off. `--pr N` (CLI) still reviews a labeled PR anyway, as today. `POST …/review` still bypasses the label, but not a config
   `review.enabled: false`.
 - **Lifetime:** created by `PATCH`; dropped by `DELETE`, or when the daemon sees the PR merged or closed.
-- **Scripts.** `pr_review.py` and `pr_fix.py` call `pr_wizard.config.effective_for(repo, number)` themselves. It reads
+- **Scripts.** `pr_review.py` and `pr_fix.py` call `pr_loop.config.effective_for(repo, number)` themselves. It reads
   the config file and the PR's `pr_overrides` row, so a run by hand (the `github` agent) gets the same config as a
   daemon run. The daemon uses the same function for gates, lanes and the reviewer list.
 
 ## 5. CLI over the API
 
-PR arguments take `N` (repo = `--repo`, else `PR_WIZARD_REPO`/`IPR_REPO`, else `iprally/iprally`) or the full form `owner/name#N`.
+PR arguments take `N` (repo = `--repo`, else `PR_LOOP_REPO`/`IPR_REPO`, else `iprally/iprally`) or the full form `owner/name#N`.
 
 | Command | Path after the overhaul |
 | --- | --- |
-| `-l` | `GET /v1/queue`, every project, rendered as today (same columns, OSC 8 links on a tty, `gitops#N` for other repos). Daemon down: prints `daemon down — pr-wizard --bg starts it` to stderr and computes the same snapshot locally (one cached GraphQL call). |
+| `-l` | `GET /v1/queue`, every project, rendered as today (same columns, OSC 8 links on a tty, `gitops#N` for other repos). Daemon down: prints `daemon down — pr-loop --bg starts it` to stderr and computes the same snapshot locally (one cached GraphQL call). |
 | `--next N` | `POST /v1/next {"prs":[{repo, number}],"only_queued":true}`, prints the reason when not bumped, then the `-l` list |
 | `--bg` | `POST /v1/refresh`; daemon down: `launchctl kickstart gui/<uid>/<names.LABEL>` (the CLI ships with the daemon, so it knows its label) |
 | `--wait N…` | the bump is `POST /v1/next {"only_queued": false}` (daemon down: kickstart, then retry for 30 s); the wait loop stays local (`heads()` GraphQL + reads of `state.db`), so merged/closed PRs and its JSON output are unchanged |
@@ -1001,14 +1001,14 @@ PR arguments take `N` (repo = `--repo`, else `PR_WIZARD_REPO`/`IPR_REPO`, else `
 
 - The menu bar toggle, the notification toggle and the event cursor: app-local (`UserDefaults`).
 - Finding bodies and review text: on GitHub, never through the API. Only the digest (`findings`) passes.
-- Logs: `~/Library/Logs/pr-wizard.log`, not served.
+- Logs: `~/Library/Logs/pr-loop.log`, not served.
 
 ## 7. Test fixtures
 
 `contract/api/v1/` holds one JSON file per response above (`info.json`, `queue.json`,
 `events.json`, `history.json`, `config.json`, `pr-config.json`, `prompt.json`, `next.json`, `accepted.json`, `paused.json`,
 `error-invalid-config.json`, `error-busy.json`). Python tests assert the server's output for a fixed fake
-runtime equals them. Swift tests decode the same files. `python3 -m pr_wizard.api --fake --socket /tmp/prw.sock` (from `daemon/`)
+runtime equals them. Swift tests decode the same files. `python3 -m pr_loop.api --fake --socket /tmp/prw.sock` (from `daemon/`)
 serves that fake runtime. It is stateful and in memory, it starts from the fixtures, and it uses the real route table, validator and
 long-poll code. Every accepted action changes the snapshot and wakes the waiters:
 
