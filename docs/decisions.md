@@ -106,7 +106,7 @@ and resolves. *Why:* one place controls what lands, and it strips AI attribution
 the top instead; each pane shows the selected scope only. The owner settled this over three mockup rounds: a
 toolbar project picker replaced the sidebar in round 1, and round 3 brought the sidebar back.
 
-**D25. An empty queue shows "Recently worked on" (history), not a blank view.**
+**D25. An empty queue shows "Recently worked on" (history), not a blank view.** Replaced by D31.
 
 **D26. The hover findings peek is gone.** Space and ⌘Y toggle the peek on the selected row. A non-empty selection
 opens the inspector, which shows the same findings. *Why:* the popover opened over any row the pointer crossed
@@ -114,6 +114,14 @@ and said little.
 
 **D27. Releases: a `v*` tag publishes a dmg and a zip.** CI builds them from the tag. *Why:* there was no way to
 get the app without cloning and building it.
+
+**D31. The queue reads as a to-do list: To Approve, My PRs, Done.** Colleagues' PRs come first, since a
+colleague waits on them; then mine; then Done, collapsed by default. A colleague's ready PR is green ("Ready to
+approve"), mine is purple ("Ready for review"). *Why:* both were the same green "Ready", and the owner acts on them
+in different ways. Done holds every §3.13 history entry off the to-do list (merged, closed, approved by me, marked
+done), so the empty-state history view went away. The owner marks a PR done or moves it back (`api.md §3.18`).
+A done PR takes no new pass: done means off my plate. A new review request does not undo a manual mark; my
+approval is done only until a re-request, as before.
 
 ## Process of work
 

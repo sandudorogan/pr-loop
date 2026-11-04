@@ -40,10 +40,11 @@ CREATE INDEX IF NOT EXISTS history_at ON history (at);
 CREATE TABLE IF NOT EXISTS pr_overrides (repo TEXT, number INT, config TEXT, created_at TEXT, updated_at TEXT,
   PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS paused_prs (repo TEXT, number INT, at TEXT, PRIMARY KEY (repo, number));
+CREATE TABLE IF NOT EXISTS done_prs (repo TEXT, number INT, done INT, at TEXT, PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS migration_log (seq INTEGER PRIMARY KEY, old_path TEXT, new_path TEXT, kind TEXT, at TEXT);
 """
-# Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs.
-UPGRADES = [lambda c: [c.execute(s) for s in SCHEMA.split(";\n") if s.strip()]] * 2
+# Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs, v3: done_prs.
+UPGRADES = [lambda c: [c.execute(s) for s in SCHEMA.split(";\n") if s.strip()]] * 3
 
 _local = threading.local()
 COMMITS = []
@@ -452,6 +453,24 @@ def pause_pr(repo, n, on):
             c.execute("INSERT OR IGNORE INTO paused_prs VALUES (?, ?, ?)", (repo, int(n), now()))
         else:
             c.execute("DELETE FROM paused_prs WHERE repo = ? AND number = ?", (repo, int(n)))
+
+
+def done_prs():
+    """{(repo, number): done} of every PR the owner marked done (True) or moved back to the to-do list (False)."""
+    return {(r["repo"], r["number"]): bool(r["done"]) for r in _all("SELECT * FROM done_prs")}
+
+
+def mark_done(repo, n, done):
+    """`done` True or False stores the mark, None drops it."""
+    with tx() as c:
+        if done is None:
+            c.execute("DELETE FROM done_prs WHERE repo = ? AND number = ?", (repo, int(n)))
+        else:
+            c.execute("INSERT OR REPLACE INTO done_prs VALUES (?, ?, ?, ?)", (repo, int(n), int(done), now()))
+
+
+def has_history(repo, n):
+    return _one("SELECT 1 FROM history WHERE repo = ? AND number = ?", repo, int(n)) is not None
 
 
 def log_moves(moves, at=None):

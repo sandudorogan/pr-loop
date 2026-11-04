@@ -207,6 +207,14 @@ class Actions(Fake):
         self.assertEqual((self.item(key)["group"], self.item(key)["status"], self.item(key)["paused"]),
                          ("queued", "queued", False))
 
+    def test_done_moves_the_row_to_the_history_and_back(self):
+        key = f"{IPRALLY}#17166"
+        done = lambda: {h["key"]: h["outcome"] for h in self.call("GET", "/v1/history")[1]["entries"] if h["done"]}
+        self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17166/done"), (200, fixture("done")))
+        self.assertEqual((key in self.keys(), done()[key]), (False, "quality-only"))
+        self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17166/todo"), (200, {"key": key, "done": False}))
+        self.assertEqual((self.item(key)["group"], key in done()), ("ready", False))
+
     def test_review_of_a_colleague_pr_withdraws_then_reposts_the_ready_event(self):
         key = f"{IPRALLY}#17166"
         self.assertEqual(self.call("POST", f"/v1/prs/{IPRALLY}/17166/review"), (202, {"key": key, "accepted": True}))

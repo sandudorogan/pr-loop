@@ -5,7 +5,7 @@
      "author": "colleague", "mine": false, "state": "merged", "outcome": "ready",
      "rounds": 2, "fixes_pushed": 0, "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e",
      "first_at": "2026-10-23T09:12:00+03:00", "at": "2026-10-24T15:40:00+03:00",
-     "closed_at": "2026-10-24T16:05:00+03:00",
+     "closed_at": "2026-10-24T16:05:00+03:00", "done": true,
      "findings": {
        "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e", "current": true, "round": 2, "at_floor": 0,
        "conventions": ["AGENTS.md", "CLAUDE.md", "ui/AGENTS.md", "ui/CLAUDE.md"],

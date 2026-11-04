@@ -2,7 +2,8 @@
 
 A runtime serves the bodies: `info()`, `snapshot()`, `config()`, `events(since)`, and `changes`, which every change moves.
 `history(repo, limit)`, `pr_labels(repo, n)`, `pr_override(repo, n)`. It acts on `save_config(doc)`, `refetch()`,
-`bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)`, `put_pr_override(repo, n, doc)`, `pause_pr(repo, n, on)` and `pause(on)`.
+`bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)`, `put_pr_override(repo, n, doc)`, `pause_pr(repo, n, on)`,
+`mark_done(repo, n, on)` and `pause(on)`.
 
 Usage:
   python3 -m pr_loop.api --fake [--socket PATH] [--fake-speed S] [--fake-empty]
@@ -190,8 +191,8 @@ def drop_pr_config(rt, query, body, owner, name, n):
 
 def history(rt, query):
     limit = query.get("limit", ["20"])[-1]
-    if not (limit.isdigit() and 1 <= int(limit) <= 100):
-        raise bad("limit must be an integer from 1 to 100")
+    if not (limit.isdigit() and 1 <= int(limit) <= db.HISTORY_KEEP):
+        raise bad(f"limit must be an integer from 1 to {db.HISTORY_KEEP}")
     return rt.history(query.get("repo", [None])[-1], int(limit))
 
 
@@ -220,6 +221,13 @@ def hold(on):
     return at
 
 
+def finish(on):
+    def at(rt, query, body, owner, name, n):
+        repo, n = f"{owner}/{name}", int(n)
+        return {"key": f"{repo}#{n}", "done": rt.mark_done(repo, n, on)}
+    return at
+
+
 def act(lane):
     def on(rt, query, body, owner, name, n):
         repo, n = f"{owner}/{name}", int(n)
@@ -243,6 +251,8 @@ ROUTES = {
     f"{PR}/config": {"GET": pr_config, "PUT": put_pr_config, "PATCH": patch_pr_config, "DELETE": drop_pr_config},
     f"{PR}/pause": {"POST": hold(True)},
     f"{PR}/resume": {"POST": hold(False)},
+    f"{PR}/done": {"POST": finish(True)},
+    f"{PR}/todo": {"POST": finish(False)},
     "/v1/pause": {"POST": lambda rt, query, body: {"paused": rt.pause(True)}},
     "/v1/resume": {"POST": lambda rt, query, body: {"paused": rt.pause(False)}},
 }

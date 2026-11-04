@@ -25,7 +25,7 @@ class Runtime:
         self.log, self.hist, self.version = self.read("events")["events"], self.read("history")["entries"], 0
         self.epoch = epoch or "k" + secrets.token_hex(3)
         self.bumps = [i["key"] for i in self.snap["items"] if i["bumped"]]
-        self.unpaused = {}
+        self.unpaused, self.finished = {}, {}
         seeded = self.read("pr-config")
         self.overrides = {seeded["key"]: {k: seeded[k] for k in ("created_at", "updated_at")} | {"config": seeded["override"]}}
         if os.environ.get("PRL_FAKE_EMPTY") if empty is None else empty:
@@ -246,7 +246,7 @@ class Runtime:
                  "url": item["url"], "author": item["author"], "mine": item["mine"], "state": "settled",
                  "outcome": outcome, "rounds": item["review"]["rounds"], "fixes_pushed": (old or {}).get("fixes_pushed", 0),
                  "head": item["head"], "first_at": (old or {}).get("first_at") or db.now(), "at": db.now(),
-                 "closed_at": None, "findings": item["findings"]}
+                 "closed_at": None, "findings": item["findings"], "done": item["key"] in self.finished}
         self.hist = [entry] + [h for h in self.hist if h["key"] != item["key"]]
 
     def fix(self, repo, n):
@@ -289,6 +289,22 @@ class Runtime:
                 item.update(paused=True, group="paused", status="paused", detail=f"since {datetime.now():%a %H:%M}")
             elif not on and item["paused"]:
                 item.update(self.unpaused.pop(item["key"]), paused=False)
+            self.publish()
+        return on
+
+    def mark_done(self, repo, n, on):
+        """A done row leaves `items` for the history, where `done` is true; moving it back restores it."""
+        with self.lock:
+            key, item = f"{repo}#{n}", self.target(repo, n) or self.finished.get(f"{repo}#{n}")
+            if item is None:
+                raise api.Problem(404, "not_in_queue", f"{key} is not in the last queue fetch")
+            if on and key not in self.finished:
+                self.finished[key] = item
+                self.snap["items"].remove(item)
+                self.upsert(item, (item["review"] or {}).get("verdict") or item["status"])
+            elif not on and key in self.finished:
+                self.snap["items"].append(self.finished.pop(key))
+                self.hist = [dict(h, done=False) if h["key"] == key else h for h in self.hist]
             self.publish()
         return on
 

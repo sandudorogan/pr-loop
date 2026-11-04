@@ -131,6 +131,11 @@ class Settle(Store):
         self.assertEqual(len(asked.queries), 1)
         self.assertIn("lookup cost 1 points", self.said[0])
 
+    def test_a_merge_drops_the_done_mark(self):
+        db.mark_done(MONOREPO, 1, True)
+        self.settle(Asked({(MONOREPO, 1): node("MERGED")}))
+        self.assertEqual(db.done_prs(), {})
+
     def test_the_merge_keeps_the_time_of_the_last_pass(self):
         at = ago(hours=5)
         db.upsert_history(MONOREPO, 1, title="x", at=at)
@@ -231,11 +236,12 @@ class Api(unittest.TestCase):
         for n in (10, 12, 22):
             self.row(n)
         self.row(99, state="merged", closed_at=ago())
-        self.assertEqual([(e["number"], e["state"]) for e in self.entries()], [(22, "settled"), (99, "merged")])
+        self.assertEqual([(e["number"], e["state"], e["done"]) for e in self.entries()],
+                         [(22, "settled", False), (99, "merged", True)])
 
     def test_a_standing_approval_is_the_outcome(self):
         self.row(17, outcome="clean")
-        self.assertEqual([(e["number"], e["outcome"]) for e in self.entries()], [(17, "approved")])
+        self.assertEqual([(e["number"], e["outcome"], e["done"]) for e in self.entries()], [(17, "approved", True)])
 
     def test_newest_first_with_a_limit_and_a_repo(self):
         for n in (30, 31, 32):
@@ -252,7 +258,7 @@ class Api(unittest.TestCase):
         self.assertEqual([e["number"] for e in self.entries("?limit=1")], [30])
 
     def test_a_bad_limit_is_a_400(self):
-        for limit in ("0", "101", "x"):
+        for limit in ("0", "501", "x"):
             self.assertEqual(self.get(f"/v1/history?limit={limit}")[0], 400, limit)
         self.assertEqual(self.get("/v1/history", "POST")[0], 405)
 

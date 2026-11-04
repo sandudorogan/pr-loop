@@ -328,6 +328,7 @@ Snapshot rules (they reproduce `show()` and `row()` in `queue.py`):
 | `bumped` | bool | the PR is in the `next` table (counts as a request) |
 | `group` | `active` \| `queued` \| `ready` \| `idle` \| `paused` | `row()` groups 0, 1, 3, 4; `paused` (5) = a paused PR without a live run, listed last |
 | `paused` | bool | the PR is in `paused_prs` (§3.17), also while its live run finishes |
+| `done` | bool | the PR is off the to-do list (§3.18). `items` lists a done PR only while its live run finishes; then it is a `done` §3.13 entry |
 | `rank` | int \| null | 1..n review order, `queued` only (the `-l` number) |
 | `status` | string | the `-l` status column (table below) |
 | `detail` | string | the `-l` detail column, human text; do not parse |
@@ -540,7 +541,7 @@ Body: none or `{}`. Same as SIGUSR1 today: the refresh thread fetches the queue 
 ```
 
 `reason` ∈ `null`, `unknown-repo`, `not-in-queue` (not fetched, or approved by me), `active` (in review
-or fix), `nothing-new` (a result at this head already), `review-lane-off`. Any bump triggers a refresh.
+or fix), `paused`, `done` (marked done, §3.18), `nothing-new` (a result at this head already), `review-lane-off`. Any bump triggers a refresh.
 Bumps live in the `next` table; each bump is one transaction, so no bump is lost.
 
 ### 3.10 `POST /v1/prs/{owner}/{name}/{n}/review` → 202
@@ -581,7 +582,7 @@ Pause: review and fix workers take no new PR, running passes finish, and refresh
 
 ### 3.13 `GET /v1/history` → 200
 
-Query: `limit` (int 1–100, default 20), `repo` (optional `owner/name` filter). This is the queue window's empty state.
+Query: `limit` (int 1–500, default 20), `repo` (optional `owner/name` filter). The app's Done section shows the `done` entries.
 
 ```json
 {
@@ -591,7 +592,7 @@ Query: `limit` (int 1–100, default 20), `repo` (optional `owner/name` filter).
      "author": "colleague", "mine": false, "state": "merged", "outcome": "ready",
      "rounds": 2, "fixes_pushed": 0, "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e",
      "first_at": "2026-10-23T09:12:00+03:00", "at": "2026-10-24T15:40:00+03:00",
-     "closed_at": "2026-10-24T16:05:00+03:00",
+     "closed_at": "2026-10-24T16:05:00+03:00", "done": true,
      "findings": {"…": "same digest object as items[].findings in §3.2"}}
   ]
 }
@@ -605,6 +606,7 @@ Query: `limit` (int 1–100, default 20), `repo` (optional `owner/name` filter).
 | `fixes_pushed` | int | fix passes that pushed a commit |
 | `first_at`, `at` | string | the first and the latest pass on the PR |
 | `closed_at` | string \| null | when the daemon saw it merged or closed |
+| `done` | bool | the PR is off the to-do list: merged, closed, out of the last fetch, approved by me or marked done (§3.18) |
 | `findings` | object \| null | the findings digest at the last reviewed head |
 
 Order: `at` descending. Store: the `history` table in `state.db`, upserted in the same transaction as every
@@ -667,6 +669,21 @@ and the row stays `active` until then. Resume puts the PR back in both lanes at 
 Now (§3.10) still runs on a paused PR, and `POST /v1/next` leaves it with reason `paused`. The pause is a
 `paused_prs` row in `state.db`: it survives restarts and pushes, and the §3.13 lookup drops it when the PR merges or
 closes. A PR outside the last fetch is 404 `not_in_queue`.
+
+### 3.18 `POST /v1/prs/{owner}/{name}/{n}/done`, `…/todo` → 200
+
+```json
+{"key": "iprally/iprally#17166", "done": true}
+```
+
+The to-do list is every fetched PR that is not done. A PR is done when I mark it done, or when my approval stands
+and I did not move it back. A done PR leaves `items` (§3.2) and both lanes, and its §3.13 entry turns `done`. A
+running pass finishes. Review Now (§3.10) still runs on it, and `POST /v1/next` leaves it with reason `done`.
+
+`done` stores the mark. If the PR has no §3.13 row, it gets one with outcome `done`, so the Done list keeps it after
+it merges. `todo` moves the PR back: it drops the mark, or stores "not done" when my approval stands. The marks are
+`done_prs` rows in `state.db`: they survive restarts and pushes, a new review request does not clear them, and the
+§3.13 lookup drops them when the PR merges or closes. A PR outside the last fetch is 404 `not_in_queue`.
 
 ## 4. Config
 
@@ -1006,7 +1023,7 @@ PR arguments take `N` (repo = `--repo`, else `PR_LOOP_REPO`/`IPR_REPO`, else `ip
 ## 7. Test fixtures
 
 `contract/api/v1/` holds one JSON file per response above (`info.json`, `queue.json`,
-`events.json`, `history.json`, `config.json`, `pr-config.json`, `prompt.json`, `next.json`, `accepted.json`, `paused.json`,
+`events.json`, `history.json`, `config.json`, `pr-config.json`, `prompt.json`, `next.json`, `accepted.json`, `paused.json`, `done.json`,
 `error-invalid-config.json`, `error-busy.json`). Python tests assert the server's output for a fixed fake
 runtime equals them. Swift tests decode the same files. `python3 -m pr_loop.api --fake --socket /tmp/prw.sock` (from `daemon/`)
 serves that fake runtime. It is stateful and in memory, it starts from the fixtures, and it uses the real route table, validator and
@@ -1019,6 +1036,7 @@ long-poll code. Every accepted action changes the snapshot and wakes the waiters
 | `POST …/review` | item → `active` review with three `reviewers` that step `running` → `clean` over ~3 s, then `ready` (colleague: a `ready_for_approval` event) or `idle` `clean` (mine). On a READY item, a `ready_withdrawn` event comes first |
 | `POST …/fix` | item → `active` fix for ~3 s, then `fix.status: nothing-to-fix`, `parked: false` |
 | `POST /v1/pause`, `/v1/resume` | flips `paused` |
+| `POST …/done`, `…/todo` | the item leaves `items` for a `done` history entry, and comes back |
 | `PUT`/`PATCH /v1/config` | validated and kept in memory; `rev`, `effective`, `lanes.pools` and `projects` follow |
 | `GET /v1/history` | serves the history fixture; a fake PR that reaches `ready` or `clean` is upserted |
 | `GET`/`PUT`/`PATCH`/`DELETE …/config` (PR) | kept in memory; `override` on the item and `effective` follow |
