@@ -64,6 +64,9 @@ class Writes(unittest.TestCase):
     def refetched(self):
         return self.rt.refresh_now.is_set() and not self.rt.refresh_now.clear()
 
+    def queued(self, lane):
+        return {p["number"] for pool, _ in self.pools.of(lane) for p in pool.prs}
+
 
 class Config(Writes):
     def rev(self):
@@ -219,9 +222,6 @@ class Actions(Writes):
 
 
 class PausePR(Writes):
-    def queued(self, lane):
-        return {p["number"] for pool, _ in self.pools.of(lane) for p in pool.prs}
-
     def act(self, n, path):
         return self.call("POST", f"/v1/prs/{MONOREPO}/{n}/{path}")
 
@@ -239,6 +239,39 @@ class PausePR(Writes):
 
     def test_a_pr_outside_the_fetch_is_404(self):
         self.assertEqual(self.act(11, "pause")[1]["error"]["code"], "not_in_queue")
+
+
+class DonePR(Writes):
+    prs = Writes.prs + [pr(18, mine=False, approvals=[True])]
+
+    def act(self, n, path):
+        return self.call("POST", f"/v1/prs/{MONOREPO}/{n}/{path}")
+
+    def listed(self):
+        return {i["number"] for i in self.call("GET", "/v1/queue")[1]["items"]}
+
+    def done(self):
+        return {h["number"]: h["outcome"] for h in self.call("GET", "/v1/history?limit=500")[1]["entries"] if h["done"]}
+
+    def test_a_done_pr_leaves_the_list_and_the_lanes_until_moved_back(self):
+        self.rt.feed()
+        self.assertEqual(self.act(10, "done"), (200, {"key": f"{MONOREPO}#10", "done": True}))
+        self.assertEqual((10 in self.listed(), 10 in self.queued("review"), self.done()), (False, False, {10: "done"}))
+        self.assertEqual(self.call("POST", "/v1/next", {"prs": [{"repo": MONOREPO, "number": 10}]})[1]["results"][0]["reason"],
+                         "done")
+        self.assertEqual(self.act(10, "todo"), (200, {"key": f"{MONOREPO}#10", "done": False}))
+        self.assertEqual((10 in self.listed(), 10 in self.queued("review"), self.done(), db.done_prs()),
+                         (True, True, {}, {}))
+
+    def test_my_approval_makes_a_pr_done_until_i_move_it_back(self):
+        self.assertNotIn(18, self.listed())
+        self.act(18, "todo")
+        self.assertEqual((18 in self.listed(), db.done_prs()), (True, {(MONOREPO, 18): False}))
+        self.act(18, "done")
+        self.assertEqual((18 in self.listed(), db.done_prs()), (False, {(MONOREPO, 18): True}))
+
+    def test_a_pr_outside_the_fetch_is_404(self):
+        self.assertEqual(self.act(11, "done")[1]["error"]["code"], "not_in_queue")
 
 
 class Pause(Writes):

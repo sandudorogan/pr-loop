@@ -63,10 +63,11 @@ def lookup(graphql, pairs):
 
 def settle(graphql, prs, say):
     """Marks the open entries whose PR left the fetch `merged` or `closed`, and drops those PRs' overrides (api.md
-    §4.10) and pauses, also of PRs with no entry. A PR the lookup finds open stays out of the next lookups for RECHECK seconds."""
+    §4.10), pauses and done marks, also of PRs with no entry. A PR the lookup finds open stays out of the next lookups for RECHECK seconds."""
     inside, now = {(p["repo"], p["number"]) for p in prs}, time.monotonic()
     entries = [(r["repo"], r["number"]) for r in db.history(db.HISTORY_KEEP) if r["state"] == "open"]
-    gone = [k for k in dict.fromkeys(entries + list(db.pr_overrides()) + list(db.paused_prs()))
+    gone = [k for k in dict.fromkeys(entries + list(db.pr_overrides()) + list(db.paused_prs())
+                                       + list(db.done_prs()))
             if k not in inside and now - LOOKED.get(k, -RECHECK) >= RECHECK]
     LOOKED.update(dict.fromkeys(gone, now))
     if not gone:
@@ -78,6 +79,7 @@ def settle(graphql, prs, say):
                 (repo, n) in entries and db.upsert_history(repo, n, state=node["state"].lower(), closed_at=db.now())
                 db.drop_pr_override(repo, n)
                 db.pause_pr(repo, n, False)
+                db.mark_done(repo, n, None)
     say(f"history: {len(gone)} PR(s) left the queue, {sum(n['state'] != 'OPEN' for n in found.values())} merged or closed, "
         f"lookup cost {cost} points")
 
@@ -123,12 +125,13 @@ def seed(graphql, prs, say):
     say(f"history: seeded {len(rows)} PR(s) from the stored results, lookup cost {cost} points")
 
 
-def entries(rows, busy, approved, cfg, limit):
-    """The API entries: the newest `limit` rows that are not open PRs the queue still works. `approved` and `busy`
-    are sets of PR keys; my standing approval beats the stored outcome."""
+def entries(rows, busy, approved, todo, cfg, limit):
+    """The API entries: the newest `limit` rows that are not open PRs the queue still works. `approved`, `busy` and
+    `todo` are sets of PR keys; my standing approval beats the stored outcome, and a PR off the to-do list is done."""
     from pr_wizard.snapshot import findings
     shown = [r for r in rows if r["state"] != "open" or r["key"] not in busy][:limit]
     return [dict(r, state=STATES[r["state"]], outcome="approved" if r["key"] in approved else r["outcome"],
+                 done=r["key"] not in todo,
                  findings=findings(r["repo"], db.review(r["repo"], r["number"]),
                                             db.reviewer_results(r["repo"], r["number"]), r["head"], cfg))
             for r in shown]

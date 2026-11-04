@@ -143,9 +143,9 @@ def active(prs):
 
 
 def workable(prs):
-    """The PRs the lanes may take: a local checkout, not paused."""
-    served, held = checkouts(), db.paused_prs()
-    return [pr for pr in prs if pr["repo"] in served and pr_key(pr) not in held]
+    """The PRs the lanes may take: a local checkout, not paused, not marked done."""
+    served, held, marks = checkouts(), db.paused_prs(), db.done_prs()
+    return [pr for pr in prs if pr["repo"] in served and pr_key(pr) not in held and not marks.get(pr_key(pr))]
 
 
 def root(repo):
@@ -262,6 +262,11 @@ def approved_by_me(pr):
 def approved(pr):
     """My approval stands and nobody re-requested my review since."""
     return not pr["requested"] and approved_by_me(pr)
+
+
+def done(pr, marks):
+    """Off my to-do list: I marked it done, or my approval stands and I did not move it back (api.md §3.18)."""
+    return marks.get(pr_key(pr), approved(pr))
 
 
 def labeled(pr, label):
@@ -832,6 +837,19 @@ class Runtime:
         self.changes.touch()
         return on
 
+    def mark_done(self, repo, n, on):
+        """api.md §3.18: a done PR leaves the to-do list and both lanes. A PR with no history row gets one, so the
+        Done list keeps it after it merges. Moving an approved PR back stores False: its approval would make it done."""
+        pr = self.fetched(repo, n)
+        with db.tx():
+            db.mark_done(repo, n, on or (False if approved(pr) else None))
+            if on and not db.has_history(repo, n):
+                history.remember(pr, "done")
+        log(repo, n, "done" if on else "back to the to-do list")
+        self.feed()
+        self.changes.touch()
+        return on
+
     def refreshed(self, prs=None, error=None):
         at = db.now()
         if error is None:
@@ -850,11 +868,12 @@ class Runtime:
         return db.events_after(since)
 
     def history(self, repo, limit):
-        """api.md §3.13: the newest entries, minus the open PRs the queue still works."""
-        items = self.snapshot()["items"]
-        busy = {i["key"] for i in items if i["group"] in ("active", "queued") or i["fix_queued"]}
+        """api.md §3.13: the newest entries, minus the open PRs the queue still works. Done = not on the to-do list."""
+        items, marks = self.snapshot()["items"], db.done_prs()
+        busy = {i["key"] for i in items if not i["done"] and (i["group"] in ("active", "queued") or i["fix_queued"])}
         standing = {f"{p['repo']}#{p['number']}" for p in self.prs if approved(p)}
-        return {"entries": history.entries(db.history(db.HISTORY_KEEP, repo), busy, standing, cfg(), limit)}
+        todo = {f"{p['repo']}#{p['number']}" for p in self.prs if not done(p, marks)}
+        return {"entries": history.entries(db.history(db.HISTORY_KEEP, repo), busy, standing, todo, cfg(), limit)}
 
     def snapshot(self):
         return snapshot.build(self.prs, snapshot.read(self.prs), {"generated_at": db.now(), "fetched_at": self.fetched_at,
@@ -895,6 +914,8 @@ def unbumpable(repo, n, pr, runs, repos):
         return "active"
     if (repo, n) in db.paused_prs():
         return "paused"
+    if db.done_prs().get((repo, n)):
+        return "done"
     return None if row(pr, db.review(repo, n), {}, [n], db.fix(repo, n))[0] == 1 else "nothing-new"
 
 

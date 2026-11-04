@@ -20,7 +20,7 @@ def read(prs):
     for repo, rows in repos.items():
         rows["results"] = {int(n): db.reviewer_results(repo, n) for n in rows["reviews"]}
     return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "checkouts": q.found(),
-            "overrides": db.pr_overrides(), "paused": db.paused_prs()}
+            "overrides": db.pr_overrides(), "paused": db.paused_prs(), "done": db.done_prs()}
 
 
 def iso(at):
@@ -52,8 +52,9 @@ def findings(repo, seen, results, head, cfg, override=None):
             "reviewers": reviewers, "top": ranked[:3]}
 
 
-def entry(pr, rows, runs, cfg, first, override, paused):
-    """`paused` is when the PR was paused, or None. A paused PR's live run stays `active` until it finishes."""
+def entry(pr, rows, runs, cfg, first, override, paused, done):
+    """`paused` is when the PR was paused, or None. A paused PR's live run stays `active` until it finishes, and so
+    does a done one's: the snapshot lists a done PR only while it runs."""
     repo, n, head = pr["repo"], pr["number"], pr["headRefOid"]
     seen, fixed = rows["reviews"].get(str(n), {}), rows["fixes"].get(str(n), {})
     now = {k: f"{r['lane']} {r['since'][11:19]}" for (r_repo, k), r in runs.items() if r_repo == repo}
@@ -68,7 +69,7 @@ def entry(pr, rows, runs, cfg, first, override, paused):
         "additions": pr["additions"], "deletions": pr["deletions"],
         "pushed_at": iso(pr["commits"]["nodes"][0]["commit"]["committedDate"]), "updated_at": iso(pr["updatedAt"]),
         "requested": pr["requested"], "bumped": n in first, "group": GROUPS[group], "rank": None,
-        "paused": bool(paused),
+        "paused": bool(paused), "done": done,
         "status": status, "detail": detail,
         "active": run and {"lane": run["lane"], "since": run["since"],
                            "reviewers": run["reviewers"] if run["lane"] == "review" else None},
@@ -98,8 +99,8 @@ def build(prs, state, runtime):
     first = {repo: rows["next"] for repo, rows in repos.items()}
     active = {repo: [n for r, n in runs if r == repo] for repo in repos}
     rows = [(entry(pr, repos[pr["repo"]], runs, cfg, first[pr["repo"]], overrides.get(q.pr_key(pr)),
-                   state["paused"].get(q.pr_key(pr))), pr) for pr in prs]
-    rows = sorted(((i, pr) for i, pr in rows if i["active"] or not q.approved(pr)),
+                   state["paused"].get(q.pr_key(pr)), q.done(pr, state["done"])), pr) for pr in prs]
+    rows = sorted(((i, pr) for i, pr in rows if i["active"] or not i["done"]),
                   key=lambda r: (list(GROUPS.values()).index(r[0]["group"]), q.priority(r[1], first),
                                  r[1]["number"] < max(active[r[1]["repo"]], default=0), r[1]["number"], r[1]["repo"]))
     items = [i for i, _ in rows]
