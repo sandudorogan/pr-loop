@@ -9,13 +9,13 @@ let strict: [SwiftSetting] = [
 ]
 
 let package = Package(
-    name: "PRWizard",
+    name: "PRLoop",
     platforms: [.macOS(.v26)],
     targets: [
-        .target(name: "PRWizardKit", swiftSettings: strict),
+        .target(name: "PRLoopKit", swiftSettings: strict),
         .executableTarget(
-            name: "PRWizard", dependencies: ["PRWizardKit"],
+            name: "PRLoop", dependencies: ["PRLoopKit"],
             swiftSettings: strict + [.defaultIsolation(MainActor.self)]),
-        .testTarget(name: "PRWizardKitTests", dependencies: ["PRWizardKit"], swiftSettings: strict),
+        .testTarget(name: "PRLoopKitTests", dependencies: ["PRLoopKit"], swiftSettings: strict),
     ]
 )

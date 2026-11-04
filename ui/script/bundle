@@ -1,12 +1,12 @@
 #!/bin/zsh -e
 cd "${0:A:h}/.."
-swift build -c release --product PRWizard
+swift build -c release --product PRLoop
 bin=$(swift build -c release --show-bin-path)
-app="build/PR Wizard.app"
+app="build/PR Loop.app"
 count=$(git rev-list --count HEAD)
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp "$bin/PRWizard" "$app/Contents/MacOS/PRWizard"
+cp "$bin/PRLoop" "$app/Contents/MacOS/PRLoop"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$count" "$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "${VERSION:-1.0.$count}" "$app/Contents/Info.plist"

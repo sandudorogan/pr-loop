@@ -1,9 +1,9 @@
 #!/bin/zsh -e
 cd "${0:A:h}/.."
 script/bundle
-dest="/Applications/PR Wizard.app"
-running="^$dest/Contents/MacOS/PRWizard( |$)"
+dest="/Applications/PR Loop.app"
+running="^$dest/Contents/MacOS/PRLoop( |$)"
 pkill -f "$running" && while pgrep -f "$running" >/dev/null; do sleep 0.2; done
 rm -rf "$dest"
-ditto "build/PR Wizard.app" "$dest"
+ditto "build/PR Loop.app" "$dest"
 echo "$dest"

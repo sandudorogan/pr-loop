@@ -18,11 +18,11 @@ func render(pixels: Int) -> Data {
     NSGradient(starting: NSColor.systemIndigo, ending: NSColor.systemPurple)?.draw(in: squircle, angle: 90)
     let config = NSImage.SymbolConfiguration(pointSize: tile.width * 0.5, weight: .medium)
         .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
-    let wand = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)!
+    let symbol = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)!
         .withSymbolConfiguration(config)!
-    let fit = min(tile.width * 0.62 / wand.size.width, tile.height * 0.62 / wand.size.height)
-    let size = NSSize(width: wand.size.width * fit, height: wand.size.height * fit)
-    wand.draw(in: NSRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
+    let fit = min(tile.width * 0.62 / symbol.size.width, tile.height * 0.62 / symbol.size.height)
+    let size = NSSize(width: symbol.size.width * fit, height: symbol.size.height * fit)
+    symbol.draw(in: NSRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
     NSGraphicsContext.current = nil
     return rep.representation(using: .png, properties: [:])!
 }

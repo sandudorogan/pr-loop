@@ -1,13 +1,13 @@
 #!/bin/zsh -e
 cd "${0:A:h}/.."
 script/bundle
-app="build/PR Wizard.app"
-name=PR-Wizard-$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")
-rm -rf build/dmg build/PR-Wizard-*(N) build/SHA256SUMS
+app="build/PR Loop.app"
+name=PR-Loop-$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")
+rm -rf build/dmg build/PR-Loop-*(N) build/SHA256SUMS
 mkdir build/dmg
-ditto "$app" "build/dmg/PR Wizard.app"
+ditto "$app" "build/dmg/PR Loop.app"
 ln -s /Applications build/dmg/Applications
-hdiutil create -quiet -volname "PR Wizard" -srcfolder build/dmg -fs HFS+ -format UDZO "build/$name.dmg"
+hdiutil create -quiet -volname "PR Loop" -srcfolder build/dmg -fs HFS+ -format UDZO "build/$name.dmg"
 hdiutil verify -quiet "build/$name.dmg"
 ditto -c -k --keepParent "$app" "build/$name.zip"
 (cd build && shasum -a 256 $name.dmg $name.zip > SHA256SUMS)
