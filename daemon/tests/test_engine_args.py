@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pr_wizard import config
+from pr_loop import config
 import prs  # noqa: F401  (puts review/ on sys.path and pins the config path)
 
 SCHEMA, LAST = "<SCHEMA>", "<LAST>"
@@ -47,7 +47,7 @@ def scripts(doc=None):
         if doc is not None:
             Path(path).write_text(json.dumps(doc))
         saved = {n: sys.modules.pop(n, None) for n in ("pr_review", "pr_fix")}
-        with patch.dict(os.environ, {"PR_WIZARD_CONFIG": path, "IPR_REPO": "iprally/iprally"}):
+        with patch.dict(os.environ, {"PR_LOOP_CONFIG": path, "IPR_REPO": "iprally/iprally"}):
             fresh = importlib.import_module("pr_review"), importlib.import_module("pr_fix")
         try:
             yield fresh
@@ -129,7 +129,7 @@ class NoConfigFile(Goldens, unittest.TestCase):
 
 
 class SeededFile(Goldens, unittest.TestCase):
-    """What unit 24 writes to ~/.config/pr-wizard/config.json: the defaults, dumped."""
+    """What unit 24 writes to ~/.config/pr-loop/config.json: the defaults, dumped."""
     scripts_doc = json.loads(json.dumps(config.DEFAULTS))
 
 

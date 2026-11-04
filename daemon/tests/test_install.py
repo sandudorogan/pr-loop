@@ -84,11 +84,11 @@ class ConfigInstallation(unittest.TestCase):
         self.home = Path(self.temp.name) / "home"
         self.root = self.home / "workdir/sample"
         self.root.mkdir(parents=True)
-        (self.root / "links.json").write_text(json.dumps({"links": {}, "config": ".config/pr-wizard/config.json"}))
+        (self.root / "links.json").write_text(json.dumps({"links": {}, "config": ".config/pr-loop/config.json"}))
         self.source = self.home / ".local/share/chezmoi"
-        self.target = self.home / ".config/pr-wizard/config.json"
-        self.real = self.source / ".pr-wizard/config.json"
-        self.template = self.source / "dot_config/pr-wizard/symlink_config.json.tmpl"
+        self.target = self.home / ".config/pr-loop/config.json"
+        self.real = self.source / ".pr-loop/config.json"
+        self.template = self.source / "dot_config/pr-loop/symlink_config.json.tmpl"
 
     def install(self, **kwargs):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -113,7 +113,7 @@ class ConfigInstallation(unittest.TestCase):
             self.install(chezmoi=self.source)
             self.real.write_text('{"fix": {"workers": 1}}')
             self.install(chezmoi=self.source)
-        self.assertEqual(self.template.read_text(), "{{ .chezmoi.sourceDir }}/.pr-wizard/config.json\n")
+        self.assertEqual(self.template.read_text(), "{{ .chezmoi.sourceDir }}/.pr-loop/config.json\n")
         self.assertTrue(self.target.is_symlink())
         self.assertEqual(self.target.resolve(), self.real.resolve())
         self.assertEqual(self.real.read_text(), '{"fix": {"workers": 1}}')

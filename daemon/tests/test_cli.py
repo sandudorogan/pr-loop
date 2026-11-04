@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from prs import GITOPS, MONOREPO, rq
 from test_api_read import fixture
-from pr_wizard import api, cli, client, names, snapshot
+from pr_loop import api, cli, client, names, snapshot
 
 
 class Stub:
@@ -193,7 +193,7 @@ class Actions(Cli):
     def test_pr_reviews_locally_even_with_the_daemon_up(self):
         self.serve()
         with patch.object(rq, "tick") as tick:
-            self.assertEqual(self.run_cli("--pr", "42", env={"PR_WIZARD_REPO": GITOPS})[0], 0)
+            self.assertEqual(self.run_cli("--pr", "42", env={"PR_LOOP_REPO": GITOPS})[0], 0)
         tick.assert_called_once_with((GITOPS, 42), False)
         self.assertEqual(self.rt.asked, [])
 

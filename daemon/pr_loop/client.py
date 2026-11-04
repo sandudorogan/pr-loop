@@ -1,7 +1,7 @@
 """A client of the control API (api.md §1): one HTTP/1.1 + JSON request per connection on the daemon's Unix socket."""
 import http.client, json, socket
 
-from pr_wizard import names
+from pr_loop import names
 
 
 class Down(Exception):
@@ -18,7 +18,7 @@ class Failed(Exception):
 
 class Connection(http.client.HTTPConnection):
     def __init__(self, path, timeout):
-        super().__init__("pr-wizard", timeout=timeout)
+        super().__init__("pr-loop", timeout=timeout)
         self.path = path
 
     def connect(self):

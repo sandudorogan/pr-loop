@@ -11,7 +11,7 @@ from test_api_write import Writes
 from test_engine_args import scripts
 from test_events import Store
 from test_history import Asked, node
-from pr_wizard import config, db, history
+from pr_loop import config, db, history
 
 OPUS = [config.DEFAULTS["review"]["reviewers"][0]]
 SCOPE = {"head": HEAD, "done_at_head": ["solo", "codex"], "clean_at_head": []}

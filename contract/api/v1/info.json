@@ -1,12 +1,12 @@
 {
-  "name": "pr-wizard",
+  "name": "pr-loop",
   "version": "1.0.0",
   "commit": "3dc9b3f",
   "api": 1,
   "pid": 48973,
   "started_at": "2026-10-25T09:00:00+03:00",
   "uptime_s": 10862,
-  "label": "local.pr-wizard",
+  "label": "local.pr-loop",
   "paused": false,
   "projects": [
     {"repo": "iprally/iprally", "status": "active", "available": true, "review": true, "fix": true, "checkout": {"path": "/Users/sandu.dorogan/workdir/iprally", "source": "detected"}, "prs": 3, "error": null, "conventions": {"ref": "origin/main", "files": ["AGENTS.md", "CLAUDE.md", "api/AGENTS.md", "api/CLAUDE.md", "ui/AGENTS.md", "ui/CLAUDE.md", ".clj-kondo/config.edn"], "skills": ["add-phosphor-icon", "adr", "quality-self-review"]}, "gates": [{"name": "cljfmt", "kind": "format", "source": "default"}, {"name": "Karma", "kind": "test", "source": "default"}]},
@@ -16,11 +16,11 @@
   ],
   "lanes": {"separate": false, "pools": [{"id": "review", "lane": "review", "repo": null, "workers": 3, "busy": 1, "pending": 1}, {"id": "fix", "lane": "fix", "repo": null, "workers": 3, "busy": 0, "pending": 0}]},
   "refresh": {"interval_s": 300, "idle_s": 60, "last_at": "2026-10-25T12:00:41+03:00", "last_error": null},
-  "config": {"path": "/Users/sandu.dorogan/.config/pr-wizard/config.json", "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-wizard/config.json", "rev": "3f9a0c1d2e4b", "error": null},
+  "config": {"path": "/Users/sandu.dorogan/.config/pr-loop/config.json", "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json", "rev": "3f9a0c1d2e4b", "error": null},
   "paths": {
-    "socket": "/Users/sandu.dorogan/.local/state/pr-wizard/api.sock",
-    "state": "/Users/sandu.dorogan/.local/state/pr-wizard",
-    "db": "/Users/sandu.dorogan/.local/state/pr-wizard/state.db",
-    "log": "/Users/sandu.dorogan/Library/Logs/pr-wizard.log"
+    "socket": "/Users/sandu.dorogan/.local/state/pr-loop/api.sock",
+    "state": "/Users/sandu.dorogan/.local/state/pr-loop",
+    "db": "/Users/sandu.dorogan/.local/state/pr-loop/state.db",
+    "log": "/Users/sandu.dorogan/Library/Logs/pr-loop.log"
   }
 }

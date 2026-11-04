@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import prs  # noqa: F401
-from pr_wizard import api, config, fake
+from pr_loop import api, config, fake
 
 IPRALLY, GITOPS, SITE = "iprally/iprally", "iprally/gitops", "clojure/clojurescript-site"
 
@@ -80,11 +80,11 @@ class Flags(unittest.TestCase):
         self.assertEqual((rt.speed, rt.snapshot()["items"]), (0, []))
 
     def test_the_env_vars_still_work(self):
-        rt = self.runtime(PRW_FAKE_SPEED="2", PRW_FAKE_EMPTY="1")
+        rt = self.runtime(PRL_FAKE_SPEED="2", PRL_FAKE_EMPTY="1")
         self.assertEqual((rt.speed, rt.snapshot()["items"]), (2, []))
 
     def test_a_flag_beats_the_env_var(self):
-        self.assertEqual(self.runtime("--fake-speed", "0", PRW_FAKE_SPEED="2").speed, 0)
+        self.assertEqual(self.runtime("--fake-speed", "0", PRL_FAKE_SPEED="2").speed, 0)
 
 
 class Reads(Fake):

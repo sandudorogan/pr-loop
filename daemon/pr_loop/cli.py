@@ -1,30 +1,30 @@
-"""The command line of the one PR Wizard daemon. review-queue is the same command.
+"""The command line of the one PR Loop daemon. review-queue is the same command.
 
 Usage:
-  pr-wizard --daemon     launchd job local.pr-wizard: 3 workers review, 3 fix my PRs, the queue refreshes every 5 min
-  pr-wizard              run one review tick now, in this terminal, beside the daemon
-  pr-wizard --pr 16400   review one PR now, even if its own diff is unchanged
-  pr-wizard -n           dry run: print each PR's gate decision, review nothing
-  pr-wizard -l           list the queue: ▶ in review or fix, 1..n review order, ✓ ready to approve
-  pr-wizard --next 16400 move a PR to the front of the review order
-  pr-wizard --wait 16400 16401   block until one of these PRs settles at its current head, print it
-  pr-wizard --bg         refresh the daemon's queue now (starts the daemon if it is down)
-  pr-wizard --pause      workers take no new PR until --resume
-  pr-wizard config       print the daemon's config (--patch JSON: merge-patch it, --put FILE: replace it)
-  pr-wizard --prune      remove the worktrees of PRs that merged or that I approved (-n: dry run)
-  pr-wizard migrate      import today's JSON state into state.db (-n: dry run, --reverse: export it back)
+  pr-loop --daemon     launchd job local.pr-loop: 3 workers review, 3 fix my PRs, the queue refreshes every 5 min
+  pr-loop              run one review tick now, in this terminal, beside the daemon
+  pr-loop --pr 16400   review one PR now, even if its own diff is unchanged
+  pr-loop -n           dry run: print each PR's gate decision, review nothing
+  pr-loop -l           list the queue: ▶ in review or fix, 1..n review order, ✓ ready to approve
+  pr-loop --next 16400 move a PR to the front of the review order
+  pr-loop --wait 16400 16401   block until one of these PRs settles at its current head, print it
+  pr-loop --bg         refresh the daemon's queue now (starts the daemon if it is down)
+  pr-loop --pause      workers take no new PR until --resume
+  pr-loop config       print the daemon's config (--patch JSON: merge-patch it, --put FILE: replace it)
+  pr-loop --prune      remove the worktrees of PRs that merged or that I approved (-n: dry run)
+  pr-loop migrate      import today's JSON state into state.db (-n: dry run, --reverse: export it back)
 
 -l, --next, --bg, --wait, --pause, --resume and config ask the daemon on its socket. With the daemon down, -l and
 --next work on state.db here, --bg and --wait start the daemon. --pr, -n, the tick, --prune and migrate run here.
-A PR is N (of --repo, else $PR_WIZARD_REPO, else $IPR_REPO, else iprally/iprally) or owner/name#N.
-State: ~/.local/state/pr-wizard/state.db. Log: ~/Library/Logs/pr-wizard.log.
+A PR is N (of --repo, else $PR_LOOP_REPO, else $IPR_REPO, else iprally/iprally) or owner/name#N.
+State: ~/.local/state/pr-loop/state.db. Log: ~/Library/Logs/pr-loop.log.
 """
 import argparse, json, os, re, subprocess, sys, time
 
-from pr_wizard import client, names, queue as q, snapshot
-from pr_wizard.names import LABEL, LOG, MONOREPO
+from pr_loop import client, names, queue as q, snapshot
+from pr_loop.names import LABEL, LOG, MONOREPO
 
-DOWN = "daemon down — pr-wizard --bg starts it"
+DOWN = "daemon down — pr-loop --bg starts it"
 UP_WITHIN = 30
 REF = re.compile(r"(?:(?P<repo>[^/#\s]+/[^/#\s]+)#)?(?P<n>\d+)")
 
@@ -153,7 +153,7 @@ def parser():
     ap.add_argument("--prune", action="store_true",
                     help="remove the worktrees of PRs that merged or that I approved, in every repo")
     ap.add_argument("--repo", help="the repo of --pr, --next and --wait (default "
-                                                         f"$PR_WIZARD_REPO, $IPR_REPO, else {MONOREPO}); --prune: only this repo")
+                                                         f"$PR_LOOP_REPO, $IPR_REPO, else {MONOREPO}); --prune: only this repo")
     return ap
 
 

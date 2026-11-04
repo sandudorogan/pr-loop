@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from prs import GITOPS, MONOREPO, pr, rq
 from test_queue_config import Configured
-from pr_wizard import config, pools, snapshot
+from pr_loop import config, pools, snapshot
 
 NEW = "acme/widgets"
 LISTING = [{"repo": MONOREPO, "review": True, "fix": True}, {"repo": GITOPS, "review": False, "fix": True}]

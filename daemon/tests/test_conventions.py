@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from prs import pr_fix, pr_review as prr
-from pr_wizard import conventions as cv
+from pr_loop import conventions as cv
 
 SKILL = "---\nname: {name}\ndescription: {description}\n---\n\n# Steps\n"
 

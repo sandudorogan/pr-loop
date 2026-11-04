@@ -8,15 +8,15 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "review"))
-os.environ["PR_WIZARD_CONFIG"] = "/nonexistent/config.json"
-if "PR_WIZARD_TEST_HOME" not in os.environ:
-    os.environ["PR_WIZARD_TEST_HOME"] = os.environ["HOME"] = tempfile.mkdtemp(prefix="pr-wizard-test-home-")
+os.environ["PR_LOOP_CONFIG"] = "/nonexistent/config.json"
+if "PR_LOOP_TEST_HOME" not in os.environ:
+    os.environ["PR_LOOP_TEST_HOME"] = os.environ["HOME"] = tempfile.mkdtemp(prefix="pr-loop-test-home-")
     atexit.register(shutil.rmtree, os.environ["HOME"], ignore_errors=True)
     os.environ.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
 
-from pr_wizard import names, queue as rq  # noqa: E402
+from pr_loop import names, queue as rq  # noqa: E402
 
-assert names.DB.startswith(os.environ["PR_WIZARD_TEST_HOME"]), f"tests would touch the real state at {names.DB}"
+assert names.DB.startswith(os.environ["PR_LOOP_TEST_HOME"]), f"tests would touch the real state at {names.DB}"
 import pr_fix, pr_review  # noqa: E402
 
 MONOREPO, GITOPS = rq.MONOREPO, "iprally/gitops"

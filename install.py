@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install PR Wizard: check the tools, link the repo into $HOME, start the daemon, build and open the app."""
+"""Install PR Loop: check the tools, link the repo into $HOME, start the daemon, build and open the app."""
 import argparse
 import importlib.util
 import json
@@ -14,14 +14,14 @@ from datetime import datetime
 from xml.sax.saxutils import escape
 
 
-CONFIG_SOURCE = ".pr-wizard/config.json"
-APP = "/Applications/PR Wizard.app"
+CONFIG_SOURCE = ".pr-loop/config.json"
+APP = "/Applications/PR Loop.app"
 TOOLS = {"python3": "brew install python", "git": "xcode-select --install", "gh": "brew install gh",
          "claude": "https://claude.com/claude-code", "codex": "npm install -g @openai/codex"}
 
 
 def default_config():
-    spec = importlib.util.spec_from_file_location("pr_wizard_config", Path(__file__).parent / "daemon/pr_wizard/config.py")
+    spec = importlib.util.spec_from_file_location("pr_loop_config", Path(__file__).parent / "daemon/pr_loop/config.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return json.dumps(module.DEFAULTS, indent=2) + "\n"
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("--home", type=Path, default=Path.home(), help="destination home directory")
     parser.add_argument("--chezmoi-source", type=Path, help="chezmoi source to update (default: `chezmoi source-path`)")
     parser.add_argument("--no-chezmoi", action="store_true", help="link straight into $HOME even with chezmoi set up")
-    parser.add_argument("--no-app", action="store_true", help="skip building and opening PR Wizard.app")
+    parser.add_argument("--no-app", action="store_true", help="skip building and opening PR Loop.app")
     parser.add_argument("--dry-run", action="store_true", help="print each step without changing anything")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
@@ -186,5 +186,5 @@ if __name__ == "__main__":
     start(args.home / target, daemon["Label"], args.dry_run)
     if not args.no_app:
         install_app(root, args.dry_run)
-    if not shutil.which("pr-wizard"):
-        print("Add ~/.local/bin to your shell PATH to run pr-wizard")
+    if not shutil.which("pr-loop"):
+        print("Add ~/.local/bin to your shell PATH to run pr-loop")

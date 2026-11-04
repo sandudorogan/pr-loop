@@ -11,7 +11,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from prs import GITOPS, MONOREPO, pr, rq
-from pr_wizard import config, db, names, snapshot
+from pr_loop import config, db, names, snapshot
 
 FIXTURES = Path(__file__).parent / "fixtures"
 OLD, HEAD = "0" * 40, "a" * 40

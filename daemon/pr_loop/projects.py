@@ -7,7 +7,7 @@ each project's status.
 import os, re, subprocess, threading, time
 from glob import glob
 
-from pr_wizard import config, conventions
+from pr_loop import config, conventions
 
 SEARCHES = {"mine": "author:@me", "requested": "user-review-requested:@me", "assigned": "assignee:@me",
             "reviewed": "reviewed-by:@me -author:@me"}

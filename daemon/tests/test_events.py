@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from prs import HEAD, MONOREPO, pr, rq
 from test_api_read import call, fixture, shape
-from pr_wizard import api, db
+from pr_loop import api, db
 
 OTHER = "b" * 40
 READY_SEEN = {"sha": OTHER, "status": "clean", "verdict": "clean", "note": "no findings", "rounds": 0, "hold": False,

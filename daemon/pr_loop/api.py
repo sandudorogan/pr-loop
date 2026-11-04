@@ -5,7 +5,7 @@ A runtime serves the bodies: `info()`, `snapshot()`, `config()`, `events(since)`
 `bump(prs, only_queued)`, `review(repo, n)`, `fix(repo, n)`, `put_pr_override(repo, n, doc)`, `pause_pr(repo, n, on)` and `pause(on)`.
 
 Usage:
-  python3 -m pr_wizard.api --fake [--socket PATH] [--fake-speed S] [--fake-empty]
+  python3 -m pr_loop.api --fake [--socket PATH] [--fake-speed S] [--fake-empty]
                                                     serve the fixtures of tests/fixtures/api/v1
 """
 import argparse, json, os, re, signal, socket, socketserver, sys, threading, time, traceback
@@ -13,7 +13,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
 
-from pr_wizard import config, db, names
+from pr_loop import config, db, names
 
 MAX_WAIT = 60
 MAX_BODY = 1 << 20
@@ -343,11 +343,11 @@ def main():
     ap.add_argument("--fake", action="store_true", required=True, help="serve the fixtures, not the daemon state")
     ap.add_argument("--socket", default=names.SOCKET, help=f"the socket path (default {names.SOCKET})")
     ap.add_argument("--fake-speed", type=float, help="seconds one review or fix takes, 0 is instant "
-                    "(default $PRW_FAKE_SPEED, else 3)")
+                    "(default $PRL_FAKE_SPEED, else 3)")
     ap.add_argument("--fake-empty", action="store_true", default=None, help="start with an empty queue "
-                    "(default: $PRW_FAKE_EMPTY=1)")
+                    "(default: $PRL_FAKE_EMPTY=1)")
     a = ap.parse_args()
-    from pr_wizard import fake
+    from pr_loop import fake
     server = bind(fake.Runtime(speed=a.fake_speed, empty=a.fake_empty), a.socket)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     log(f"fake daemon on {a.socket}")

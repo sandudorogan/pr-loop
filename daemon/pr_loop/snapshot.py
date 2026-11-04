@@ -3,8 +3,8 @@ API JSON, `render()` prints it as the `-l` lines."""
 import hashlib, json
 from datetime import datetime
 
-from pr_wizard import config, db, pools, projects, queue as q
-from pr_wizard.names import tag
+from pr_loop import config, db, pools, projects, queue as q
+from pr_loop.names import tag
 
 GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle", 5: "paused"}
 MARKS = {"active": "▶", "ready": "✓", "paused": "⏸"}

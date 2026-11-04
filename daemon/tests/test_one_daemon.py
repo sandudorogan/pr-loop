@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import prs  # noqa: F401
-from pr_wizard import db, names, queue as rq
+from pr_loop import db, names, queue as rq
 
 GITOPS = "iprally/gitops"
 
@@ -81,7 +81,7 @@ class OneDaemon(unittest.TestCase):
         for repo, root in ((rq.MONOREPO, "iprally"), (GITOPS, "gitops")):
             run = rq.child(repo)
             self.assertEqual(run["cwd"], str(Path.home() / "workdir" / root))
-            self.assertEqual((run["env"]["PR_WIZARD_REPO"], run["env"]["PR_WIZARD_REPO_ROOT"]), (repo, run["cwd"]))
+            self.assertEqual((run["env"]["PR_LOOP_REPO"], run["env"]["PR_LOOP_REPO_ROOT"]), (repo, run["cwd"]))
 
     def test_review_lane_is_off_for_gitops(self):
         self.assertFalse(rq.unreviewed(dict(node(rq.MONOREPO, 1), repo=rq.MONOREPO)))

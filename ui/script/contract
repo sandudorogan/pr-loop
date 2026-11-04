@@ -1,9 +1,9 @@
 #!/bin/zsh -e
 cd "${0:A:h}/.."
 sock=$(mktemp -u "${TMPDIR:-/tmp}/prw-contract.XXXXXX").sock
-(cd ../daemon && exec python3 -m pr_wizard.api --fake --fake-speed 0 --socket $sock) >/dev/null &
+(cd ../daemon && exec python3 -m pr_loop.api --fake --fake-speed 0 --socket $sock) >/dev/null &
 fake=$!
 trap 'kill $fake 2>/dev/null; wait $fake 2>/dev/null || true; rm -f $sock' EXIT
 for _ in {1..50}; do [[ -S $sock ]] && break; sleep 0.1; done
 [[ -S $sock ]] || { print -u2 "the fake daemon did not start on $sock"; exit 1 }
-PR_WIZARD_CONTRACT_SOCKET=$sock script/test --filter Contract "$@"
+PR_LOOP_CONTRACT_SOCKET=$sock script/test --filter Contract "$@"

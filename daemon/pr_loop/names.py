@@ -12,19 +12,19 @@ PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
 
 MONOREPO = "iprally/iprally"
 REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally"}, "iprally/gitops": {"root": f"{HOME}/workdir/gitops"}}
-LABEL = "local.pr-wizard"
+LABEL = "local.pr-loop"
 NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
 
 STATE_DIR = f"{HOME}/.local/state"
 STATE, FIXES, NEXT, LOCK, LOCKS, NOWS = ".json", ".fixes.json", ".next", ".lock", ".locks", ".now.d"
-WIZARD = f"{STATE_DIR}/pr-wizard"
-DB = f"{WIZARD}/state.db"
-SCRATCH = f"{WIZARD}/scratch"
-SOCKET = f"{WIZARD}/api.sock"
-LABEL_FILE = f"{WIZARD}/launchd-label"
-DAEMON_LOCK, DAEMON_PID = f"{WIZARD}/daemon.lock", f"{WIZARD}/daemon.pid"
+LOOP = f"{STATE_DIR}/pr-loop"
+DB = f"{LOOP}/state.db"
+SCRATCH = f"{LOOP}/scratch"
+SOCKET = f"{LOOP}/api.sock"
+LABEL_FILE = f"{LOOP}/launchd-label"
+DAEMON_LOCK, DAEMON_PID = f"{LOOP}/daemon.lock", f"{LOOP}/daemon.pid"
 OLD_DAEMON_LOCK = f"{STATE_DIR}/review-queue{LOCK}"
-LOG = f"{HOME}/Library/Logs/pr-wizard.log"
+LOG = f"{HOME}/Library/Logs/pr-loop.log"
 DELEGATOR = f"{HOME}/.claude/skills/delegator"
 BRIEFS = f"{DELEGATOR}/briefs"
 CLEAN_CACHE = f"{DELEGATOR}/.clean-reviews.json"
@@ -48,11 +48,11 @@ def fix_dir(repo):
 
 
 def lock(repo, n, kind=""):
-    return f"{WIZARD}/locks/{repo}/{n}{kind}"
+    return f"{LOOP}/locks/{repo}/{n}{kind}"
 
 
 def slot(i):
-    return f"{WIZARD}/slot.{i}.lock"
+    return f"{LOOP}/slot.{i}.lock"
 
 
 def root(repo):
@@ -64,11 +64,11 @@ def worktrees(repo_root):
 
 
 def env_repo():
-    return os.environ.get("PR_WIZARD_REPO") or os.environ.get("IPR_REPO", MONOREPO)
+    return os.environ.get("PR_LOOP_REPO") or os.environ.get("IPR_REPO", MONOREPO)
 
 
 def env_root(repo):
-    return os.environ.get("PR_WIZARD_REPO_ROOT") or os.environ.get("IPR_REPO_ROOT", f"{HOME}/workdir/{repo.split('/')[1]}")
+    return os.environ.get("PR_LOOP_REPO_ROOT") or os.environ.get("IPR_REPO_ROOT", f"{HOME}/workdir/{repo.split('/')[1]}")
 
 
 def legacy():
@@ -99,12 +99,12 @@ def migrate(dry_run=False):
     """Imports today's JSON state into state.db in one transaction, once. Then the imported files move to
     legacy/<timestamp>/ under their path from HOME, the fix scratch dirs to scratch/, and the locks and
     live-run files go. Returns what it did (dry_run: would do), or {} once the import has happened."""
-    from pr_wizard import db
+    from pr_loop import db
     if dry_run:
         found = {} if os.path.exists(DB) and db.meta_get("imported_at") else legacy()
         return found and {**found, "rows": counts(found["rows"])}
-    os.makedirs(WIZARD, exist_ok=True)
-    with open(f"{WIZARD}/.migrate.lock", "w") as fh:
+    os.makedirs(LOOP, exist_ok=True)
+    with open(f"{LOOP}/.migrate.lock", "w") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
         if db.meta_get("imported_at"):
             return {}
@@ -122,7 +122,7 @@ def migrate(dry_run=False):
                         db.add_clean(repo, *head.split("/"), reviewer)
                 db.bump(repo, *t["next"])
             db.meta_set("imported_at", stamp.astimezone().isoformat(timespec="seconds"))
-        db.log_moves(relocate(found, f"{WIZARD}/legacy/{stamp:%Y%m%d%H%M%S}"))
+        db.log_moves(relocate(found, f"{LOOP}/legacy/{stamp:%Y%m%d%H%M%S}"))
     return {**found, "rows": counts(found["rows"])}
 
 
@@ -143,7 +143,7 @@ def relocate(found, legacy_dir):
 def reverse():
     """Writes the current state.db back to today's files, with the old writers' format, then sets the db aside
     as state.db.reverted-<timestamp>. Returns the files it wrote."""
-    from pr_wizard import db
+    from pr_loop import db
     if not os.path.exists(DB):
         raise SystemExit(f"no {DB} to export")
     written = []
@@ -154,7 +154,7 @@ def reverse():
             json.dump(data, fh, indent=indent)
         written.append(p)
 
-    with open(f"{WIZARD}/.migrate.lock", "w") as fh:
+    with open(f"{LOOP}/.migrate.lock", "w") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
         for repo in REPOS:
             write(path(repo, STATE), {str(n): e for n, e in db.reviews(repo).items()})

@@ -7,7 +7,7 @@ from prs import GITOPS, HEAD, MONOREPO, pr, rq
 from test_events import Store
 import test_api_read
 from test_api_read import fixture, shape
-from pr_wizard import db, history
+from pr_loop import db, history
 
 OTHER = "b" * 40
 

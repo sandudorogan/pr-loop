@@ -1,4 +1,4 @@
-"""The PR Wizard config (api.md §4): defaults, merge, validation, effective config, atomic save."""
+"""The PR Loop config (api.md §4): defaults, merge, validation, effective config, atomic save."""
 
 import copy
 import hashlib
@@ -7,7 +7,7 @@ import os
 import re
 from typing import Any, Callable, NamedTuple
 
-from pr_wizard import db
+from pr_loop import db
 
 NO_REVIEW, NO_FIX = "no-auto-review", "no-auto-fix"
 ENGINES, FIX_ENGINES, GATE_KINDS = ["claude", "codex"], ["codex"], ["format", "test"]
@@ -287,7 +287,7 @@ def validate(doc, level="config", base=None):
 # ---------------------------------------------------------------- load, save
 
 def default_path():
-    return os.environ.get("PR_WIZARD_CONFIG") or os.path.expanduser("~/.config/pr-wizard/config.json")
+    return os.environ.get("PR_LOOP_CONFIG") or os.path.expanduser("~/.config/pr-loop/config.json")
 
 
 class Loaded(NamedTuple):

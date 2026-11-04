@@ -14,7 +14,7 @@ from unittest.mock import patch
 from prs import MONOREPO, ROOT, rq
 from test_snapshot import mismatches, spec
 import test_snapshot
-from pr_wizard import api, config, db, fake, names
+from pr_loop import api, config, db, fake, names
 
 FIXTURES = ROOT.parent / "contract/api/v1"
 
@@ -26,7 +26,7 @@ def fixture(name):
 def call(path, sock, method="GET"):
     with socket.socket(socket.AF_UNIX) as s:
         s.connect(sock)
-        s.sendall(f"{method} {path} HTTP/1.1\r\nHost: pr-wizard\r\nContent-Length: 0\r\n\r\n".encode())
+        s.sendall(f"{method} {path} HTTP/1.1\r\nHost: pr-loop\r\nContent-Length: 0\r\n\r\n".encode())
         data = b"".join(iter(lambda: s.recv(65536), b""))
     head, body = data.split(b"\r\n\r\n", 1)
     lines = head.decode().split("\r\n")
@@ -175,13 +175,13 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(call("/v1/queue", path)[2], fixture("queue"))
 
     def test_the_daemon_serves_writes_the_label_and_unlinks_on_sigterm(self):
-        state = f"{self.dir}/pr-wizard"
+        state = f"{self.dir}/pr-loop"
         os.makedirs(state, mode=0o755)
         child = subprocess.Popen([sys.executable, "-c", f"""
 import signal, sys
 sys.path.insert(0, {str(ROOT)!r})
-from pr_wizard import db, fake, names, queue
-names.WIZARD, names.SOCKET, names.LABEL_FILE = {state!r}, {state + '/api.sock'!r}, {state + '/launchd-label'!r}
+from pr_loop import db, fake, names, queue
+names.LOOP, names.SOCKET, names.LABEL_FILE = {state!r}, {state + '/api.sock'!r}, {state + '/launchd-label'!r}
 db.DB = {state + '/state.db'!r}
 queue.serve(fake.Runtime())
 signal.pause()
@@ -189,7 +189,7 @@ signal.pause()
         self.addCleanup(lambda: child.poll() is None and child.kill())
         self.assertIn("api on", child.stdout.readline())
         self.assertEqual(os.stat(state).st_mode & 0o777, 0o700)
-        self.assertEqual(Path(f"{state}/launchd-label").read_text(), "local.pr-wizard\n")
+        self.assertEqual(Path(f"{state}/launchd-label").read_text(), "local.pr-loop\n")
         self.assertEqual(call("/v1/info", f"{state}/api.sock")[2], fixture("info"))
         child.send_signal(signal.SIGTERM)
         self.assertEqual(child.wait(10), 143)
@@ -197,13 +197,13 @@ signal.pause()
         child.stdout.close()
 
     def test_sigterm_exits_even_when_the_socket_is_already_gone(self):
-        state = f"{self.dir}/pr-wizard"
+        state = f"{self.dir}/pr-loop"
         os.makedirs(state, mode=0o755)
         child = subprocess.Popen([sys.executable, "-c", f"""
 import signal, sys
 sys.path.insert(0, {str(ROOT)!r})
-from pr_wizard import db, fake, names, queue
-names.WIZARD, names.SOCKET, names.LABEL_FILE = {state!r}, {state + '/api.sock'!r}, {state + '/launchd-label'!r}
+from pr_loop import db, fake, names, queue
+names.LOOP, names.SOCKET, names.LABEL_FILE = {state!r}, {state + '/api.sock'!r}, {state + '/launchd-label'!r}
 db.DB = {state + '/state.db'!r}
 queue.serve(fake.Runtime())
 signal.pause()

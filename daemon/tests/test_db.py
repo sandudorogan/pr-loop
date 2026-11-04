@@ -10,7 +10,7 @@ from contextlib import closing
 from unittest import mock
 
 import prs  # noqa: F401
-from pr_wizard import db
+from pr_loop import db
 
 R, G = "iprally/iprally", "iprally/gitops"
 SHA, SHA2 = "a" * 40, "b" * 40

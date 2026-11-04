@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
-from pr_wizard import db
+from pr_loop import db
 
 OTHER = "b" * 40
 

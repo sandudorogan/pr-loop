@@ -1,4 +1,4 @@
-"""History (api.md §3.13): the PRs the wizard worked on, for the empty queue window.
+"""History (api.md §3.13): the PRs PR Loop worked on, for the empty queue window.
 
   review / fix result ──remember──▶ history row, in the result's transaction
   PR leaves the fetch ──settle────▶ one batched pullRequest(number:) query ──▶ state merged | closed, override dropped
@@ -11,7 +11,7 @@ import json
 import time
 from datetime import datetime, timedelta
 
-from pr_wizard import db
+from pr_loop import db
 
 READY = ("clean", "quality-only")
 WORKED = ("posted", "clean", "failed", "needs-human", "too-big")
@@ -103,7 +103,7 @@ def seed(graphql, prs, say):
     pass of each lane, so `fixes_pushed` is 1 at most."""
     if db.meta_get("history_seeded"):
         return
-    from pr_wizard.snapshot import iso
+    from pr_loop.snapshot import iso
     known = {(r["repo"], r["number"]) for r in db.history(db.HISTORY_KEEP)}
     rows = {k: v for k, v in stored().items() if k not in known}
     live = {(p["repo"], p["number"]): p for p in prs}
@@ -126,7 +126,7 @@ def seed(graphql, prs, say):
 def entries(rows, busy, approved, cfg, limit):
     """The API entries: the newest `limit` rows that are not open PRs the queue still works. `approved` and `busy`
     are sets of PR keys; my standing approval beats the stored outcome."""
-    from pr_wizard.snapshot import findings
+    from pr_loop.snapshot import findings
     shown = [r for r in rows if r["state"] != "open" or r["key"] not in busy][:limit]
     return [dict(r, state=STATES[r["state"]], outcome="approved" if r["key"] in approved else r["outcome"],
                  findings=findings(r["repo"], db.review(r["repo"], r["number"]),

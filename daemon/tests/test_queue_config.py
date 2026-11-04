@@ -8,7 +8,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
-from pr_wizard import config, db, pools, projects, snapshot
+from pr_loop import config, db, pools, projects, snapshot
 
 NEW = "acme/widgets"
 OTHER = "b" * 40
@@ -19,7 +19,7 @@ class Configured(unittest.TestCase):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
         self.path = os.path.join(self.dir.name, "config.json")
-        env = patch.dict(os.environ, {"PR_WIZARD_CONFIG": self.path})
+        env = patch.dict(os.environ, {"PR_LOOP_CONFIG": self.path})
         env.start()
         self.addCleanup(env.stop)
         patcher = patch.object(db, "DB", os.path.join(self.dir.name, "state.db"))
@@ -120,7 +120,7 @@ class Projects(Configured):
         self.assertEqual(rq.checkouts(), {MONOREPO: "/src/iprally", GITOPS: os.path.expanduser("~/workdir/gitops"),
                                           "acme/tools": os.path.expanduser("~/src/tools")})
         self.assertEqual({p["repo"]: p["status"] for p in rq.listed([])}[NEW], "no-checkout")
-        self.assertEqual(rq.child("acme/tools")["env"]["PR_WIZARD_REPO_ROOT"], os.path.expanduser("~/src/tools"))
+        self.assertEqual(rq.child("acme/tools")["env"]["PR_LOOP_REPO_ROOT"], os.path.expanduser("~/src/tools"))
 
     def test_lanes_follow_the_project_and_the_labels_still_win(self):
         self.write({"projects": {NEW: {"root": "/src/w", "fix": {"enabled": False}}, GITOPS: {"review": {"enabled": True}}}})

@@ -1,4 +1,4 @@
-"""state.db: the PR Wizard state in SQLite (plan.md §2). Accessors take and return today's dict shapes."""
+"""state.db: the PR Loop state in SQLite (plan.md §2). Accessors take and return today's dict shapes."""
 
 import json
 import os
@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 
-from pr_wizard import names
+from pr_loop import names
 
 DB = names.DB
 BUSY_MS = 10_000

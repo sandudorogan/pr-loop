@@ -1,14 +1,14 @@
-"""The runtime behind `python3 -m pr_wizard.api --fake`: the fixtures of tests/fixtures/api/v1 as a stateful, in-memory
+"""The runtime behind `python3 -m pr_loop.api --fake`: the fixtures of tests/fixtures/api/v1 as a stateful, in-memory
 daemon (api.md §7). Writes and actions change the snapshot as the daemon would and wake the long-polls. Nothing touches disk.
 
-Knobs, as `pr_wizard.api` flags or env vars (a flag wins):
-  --fake-speed <s> / PRW_FAKE_SPEED=<s>   seconds one review or fix takes (default 3, 0 = instant)
-  --fake-empty     / PRW_FAKE_EMPTY=1     start with an empty queue (the history view)
+Knobs, as `pr_loop.api` flags or env vars (a flag wins):
+  --fake-speed <s> / PRL_FAKE_SPEED=<s>   seconds one review or fix takes (default 3, 0 = instant)
+  --fake-empty     / PRL_FAKE_EMPTY=1     start with an empty queue (the history view)
 """
 import copy, hashlib, json, os, secrets, threading, time
 from datetime import datetime
 
-from pr_wizard import api, config, db, names
+from pr_loop import api, config, db, names
 
 FIXTURES = os.path.join(names.CONTRACT, "api", "v1")
 GROUPS = ("active", "queued", "ready", "idle", "paused")
@@ -18,7 +18,7 @@ KEEP_EVENTS, ZERO = 1000, dict.fromkeys(("critical", "high", "medium", "low"), 0
 class Runtime:
     def __init__(self, fixtures=FIXTURES, speed=None, epoch=None, empty=None):
         self.fixtures, self.changes, self.lock = fixtures, api.Changes(), threading.RLock()
-        self.speed = float(os.environ.get("PRW_FAKE_SPEED", 3)) if speed is None else speed
+        self.speed = float(os.environ.get("PRL_FAKE_SPEED", 3)) if speed is None else speed
         self.snap, self.info_doc = self.read("queue"), self.read("info")
         self.page = self.read("config")
         self.cfg = self.page.pop("config")
@@ -28,7 +28,7 @@ class Runtime:
         self.unpaused = {}
         seeded = self.read("pr-config")
         self.overrides = {seeded["key"]: {k: seeded[k] for k in ("created_at", "updated_at")} | {"config": seeded["override"]}}
-        if os.environ.get("PRW_FAKE_EMPTY") if empty is None else empty:
+        if os.environ.get("PRL_FAKE_EMPTY") if empty is None else empty:
             self.snap["items"] = []
             self.counts()
 

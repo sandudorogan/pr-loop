@@ -12,7 +12,7 @@ import textwrap
 import time
 from contextlib import contextmanager, nullcontext
 
-from pr_wizard import names
+from pr_loop import names
 
 SLOTS = 2
 WIDTH = 96
@@ -73,7 +73,7 @@ def execute(gate, wt, cmd):
 @contextmanager
 def slot():
     """One of SLOTS across every run on this machine: for gates that are cold JVM builds or browsers."""
-    os.makedirs(names.WIZARD, exist_ok=True)
+    os.makedirs(names.LOOP, exist_ok=True)
     while True:
         for i in range(SLOTS):
             with open(names.slot(i), "w") as fh:

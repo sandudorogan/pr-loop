@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import prs  # noqa: F401
-from pr_wizard import db, names, queue as rq
+from pr_loop import db, names, queue as rq
 
 ROOT = Path(__file__).resolve().parents[1]
 MONOREPO, GITOPS = names.MONOREPO, "iprally/gitops"
@@ -79,17 +79,17 @@ class Migrate(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.home = Path(temp.name)
-        self.wizard = self.home / ".local/state/pr-wizard"
+        self.state = self.home / ".local/state/pr-loop"
         self.addCleanup(db.close)
 
-    def cli(self, *args, script=ROOT / "bin/pr-wizard", check=True):
+    def cli(self, *args, script=ROOT / "bin/pr-loop", check=True):
         env = {k: v for k, v in os.environ.items() if not k.startswith("IPR_")} | {
             "HOME": str(self.home), "PATH": "/usr/bin:/bin"}
         return subprocess.run([sys.executable, str(script), *args], env=env, capture_output=True, text=True,
                               check=check)
 
     def rows(self):
-        with patch.object(db, "DB", str(self.wizard / "state.db")):
+        with patch.object(db, "DB", str(self.state / "state.db")):
             rows = {"reviews": rq.load(MONOREPO), "fixes": rq.load(MONOREPO, rq.FIXES),
                     "gitops_fixes": rq.load(GITOPS, rq.FIXES), "next": rq.bumped(MONOREPO),
                     "fix_state": db.fix_states(MONOREPO), "gitops_fix_state": db.fix_states(GITOPS),
@@ -99,7 +99,7 @@ class Migrate(unittest.TestCase):
         return rows
 
     def legacy_dirs(self):
-        return list((self.wizard / "legacy").iterdir())
+        return list((self.state / "legacy").iterdir())
 
     def test_the_rows_equal_the_files(self):
         state = layout(self.home)
@@ -121,7 +121,7 @@ class Migrate(unittest.TestCase):
         for rel, data in state.items():
             self.assertNotIn(rel, after)
             self.assertEqual(json.loads(after[f"{legacy.relative_to(self.home)}/{rel}"]), data)
-        self.assertIn(".local/state/pr-wizard/scratch/16614-jb6nowm_/last.json", after)
+        self.assertIn(".local/state/pr-loop/scratch/16614-jb6nowm_/last.json", after)
         for rel in KEPT:
             self.assertIn(rel, after)
         for rel in EPHEMERA:
@@ -138,7 +138,7 @@ class Migrate(unittest.TestCase):
         self.assertIn(f"would import:\n  {MONOREPO:<16} reviews 3  fixes 2", out)
         self.assertIn("8 files to legacy/, 1 scratch dirs to scratch/, 8 locks and live-run files deleted", out)
         self.assertEqual(files(self.home), before)
-        self.assertFalse(self.wizard.exists())
+        self.assertFalse(self.state.exists())
 
     def test_a_second_run_is_a_no_op(self):
         layout(self.home)
@@ -153,7 +153,7 @@ class Migrate(unittest.TestCase):
     def test_two_processes_migrate_at_once(self):
         layout(self.home)
         env = {**os.environ, "HOME": str(self.home)}
-        runs = [subprocess.Popen([sys.executable, str(ROOT / "bin/pr-wizard"), "migrate"], env=env,
+        runs = [subprocess.Popen([sys.executable, str(ROOT / "bin/pr-loop"), "migrate"], env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(2)]
         outs = [run.communicate() + (run.returncode,) for run in runs]
         self.assertEqual([rc for *_, rc in outs], [0, 0], outs)
@@ -166,7 +166,7 @@ class Migrate(unittest.TestCase):
         self.cli("migrate")
         later = {"sha": A, "key": f"{A}:3:1:1", "status": "pushed", "note": "pushed aaaa", "errors": 0,
                  "at": "2026-10-26 10:00:00"}
-        with patch.object(db, "DB", str(self.wizard / "state.db")):
+        with patch.object(db, "DB", str(self.state / "state.db")):
             rq.record(MONOREPO, "17120", later, rq.FIXES)
             rq.save_bumped(MONOREPO, [17120, 17114])
             db.add_clean(MONOREPO, 17120, A, "opus")
@@ -183,8 +183,8 @@ class Migrate(unittest.TestCase):
             self.assertEqual(json.loads((self.home / rel).read_text()), data, rel)
         self.assertEqual((self.home / ".local/state/review-queue.next").read_text(), "[17120, 17114]")
         self.assertTrue((self.home / ".local/state/review-queue.json").read_text().startswith('{\n  "14274": {\n'))
-        self.assertFalse((self.wizard / "state.db").exists())
-        self.assertEqual(len(list(self.wizard.glob("state.db.reverted-*"))), 1)
+        self.assertFalse((self.state / "state.db").exists())
+        self.assertEqual(len(list(self.state.glob("state.db.reverted-*"))), 1)
         self.assertEqual(len(self.legacy_dirs()), 1)
 
     def test_reverse_needs_a_db(self):

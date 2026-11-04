@@ -1,6 +1,6 @@
 {
-  "rev": "5c663cb8963c", "path": "/Users/sandu.dorogan/.config/pr-wizard/config.json",
-  "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-wizard/config.json", "source": "file", "error": null,
+  "rev": "5c663cb8963c", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
+  "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json", "source": "file", "error": null,
   "config": {
     "version": 1, "detect": {"roots": ["~/workdir"]}, "lanes": {"separate": false},
     "projects": {

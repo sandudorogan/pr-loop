@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 import prs  # noqa: F401
-from pr_wizard import config as c
+from pr_loop import config as c
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -97,7 +97,7 @@ class Load(Tmp):
         self.assertEqual(got.config["review"]["reviewers"], c.DEFAULTS["review"]["reviewers"])
 
     def test_env_picks_the_path(self):
-        with mock.patch.dict(os.environ, {"PR_WIZARD_CONFIG": self.path}):
+        with mock.patch.dict(os.environ, {"PR_LOOP_CONFIG": self.path}):
             self.assertEqual(c.default_path(), self.path)
             self.write('{"fix": {"workers": 1}}')
             self.assertEqual(c.load().config["fix"]["workers"], 1)
@@ -315,7 +315,7 @@ class Save(Tmp):
         self.assertEqual(list(json.loads(text)), list(c.DEFAULTS))
 
     def test_symlink_survives_and_the_real_file_changes(self):
-        real_dir = self.dir / "chezmoi" / ".pr-wizard"
+        real_dir = self.dir / "chezmoi" / ".pr-loop"
         real_dir.mkdir(parents=True)
         real = real_dir / "config.json"
         real.write_text("{}")
@@ -328,7 +328,7 @@ class Save(Tmp):
         self.assertEqual(c.load(str(link)).real_path, str(real.resolve()))
 
     def test_a_dangling_symlink_loads_the_defaults_and_save_creates_the_real_file(self):
-        real = self.dir / "chezmoi" / ".pr-wizard" / "config.json"
+        real = self.dir / "chezmoi" / ".pr-loop" / "config.json"
         link = self.dir / "config-link.json"
         link.symlink_to(real)
         got = c.load(str(link))

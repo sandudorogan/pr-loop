@@ -31,7 +31,7 @@ import argparse, fcntl, json, os, re, shutil, subprocess, sys, tempfile
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path[:0] = [DIR, os.path.dirname(DIR)]
 from pr_review import CFG, LIMIT, LOADED, REPO, REPO_ROOT, brief, codex_flags
-from pr_wizard import config, conventions, db, gates, names
+from pr_loop import config, conventions, db, gates, names
 
 SCHEMA = os.path.join(DIR, "fix-schema.json")
 AGENT_MARKER = "<!-- agent-review:"

@@ -36,7 +36,7 @@ import argparse, fcntl, json, os, re, subprocess, sys, tempfile
 
 DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.dirname(DIR))
-from pr_wizard import config, conventions, db, names
+from pr_loop import config, conventions, db, names
 
 SCHEMA = os.path.join(DIR, "review-schema.json")
 PROMPTS = os.path.join(DIR, "prompts")

@@ -11,7 +11,7 @@ pool is never handed out by its new one.
 """
 import threading
 
-from pr_wizard import config, queue as q
+from pr_loop import config, queue as q
 
 LANES = "review", "fix"
 

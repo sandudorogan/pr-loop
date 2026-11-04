@@ -1,6 +1,7 @@
 {
   "links": {
     ".local/bin/review-queue": "daemon/bin/review-queue",
+    ".local/bin/pr-loop": "daemon/bin/pr-loop",
     ".local/bin/pr-wizard": "daemon/bin/pr-wizard",
     ".claude/skills/delegator/pr_review.py": "daemon/review/pr_review.py",
     ".claude/skills/delegator/pr_fix.py": "daemon/review/pr_fix.py",
@@ -9,8 +10,8 @@
     ".claude/skills/delegator/prompts": "daemon/review/prompts",
     ".claude/skills/pr-review-loop": "claude/skills/pr-review-loop"
   },
-  "config": ".config/pr-wizard/config.json",
+  "config": ".config/pr-loop/config.json",
   "templates": {
-    "Library/LaunchAgents/local.pr-wizard.plist": "daemon/launchd/local.pr-wizard.plist.tmpl"
+    "Library/LaunchAgents/local.pr-loop.plist": "daemon/launchd/local.pr-loop.plist.tmpl"
   }
 }

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from prs import pr_fix as fix
-from pr_wizard import config, gates
+from pr_loop import config, gates
 
 NODE = ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null"
 BUILD = "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"

@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from prs import GITOPS, HEAD, MONOREPO, pr, rq
 from test_api_read import fixture
-from pr_wizard import api, config, db, pools
+from pr_loop import api, config, db, pools
 
 OLD = "b" * 40
 
@@ -31,12 +31,12 @@ class Writes(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(dir="/tmp")
         self.addCleanup(subprocess.run, ["rm", "-rf", self.dir])
-        self.real = f"{self.dir}/chezmoi/.pr-wizard/config.json"
+        self.real = f"{self.dir}/chezmoi/.pr-loop/config.json"
         self.path = f"{self.dir}/config/config.json"
         os.makedirs(os.path.dirname(self.path))
         os.makedirs(os.path.dirname(self.real))
         os.symlink(self.real, self.path)
-        for patcher in (patch.dict(os.environ, {"PR_WIZARD_CONFIG": self.path}),
+        for patcher in (patch.dict(os.environ, {"PR_LOOP_CONFIG": self.path}),
                         patch.object(db, "DB", f"{self.dir}/state.db"), patch.object(rq, "worker"),
                         patch.object(rq, "say")):
             patcher.start()

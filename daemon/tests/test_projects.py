@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from prs import GITOPS, MONOREPO, pr, rq
-from pr_wizard import config, conventions, projects
+from pr_loop import config, conventions, projects
 
 SITE, MINE = "clojure/clojurescript-site", "sandudorogan/dataspex"
 

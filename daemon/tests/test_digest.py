@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from prs import MONOREPO, finding, pr_review as prr, rq
-from pr_wizard import config, db, snapshot
+from pr_loop import config, db, snapshot
 
 A, B = "a" * 40, "b" * 40
 REVIEWERS = ("opus", "codex", "quality")

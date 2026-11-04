@@ -15,13 +15,13 @@ no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
 
 One process serves every project it detects: the repos of my PRs, of the PRs that request or are assigned to me,
 and the config's projects, worked when a checkout under detect.roots (or the project's root) has them. The config
-(~/.config/pr-wizard/config.json) sets each project's lanes, reviewers and gates; by default iprally/gitops gets the
-fix lane alone. The daemon prunes the worktrees of every active project at start and every 30 min. pr_wizard/cli.py is the command line.
+(~/.config/pr-loop/config.json) sets each project's lanes, reviewers and gates; by default iprally/gitops gets the
+fix lane alone. The daemon prunes the worktrees of every active project at start and every 30 min. pr_loop/cli.py is the command line.
 
   my PR head ──▶ review (3) ──settled──▶ fix (3) ──pushed──▶ new head ─┐
        ▲                                    │ nothing pushed → stop     │
        └────────────────────────────────────────────────────────────────┘
-Log: ~/Library/Logs/pr-wizard.log
+Log: ~/Library/Logs/pr-loop.log
 """
 import fcntl, hashlib, json, os, re, signal, subprocess, sys, threading, time, traceback
 from contextlib import contextmanager
@@ -30,8 +30,8 @@ from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
-from pr_wizard import __version__, api, config, db, history, names, pools, projects, snapshot
-from pr_wizard.names import (FIXES, LABEL, LOG, MONOREPO, NO_FIX, NO_REVIEW, PR_FIX, PR_REVIEW, REPOS, STATE,
+from pr_loop import __version__, api, config, db, history, names, pools, projects, snapshot
+from pr_loop.names import (FIXES, LABEL, LOG, MONOREPO, NO_FIX, NO_REVIEW, PR_FIX, PR_REVIEW, REPOS, STATE,
                               env_repo, tag)
 
 PR_NUMBER = re.compile(r"(?:fix|sync|review)-(\d{4,})")
@@ -153,7 +153,7 @@ def root(repo):
 
 
 def child(repo):
-    return {"env": {**os.environ, "PR_WIZARD_REPO": repo, "PR_WIZARD_REPO_ROOT": root(repo)}, "cwd": root(repo)}
+    return {"env": {**os.environ, "PR_LOOP_REPO": repo, "PR_LOOP_REPO_ROOT": root(repo)}, "cwd": root(repo)}
 
 
 def pr_key(pr):
@@ -862,12 +862,12 @@ class Runtime:
 
     def info(self):
         snap, loaded = self.snapshot(), self.cfg
-        return {"name": "pr-wizard", "version": __version__, "commit": self.commit, "api": 1, "pid": os.getpid(),
+        return {"name": "pr-loop", "version": __version__, "commit": self.commit, "api": 1, "pid": os.getpid(),
                 "started_at": self.started_at, "uptime_s": int(time.time() - self.started), "label": LABEL,
                 "paused": snap["paused"], "projects": snap["projects"], "lanes": snap["lanes"],
                 "refresh": {**loaded.config["refresh"], **snap["refresh"]},
                 "config": {"path": loaded.path, "real_path": loaded.real_path, "rev": loaded.rev, "error": loaded.error},
-                "paths": {"socket": names.SOCKET, "state": names.WIZARD, "db": db.DB, "log": LOG}}
+                "paths": {"socket": names.SOCKET, "state": names.LOOP, "db": db.DB, "log": LOG}}
 
     def config(self):
         loaded, listing = self.cfg, self.snapshot()["projects"]
@@ -900,8 +900,8 @@ def unbumpable(repo, n, pr, runs, repos):
 
 def serve(rt):
     """The API thread on the one socket, in the 0700 state dir. SIGTERM unlinks the socket and exits at once: running passes do not hold it."""
-    os.makedirs(names.WIZARD, exist_ok=True)
-    os.chmod(names.WIZARD, 0o700)
+    os.makedirs(names.LOOP, exist_ok=True)
+    os.chmod(names.LOOP, 0o700)
     server = api.bind(rt, names.SOCKET)
     signal.signal(signal.SIGTERM, lambda *_: (Path(names.SOCKET).unlink(missing_ok=True), os._exit(143)))
     names.write_label()
