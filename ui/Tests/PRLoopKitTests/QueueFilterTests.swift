@@ -2,6 +2,10 @@ import PRLoopKit
 import Testing
 
 @Suite struct QueueFilterTests {
+    private func toApprove(_ items: [QueueItem]) -> [String]? {
+        QueueFilter().sections(items).first?.rows.map(\.id)
+    }
+
     private func keys(_ filter: QueueFilter) throws -> [String] {
         filter.items(try Snapshots.queue().items).map(\.key)
     }
@@ -31,19 +35,37 @@ import Testing
         #expect(try keys(QueueFilter(text: text)) == expected)
     }
 
-    @Test("sections follow the groups and hide when empty")
+    @Test("colleagues' PRs, then mine, each with the ready ones first, then Done")
     func sections() throws {
-        let items = try Snapshots.queue().items
-        let all = QueueFilter().sections(items)
-        #expect(all.map(\.title) == ["In Work", "Up Next", "Ready", "Waiting"])
-        #expect(all.map(\.items.count) == [1, 1, 1, 1])
-        #expect(QueueFilter(repo: "iprally/gitops").sections(items).map(\.kind) == [.waiting])
+        let all = QueueFilter().sections(try Snapshots.queue().items, done: [try Snapshots.historyEntry()])
+        #expect(all.map(\.title) == ["To Approve", "My PRs", "Done"])
+        #expect(
+            all.map { $0.rows.map(\.id) } == [
+                ["iprally/iprally#17166", "iprally/iprally#17201"],
+                ["iprally/iprally#17190", "iprally/gitops#412"],
+                ["iprally/iprally#17120"],
+            ])
+        #expect(QueueFilter(repo: "iprally/gitops").sections(try Snapshots.queue().items).map(\.kind) == [.mine])
     }
 
-    @Test("a paused PR goes to the last section")
+    @Test("a paused PR goes last in its section")
     func paused() throws {
-        let items = try Snapshots.queue().items + [Snapshots.item(1, ["group": "paused", "paused": true])]
-        #expect(QueueFilter().sections(items).map(\.title) == ["In Work", "Up Next", "Ready", "Waiting", "Paused"])
+        let items = try [Snapshots.item(1, ["group": "paused", "paused": true]), Snapshots.item(2)]
+        #expect(toApprove(items) == ["iprally/iprally#17166", "iprally/iprally#17201"])
+    }
+
+    @Test("Done shows only done entries, and a done item leaves the to-do list")
+    func done() throws {
+        let open = try Snapshots.historyEntry(["done": false, "state": "settled"])
+        let finishing = try Snapshots.item(2, ["done": true, "group": "active"])
+        #expect(QueueFilter().sections([finishing], done: [open]).isEmpty)
+    }
+
+    @Test("the project and the text filter Done too")
+    func doneFilter() throws {
+        let entry = try Snapshots.historyEntry()
+        #expect(QueueFilter(text: "sticky").sections([], done: [entry]).map(\.kind) == [.done])
+        #expect(QueueFilter(repo: "iprally/gitops").sections([], done: [entry]).isEmpty)
     }
 
     @Test("the selection resumes only when every PR is paused")
@@ -54,9 +76,9 @@ import Testing
         #expect(![QueueItem]().resumes)
     }
 
-    @Test("an unknown group waits")
+    @Test("an unknown group waits behind the ready ones")
     func unknownGroup() throws {
-        let item = try Snapshots.item(0, ["group": .string("parked")])
-        #expect(QueueFilter().sections([item]).map(\.kind) == [.waiting])
+        let items = try [Snapshots.item(1, ["group": .string("parked")]), Snapshots.item(2)]
+        #expect(toApprove(items) == ["iprally/iprally#17166", "iprally/iprally#17201"])
     }
 }

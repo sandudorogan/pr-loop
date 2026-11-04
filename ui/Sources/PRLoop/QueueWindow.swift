@@ -5,19 +5,20 @@ import SwiftUI
 struct QueueWindow: View {
     let socket: String
     @Environment(QueueStore.self) private var store
+    @Environment(HistoryStore.self) private var history
     @SceneStorage("sidebar") private var sidebar = SidebarSelection.all
-    @SceneStorage("columns") private var columns = TableColumnCustomization<QueueItem>()
+    @SceneStorage("todoColumns") private var columns = TableColumnCustomization<TodoRow>()
     @SceneStorage("inspector") private var showsInspector = false
     @SceneStorage("sidebarShown") private var showsSidebar = true
     @SceneStorage("inspectorTab") private var inspectorTab = PRInspector.Tab.status
     @SceneStorage("inspectorWidth") private var inspectorWidth = 320.0
     @State private var detailWidth: CGFloat = 0
-    @State private var selection = Set<QueueItem.ID>()
+    @State private var selection = Set<TodoRow.ID>()
     @State private var search = ""
     @State private var peek = PeekModel()
 
     private var filter: QueueFilter { QueueFilter(repo: sidebar.repo, text: search) }
-    private var sections: [QueueSection] { filter.sections(store.snapshot?.items ?? []) }
+    private var sections: [QueueSection] { filter.sections(store.snapshot?.items ?? [], done: history.entries) }
 
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
@@ -39,18 +40,21 @@ struct QueueWindow: View {
         .navigationSubtitle(subtitle)
         .toolbar {
             QueueToolbar(
-                store: store, repo: sidebar.repo, items: selected, showsInspector: $showsInspector, search: $search)
+                store: store, repo: sidebar.repo, rows: selectedRows, showsInspector: $showsInspector, search: $search)
         }
         .focusedSceneValue(
             \.queueFocus,
             QueueFocus(
-                items: selected, sidebar: $sidebar, showsInspector: $showsInspector,
+                rows: selectedRows, sidebar: $sidebar, showsInspector: $showsInspector,
                 showSettings: { showSettings(selection) }, focusFilter: { NSApp.keyWindow?.focusToolbarField() })
         )
         .environment(peek)
         .frame(minWidth: minWidth, minHeight: 400)
         .onChange(of: selection) { _, keys in
             if !keys.isEmpty { showsInspector = true }
+        }
+        .task(id: HistoryRequest(repo: sidebar.repo, rev: store.snapshot?.rev)) {
+            await history.show(repo: sidebar.repo, rev: store.snapshot?.rev)
         }
     }
 
@@ -105,15 +109,17 @@ struct QueueWindow: View {
         }
     }
 
-    private func showSettings(_ keys: Set<QueueItem.ID>) {
+    private func showSettings(_ keys: Set<TodoRow.ID>) {
         selection = keys
         showsInspector = true
         inspectorTab = .settings
     }
 
-    private var selected: [QueueItem] {
-        sections.flatMap(\.items).filter { selection.contains($0.id) }
+    private var selectedRows: [TodoRow] {
+        sections.flatMap(\.rows).filter { selection.contains($0.id) }
     }
+
+    private var selected: [QueueItem] { selectedRows.compactMap(\.item) }
 
     private var subtitle: String {
         let scope =
@@ -122,5 +128,10 @@ struct QueueWindow: View {
             ?? "All repos"
         guard let fetched = store.snapshot?.fetchedAt else { return scope }
         return "\(scope) · fetched \(fetched.formatted(date: .omitted, time: .shortened))"
+    }
+
+    private struct HistoryRequest: Hashable {
+        let repo: String?
+        let rev: String?
     }
 }

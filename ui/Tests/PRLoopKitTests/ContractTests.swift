@@ -124,6 +124,15 @@ struct ContractTests {
         #expect(try await daemon.setPaused(seeded, false) == false)
     }
 
+    @Test("done moves a PR to the history and todo brings it back")
+    func done() async throws {
+        #expect(try await daemon.setDone(colleague, true))
+        #expect(try await !daemon.queue(since: nil, wait: .zero).items.contains { $0.ref == colleague })
+        #expect(try await daemon.history(repo: nil, limit: 20).first { $0.ref == colleague }?.isDone == true)
+        #expect(try await daemon.setDone(colleague, false) == false)
+        #expect(try await daemon.queue(since: nil, wait: .zero).items.contains { $0.ref == colleague })
+    }
+
     @Test("a PR override patches and deletes")
     func prConfig() async throws {
         let loaded = try await daemon.prConfig(seeded)

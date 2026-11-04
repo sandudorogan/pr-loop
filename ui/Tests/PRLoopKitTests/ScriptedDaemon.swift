@@ -12,6 +12,7 @@ actor ScriptedDaemon: DaemonAPI {
         case fix(PRRef)
         case setPaused(Bool)
         case setPRPaused(PRRef, Bool)
+        case setDone(PRRef, Bool)
         case config
         case patchConfig(JSONValue, baseRev: String)
         case putConfig(JSONValue, baseRev: String)
@@ -108,6 +109,10 @@ actor ScriptedDaemon: DaemonAPI {
     func setPaused(_ pr: PRRef, _ paused: Bool) async throws -> Bool {
         try await act(.setPRPaused(pr, paused))
         return paused
+    }
+    func setDone(_ pr: PRRef, _ done: Bool) async throws -> Bool {
+        try await act(.setDone(pr, done))
+        return done
     }
 
     func prConfig(_ pr: PRRef) async throws -> PRConfig {

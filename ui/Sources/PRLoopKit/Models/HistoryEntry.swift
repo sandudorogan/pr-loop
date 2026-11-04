@@ -17,6 +17,7 @@ public struct HistoryEntry: Codable, Hashable, Identifiable, Sendable {
     public let at: Date
     public let closedAt: Date?
     public let findings: Findings?
+    public let isDone: Bool
 
     public var id: String { key }
     public var ref: PRRef { PRRef(repo: repo, number: number) }
@@ -27,5 +28,6 @@ public struct HistoryEntry: Codable, Hashable, Identifiable, Sendable {
         case fixesPushed = "fixes_pushed"
         case firstAt = "first_at"
         case closedAt = "closed_at"
+        case isDone = "done"
     }
 }

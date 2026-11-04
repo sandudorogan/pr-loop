@@ -183,15 +183,15 @@ menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAft
 
 ```text
 ┌─ toolbar ─────────────────────────────────────────────────────────────────────────────────────────┐
-│ ● ● ●  [sidebar]  PR Loop            ● Running · review 1/3 · fix 0/3    [Filter…] ⏸  ⟳  [inspector] │
+│ ● ● ●  [sidebar]  PR Loop              ● Running · review 1/3 · fix 0/3  [Filter…] ✓ ⏸  ⟳ [inspector] │
 │                   All repos · fetched 12:00                                                        │
 ├──────────────────┬──────────────────────────────────────────────────────────┬─┬──────────────────┤
 │ All repos      4 │    PR     Project  Title                Author  Status   Detail │▏│ Status       ⚙   │
-│ Repos            │ In Work                                                  │▏│ iprally #17190   │
-│ iprally/iprally 3│ ▶  #17190 iprally  feat(search): keep…  you     Reviewing 02:08 │▏│ Live run         │
-│   review · fix   │ Up Next                                                  │▏│ Review           │
-│ iprally/gitops  1│ 1  #17201 iprally  fix(api): retry…     colleague Queued  …     │▏│ Findings         │
-│   fix only       │ Ready · Waiting · Paused                                 │▏│ Fix              │
+│ Repos            │ ▾ To Approve  2                                          │▏│ iprally #17190   │
+│ iprally/iprally 3│ ✓  #17166 iprally  refactor(ui): one…   colleague Ready to approve │▏│ Live run         │
+│   review · fix   │ ▾ My PRs  2                                              │▏│ Review           │
+│ iprally/gitops  1│ ▶  #17190 iprally  feat(search): keep…  you     Reviewing 02:08 │▏│ Findings         │
+│   fix only       │ ▸ Done  1                                                │▏│ Fix              │
 └──────────────────┴──────────────────────────────────────────────────────────┴─┴──────────────────┘
    NavigationSplitView sidebar        detail = HStack [ table | ResizeHandle | PRInspector ]
 ```
@@ -200,12 +200,12 @@ menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAft
 | --- | --- |
 | Sidebar | `ProjectSidebar`: "All repos" with the total ready badge, then a "Repos" section in the snapshot's order. A row shows `owner/name` (middle-truncated), the lane line and the ready badge. `error` and `no-checkout` rows show a warning badge; `.help` gives the reason. They stay selectable: their PRs are real `skipped` rows. Selection is `@SceneStorage("sidebar")`. ⌘0 selects All repos, ⌘1…⌘9 the nth repo. |
 | Sidebar toggle | Our own button in the sidebar's toolbar. The system toggle is removed (`.toolbar(removing: .sidebarToggle)`) because it shows no on state. It drives `NavigationSplitView(columnVisibility:)` from `@SceneStorage("sidebarShown")`. |
-| Sections | From `group` (`QueueSection`): In Work (`active`), Up Next (`queued`), Ready, Waiting (`idle`, unknown), Paused. Empty sections hide. |
-| Order | The daemon's `items` order, filtered by the sidebar and the filter. No column sort: the order is the review priority. Ranks come from the daemon. The app ranks nothing. |
-| Columns | mark (▶ / rank / ✓ / pause) · PR · Project (All repos only) · Title (`[Draft]` tag) · Author (`you` when `mine`) · Status (badge + override cue) · Detail (a timer while `active`). Minimums sum to `QueueTable.minWidth` = 566 pt. Customization is `@SceneStorage("columns")`. |
+| Sections | A to-do list (`QueueFilter.sections`, decisions D31): To Approve (colleagues' items), My PRs (`mine` items), Done (the `done` entries of `GET /v1/history?limit=200&repo=`, `api.md §3.13`). Items with `done: true` (a done PR whose run still finishes) stay out of the first two. Each section collapses; the collapsed set is `@SceneStorage("collapsed")`, Done by default. Empty sections hide. A row is a `TodoRow`: `.open(QueueItem)` or `.done(HistoryEntry)`. |
+| Order | What needs me first: ready, then active, queued, idle (and unknown), paused (`Group.attention`); inside a group the daemon's `items` order. Done keeps the history order (`at` descending). No column sort. Ranks come from the daemon. |
+| Columns | mark (▶ / rank / ✓ / pause; a done row ◯✓) · PR · Project (All repos only) · Title (`[Draft]` tag) · Author (`you` when `mine`) · Status (badge + override cue; a done row shows its `outcome`) · Detail (a timer while `active`; a done row "Merged · 2 days ago"). A ready row is green "Ready to approve" for a colleague's PR and purple "Ready for review" for mine (`StatusStyle(item)`, `Tone.mine`). Minimums sum to `QueueTable.minWidth` = 566 pt. Customization is `@SceneStorage("todoColumns")`. |
 | Selection | Multi, keyed by `PRRef.id`. ⏎ or double-click opens the PR. **A non-empty selection opens the inspector.** Deselect leaves it as it is. |
 | Override cue | `items[].override` non-empty → `slider.horizontal.3` after the status badge, with the paths in `.help` and the accessibility label. |
-| Toolbar | Principal: daemon status (Running · review busy/workers · fix busy/workers, Paused, Fetching, GitHub fetch failed, Disconnected + Retry). With `lanes.separate` and one repo selected, it counts that repo's pools. Trailing group, in this order: Filter, Pause/Resume (the selected PRs), Refresh, Inspector toggle. |
+| Toolbar | Principal: daemon status (Running · review busy/workers · fix busy/workers, Paused, Fetching, GitHub fetch failed, Disconnected + Retry). With `lanes.separate` and one repo selected, it counts that repo's pools. Trailing group, in this order: Filter, Mark Done/Move to To-Do, Pause/Resume (the selected PRs), Refresh, Inspector toggle. |
 | Filter | A plain `TextField` in a `.primaryAction` toolbar item (`FilterField`), placed before the buttons, so NSToolbar overflows the buttons first. It matches number, title or project. Esc clears it. ⌘F calls `NSWindow.focusToolbarField()`. |
 | Inspector | A column in the detail `HStack`, after a `ResizeHandle`. Width is `@SceneStorage("inspectorWidth")`, from 280 pt up to what leaves the table its 566 pt. Shown state is `@SceneStorage("inspector")`. |
 | Window minimum | SwiftUI drops a minimum on the detail column, so the window carries it: `max(820, sidebar 228 (when shown) + 566 + inspector + 1)`. Opening the inspector in a narrow window grows the window. |
@@ -215,13 +215,15 @@ Actions menu. `ActionAvailability` (Kit) enables each action and gives the reaso
 
 | Menu | Items |
 | --- | --- |
-| Pull Request | Open on GitHub ⌘O · Copy Link ⇧⌘C · Move to Front ⌘] · Review Now ⇧⌘R · Retry Fix ⇧⌘F · Pause/Resume ⇧⌘P · Show Findings ⌘Y · PR Settings… ⇧⌘, · Copy Head SHA |
+| Pull Request | Open on GitHub ⌘O · Copy Link ⇧⌘C · Mark Done/Move to To-Do ⇧⌘D · Move to Front ⌘] · Review Now ⇧⌘R · Retry Fix ⇧⌘F · Pause/Resume ⇧⌘P · Show Findings ⌘Y · PR Settings… ⇧⌘, · Copy Head SHA |
 | View | Show/Hide Sidebar · Show/Hide Inspector ⌥⌘I · Refresh ⌘R · All Repos ⌘0 · repo 1…9 ⌘1…⌘9 |
 | Edit | Filter ⌘F |
 | Daemon | Pause/Resume all ⌥⌘P · Start Daemon · Open Log |
 
 - Review Now needs: not active, the project `available`, its review lane on. Retry Fix also needs `mine` and no
   `no-auto-fix` label. Otherwise the daemon answers 409; the app disables the item first.
+- Mark Done acts on the selected open PRs (`api.md §3.18`). It reads Move to To-Do only when every selected row is
+  done, and then sends only the rows still open on GitHub: a merged or closed PR stays done.
 - Pause in the toolbar and in the Pull Request menu acts on the selected PRs (`api.md §3.17`). It resumes only when
   every selected PR is paused. The Daemon menu pauses every lane (`api.md §3.12`).
 - Menu commands read the focused window's state through `focusedSceneValue` (`QueueFocus`, `PeekFocus`).
@@ -249,8 +251,7 @@ The table area shows these. The toolbar stays usable.
 | down, never connected | "PR Loop is not running", socket path, last error · Start Daemon · Retry |
 | stale | the last table, dimmed; the toolbar says Disconnected |
 | incompatible | "The daemon speaks API vN. This app speaks v1." |
-| empty queue, or no rows in the selected repo | "Recently worked on": `HistoryTable` from `GET /v1/history?limit=20&repo=` (`api.md §3.13`) |
-| empty queue, no history | `ContentUnavailableView` "Nothing in the queue" |
+| no open and no done rows | `ContentUnavailableView` "Nothing in the queue" (a repo: "Nothing in <name>" · Show All Repos) |
 | filter with no match | `ContentUnavailableView.search(text:)` |
 
 `HistoryStore.show(repo:rev:)` is the whole refetch rule. The view calls it with `.task(id: (repo, rev))`. The same

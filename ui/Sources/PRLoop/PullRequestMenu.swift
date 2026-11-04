@@ -3,19 +3,23 @@ import PRLoopKit
 import SwiftUI
 
 struct PullRequestMenu: View {
-    let items: [QueueItem]
+    let rows: [TodoRow]
     let store: QueueStore
     let peek: PeekFocus?
     var showSettings: (() -> Void)?
 
+    private var items: [QueueItem] { rows.compactMap(\.item) }
+
     var body: some View {
         let projects = store.snapshot?.projects ?? []
-        Button("Open on GitHub") { for item in items { NSWorkspace.shared.open(item.url) } }
+        Button("Open on GitHub") { for row in rows { NSWorkspace.shared.open(row.url) } }
             .keyboardShortcut("o")
-            .disabled(items.isEmpty)
-        Button("Copy Link") { copy(items.map(\.url.absoluteString)) }
+            .disabled(rows.isEmpty)
+        Button("Copy Link") { copy(rows.map(\.url.absoluteString)) }
             .keyboardShortcut("c", modifiers: [.command, .shift])
-            .disabled(items.isEmpty)
+            .disabled(rows.isEmpty)
+        Divider()
+        DoneButton(rows: rows, store: store).keyboardShortcut("d", modifiers: [.command, .shift])
         Divider()
         action("Move to Front", items.map(ActionAvailability.moveToFront), PendingAction.moveToFront, "]") {
             await store.moveToFront(items.map(\.ref))
@@ -55,5 +59,26 @@ struct PullRequestMenu: View {
     private func copy(_ lines: [String]) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    }
+}
+
+/// Mark Done, or Move to To-Do when every selected row is done.
+struct DoneButton: View {
+    let rows: [TodoRow]
+    let store: QueueStore
+
+    var body: some View {
+        let back = rows.movesBack
+        let refs = rows.doneRefs
+        Button {
+            Task { await store.setDone(refs, !back) }
+        } label: {
+            Label(back ? "Move to To-Do" : "Mark Done", systemImage: back ? "arrow.uturn.backward" : "checkmark.circle")
+        }
+        .disabled(refs.isEmpty || refs.contains { store.pendingActions.contains(.done($0)) })
+        .help(
+            refs.isEmpty
+                ? (back ? "A merged or closed PR stays done" : "Select a PR to mark done")
+                : back ? "Move the PR back to the to-do list" : "Mark the PR done: no new review or fix")
     }
 }

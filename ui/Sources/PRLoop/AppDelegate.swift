@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     override init() {
         let daemon = DaemonClient(transport: UnixSocketTransport(path: socket))
         store = QueueStore(daemon: daemon)
-        history = HistoryStore(daemon: daemon)
+        history = HistoryStore(daemon: daemon, limit: 200)
         settings = SettingsStore(daemon: daemon)
         prSettings = PRSettingsStore(daemon: daemon)
         notifications = ReadyNotifications(

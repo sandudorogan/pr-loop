@@ -49,7 +49,7 @@ struct PRInspector: View {
                 InspectorHeader(model: model)
                 Menu("Actions") {
                     PullRequestMenu(
-                        items: [item], store: store, peek: PeekFocus(model: peek, id: item.id),
+                        rows: [.open(item)], store: store, peek: PeekFocus(model: peek, id: item.id),
                         showSettings: { tab = .settings })
                 }
             }
