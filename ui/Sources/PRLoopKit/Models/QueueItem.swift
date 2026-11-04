@@ -7,6 +7,7 @@ public struct QueueItem: Codable, Hashable, Identifiable, Sendable {
     public let title: String
     public let url: URL
     public let author: String
+    public let authorName: String?
     public let isMine: Bool
     public let isDraft: Bool
     public let labels: [String]
@@ -38,6 +39,7 @@ public struct QueueItem: Codable, Hashable, Identifiable, Sendable {
         case key, repo, number, title, url, author, labels, head, base, additions, deletions
         case group, rank, status, detail, active, review, findings, fix, override
         case isMine = "mine"
+        case authorName = "author_name"
         case isDraft = "draft"
         case pushedAt = "pushed_at"
         case updatedAt = "updated_at"

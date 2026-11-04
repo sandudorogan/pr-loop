@@ -80,6 +80,16 @@ import Testing
         #expect(notification.subtitle == subtitle)
     }
 
+    @Test("the subtitle names the author by name when GitHub has one")
+    func subtitleName() throws {
+        let event = Events.event("ready_for_approval", 1, authorName: "Aino Virtanen")
+        guard case .post(let notification) = try #require(LivePlan.plan(try Events.page("e.1", [event])).first) else {
+            Issue.record("expected a post")
+            return
+        }
+        #expect(notification.subtitle == "iprally #17166 · Aino Virtanen · notes only")
+    }
+
     @Test("content: event id as identifier, key as thread, title, body and url")
     func content() throws {
         let event = try #require(try Fixture.decode(EventPage.self, from: "events.json").events.first)

@@ -188,6 +188,7 @@ On a connect error, back off 2 s → 30 s and show "daemon down".
       "title": "feat(search): keep filters on back navigation",
       "url": "https://github.com/iprally/iprally/pull/17190",
       "author": "sandudorogan",
+      "author_name": "Sandu Dorogan",
       "mine": true,
       "draft": false,
       "labels": [],
@@ -319,6 +320,7 @@ Snapshot rules (they reproduce `show()` and `row()` in `queue.py`):
 | `number`, `title`, `draft`, `additions`, `deletions` | int/string/bool | GraphQL fragment `pr` |
 | `url` | string | `https://github.com/<repo>/pull/<n>` |
 | `author` | string | `author { login }` (added to the fragment) |
+| `author_name` | string \| null | `author { ... on User { name } }`: the name set on GitHub; null for a bot or a user without one. UIs show it, else `author` |
 | `mine` | bool | `viewerDidAuthor` |
 | `labels` | [string] | label names |
 | `head`, `base` | string | `headRefOid`, `baseRefName` |
@@ -397,7 +399,7 @@ Query: `since` (cursor string, optional), `wait` (int seconds 0–60, default 0)
     {"id": "ready_for_approval:iprally/iprally#17166@9f8e7d6c5b4a", "seq": 57, "type": "ready_for_approval",
      "key": "iprally/iprally#17166", "repo": "iprally/iprally", "number": 17166,
      "title": "refactor(ui): one sub per hop in the filters", "url": "https://github.com/iprally/iprally/pull/17166",
-     "author": "colleague", "head": "9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5", "verdict": "quality-only", "at": "2026-10-24T17:40:02+03:00"},
+     "author": "colleague", "author_name": "Aino Virtanen", "head": "9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5", "verdict": "quality-only", "at": "2026-10-24T17:40:02+03:00"},
     {"id": "ready_withdrawn:iprally/iprally#17120@1b2c3d4e5f60", "seq": 58, "type": "ready_withdrawn",
      "key": "iprally/iprally#17120", "repo": "iprally/iprally", "number": 17120,
      "title": "feat(ui): sticky table header", "url": "https://github.com/iprally/iprally/pull/17120",
@@ -413,7 +415,7 @@ Query: `since` (cursor string, optional), `wait` (int seconds 0–60, default 0)
 | `events[].id` | string | `"<type>:<key>@<head[:12]>"`. Stable: the same PR head made ready twice has the same id, so a UI posts it once. Use it as the notification identifier. |
 | `events[].seq` | int | order within the store |
 | `events[].type` | `ready_for_approval` \| `ready_withdrawn` | more types may come; ignore unknown ones |
-| `events[].key`, `repo`, `number`, `title`, `url`, `author`, `head` | | the PR at the moment of the event (`author` = login, for the banner subtitle) |
+| `events[].key`, `repo`, `number`, `title`, `url`, `author`, `author_name`, `head` | | the PR at the moment of the event (`author` = login, `author_name` as in §3.2; the banner subtitle shows the name, else the login) |
 | `events[].verdict` | `clean` \| `quality-only` \| null | null on `ready_withdrawn` |
 | `events[].at` | string | when the daemon recorded it |
 
@@ -589,7 +591,7 @@ Query: `limit` (int 1–500, default 20), `repo` (optional `owner/name` filter).
   "entries": [
     {"key": "iprally/iprally#17120", "repo": "iprally/iprally", "number": 17120,
      "title": "feat(ui): sticky table header", "url": "https://github.com/iprally/iprally/pull/17120",
-     "author": "colleague", "mine": false, "state": "merged", "outcome": "ready",
+     "author": "colleague", "author_name": "Aino Virtanen", "mine": false, "state": "merged", "outcome": "ready",
      "rounds": 2, "fixes_pushed": 0, "head": "1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e",
      "first_at": "2026-10-23T09:12:00+03:00", "at": "2026-10-24T15:40:00+03:00",
      "closed_at": "2026-10-24T16:05:00+03:00", "done": true,
@@ -606,6 +608,7 @@ Query: `limit` (int 1–500, default 20), `repo` (optional `owner/name` filter).
 | `fixes_pushed` | int | fix passes that pushed a commit |
 | `first_at`, `at` | string | the first and the latest pass on the PR |
 | `closed_at` | string \| null | when the daemon saw it merged or closed |
+| `author`, `author_name` | string, string \| null | as in §3.2; a row older than the field has a null name until its next pass or the merge lookup |
 | `done` | bool | the PR is off the to-do list: merged, closed, out of the last fetch, approved by me or marked done (§3.18) |
 | `findings` | object \| null | the findings digest at the last reviewed head |
 

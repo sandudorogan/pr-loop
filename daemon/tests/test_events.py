@@ -102,7 +102,7 @@ class Endpoint(Store):
         self.addCleanup(db.COMMITS.remove, self.rt.changes.touch)
 
     def add(self, n, type="ready_for_approval", head=HEAD):
-        return rq.announce(type, dict(pr(n, mine=False, head=head), author={"login": "colleague"}), "clean")
+        return rq.announce(type, dict(pr(n, mine=False, head=head)), "clean")
 
     def get(self, query=""):
         return call(f"/v1/events{query}", self.sock)
@@ -122,6 +122,7 @@ class Endpoint(Store):
         self.assertEqual((status, headers["content-type"]), (200, "application/json; charset=utf-8"))
         self.assertEqual(shape(page, fixture("events"), ("events",)), [])
         self.assertEqual(shape(page["events"][0], fixture("events")["events"][0]), [])
+        self.assertEqual((page["events"][0]["author"], page["events"][0]["author_name"]), ("colleague", "Aino Virtanen"))
 
     def test_without_since_it_subscribes_from_now(self):
         self.add(1)

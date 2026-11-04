@@ -28,7 +28,7 @@ def digest(*severities):
 
 
 def item(n, repo=MONOREPO, author="me", **kw):
-    return dict(pr(n, repo, **kw), author={"login": author} if author else None, updatedAt="2026-10-25T11:00:00Z")
+    return dict(pr(n, repo, **kw), author={"login": author, "name": author.title()} if author else None, updatedAt="2026-10-25T11:00:00Z")
 
 
 def review(sha=HEAD, status="posted", verdict="posted", note="opus", hold=False, at="2026-10-25 10:00:00"):

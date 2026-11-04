@@ -3,7 +3,7 @@ API JSON, `render()` prints it as the `-l` lines."""
 import hashlib, json
 from datetime import datetime
 
-from pr_loop import config, db, pools, projects, queue as q
+from pr_loop import config, db, history, pools, projects, queue as q
 from pr_loop.names import tag
 
 GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle", 5: "paused"}
@@ -64,7 +64,7 @@ def entry(pr, rows, runs, cfg, first, override, paused, done):
     run = runs.get((repo, n))
     return {
         "key": f"{repo}#{n}", "repo": repo, "number": n, "title": pr["title"], "url": q.url(repo, n),
-        "author": (pr["author"] or {}).get("login", "ghost"), "mine": pr["viewerDidAuthor"], "draft": pr["isDraft"],
+        **history.author(pr), "mine": pr["viewerDidAuthor"], "draft": pr["isDraft"],
         "labels": [l["name"] for l in pr["labels"]["nodes"]], "head": head, "base": pr["baseRefName"],
         "additions": pr["additions"], "deletions": pr["deletions"],
         "pushed_at": iso(pr["commits"]["nodes"][0]["commit"]["committedDate"]), "updated_at": iso(pr["updatedAt"]),

@@ -20,6 +20,7 @@ public struct ReadyNotification: Hashable, Sendable {
             case .qualityOnly: "notes only"
             default: nil
             }
-        subtitle = ["\(project) #\(event.number)", event.author, verdict].compactMap(\.self).joined(separator: " · ")
+        let author = event.authorName ?? event.author
+        subtitle = ["\(project) #\(event.number)", author, verdict].compactMap(\.self).joined(separator: " · ")
     }
 }

@@ -6,7 +6,7 @@ enum Events {
 
     static func event(
         _ type: String, _ seq: Int, repo: String = "iprally/iprally", number: Int = 17166, head: String = ready17166,
-        verdict: String? = "quality-only"
+        verdict: String? = "quality-only", authorName: String? = nil
     ) -> JSONValue {
         let key = "\(repo)#\(number)"
         return .object([
@@ -14,6 +14,7 @@ enum Events {
             "key": .string(key), "repo": .string(repo), "number": .number(Double(number)),
             "title": .string("refactor(ui): one sub per hop in the filters"),
             "url": .string("https://github.com/\(repo)/pull/\(number)"), "author": .string("colleague"),
+            "author_name": authorName.map(JSONValue.string) ?? .null,
             "head": .string(head), "verdict": verdict.map(JSONValue.string) ?? .null,
             "at": .string("2026-10-24T17:40:02+03:00"),
         ])

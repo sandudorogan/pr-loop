@@ -32,7 +32,7 @@ struct QueueTable: View {
                 .findingsPeek(row.id, popover(row), peek: peek)
             }
             .width(min: 120).customizationID("title")
-            TableColumn("Author") { Text($0.author).lineLimit(1) }
+            TableColumn("Author") { Text($0.author).lineLimit(1).help("@\($0.login)") }
                 .width(min: 48, ideal: 100).customizationID("author")
             TableColumn("Status") { row in
                 HStack(spacing: 4) {

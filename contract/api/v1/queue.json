@@ -35,7 +35,7 @@
       "number": 17190,
       "title": "feat(search): keep filters on back navigation",
       "url": "https://github.com/iprally/iprally/pull/17190",
-      "author": "sandudorogan",
+      "author": "sandudorogan", "author_name": "Sandu Dorogan",
       "mine": true,
       "draft": false,
       "labels": [],
@@ -93,7 +93,7 @@
     {
       "key": "iprally/iprally#17201", "repo": "iprally/iprally", "number": 17201,
       "title": "fix(api): retry the export job once", "url": "https://github.com/iprally/iprally/pull/17201",
-      "author": "colleague", "mine": false, "draft": false, "labels": [],
+      "author": "colleague", "author_name": null, "mine": false, "draft": false, "labels": [],
       "head": "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6", "base": "main", "additions": 35, "deletions": 4,
       "pushed_at": "2026-10-25T11:20:00+03:00", "updated_at": "2026-10-25T11:31:09+03:00",
       "requested": true, "bumped": true, "group": "queued", "rank": 1, "paused": false, "done": false, "status": "queued",
@@ -103,7 +103,7 @@
     {
       "key": "iprally/iprally#17166", "repo": "iprally/iprally", "number": 17166,
       "title": "refactor(ui): one sub per hop in the filters", "url": "https://github.com/iprally/iprally/pull/17166",
-      "author": "colleague", "mine": false, "draft": false, "labels": [],
+      "author": "colleague", "author_name": "Aino Virtanen", "mine": false, "draft": false, "labels": [],
       "head": "9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5", "base": "main", "additions": 120, "deletions": 98,
       "pushed_at": "2026-10-24T16:02:11+03:00", "updated_at": "2026-10-24T17:44:30+03:00",
       "requested": true, "bumped": false, "group": "ready", "rank": null, "paused": false, "done": false, "status": "ready",
@@ -142,7 +142,7 @@
     {
       "key": "iprally/gitops#412", "repo": "iprally/gitops", "number": 412,
       "title": "chore: bump the search image", "url": "https://github.com/iprally/gitops/pull/412",
-      "author": "sandudorogan", "mine": true, "draft": false, "labels": [],
+      "author": "sandudorogan", "author_name": "Sandu Dorogan", "mine": true, "draft": false, "labels": [],
       "head": "77aa0c1e2f3d4b5a69788796a5b4c3d2e1f00f1e", "base": "main", "additions": 2, "deletions": 2,
       "pushed_at": "2026-10-25T10:02:00+03:00", "updated_at": "2026-10-25T10:30:00+03:00",
       "requested": false, "bumped": false, "group": "idle", "rank": null, "paused": false, "done": false, "status": "skipped",

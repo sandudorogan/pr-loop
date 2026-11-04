@@ -7,7 +7,7 @@ struct InspectorHeader: View {
     var body: some View {
         let item = model.item
         let status = StatusStyle(item)
-        let author = item.isMine ? "you" : item.author
+        let author = item.authorLabel
         VStack(alignment: .leading, spacing: 6) {
             Text(model.title).font(.caption.weight(.semibold)).foregroundStyle(.tint)
             Text(item.title).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)

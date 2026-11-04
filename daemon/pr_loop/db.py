@@ -32,9 +32,9 @@ CREATE TABLE IF NOT EXISTS runs (repo TEXT, number INT, pid INT, lane TEXT, sinc
   PRIMARY KEY (repo, number));
 CREATE INDEX IF NOT EXISTS runs_pid ON runs (pid);
 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE, type TEXT, repo TEXT,
-  number INT, title TEXT, url TEXT, author TEXT, head TEXT, verdict TEXT, at TEXT);
+  number INT, title TEXT, url TEXT, author TEXT, head TEXT, verdict TEXT, at TEXT, author_name TEXT);
 CREATE TABLE IF NOT EXISTS history (repo TEXT, number INT, title TEXT, url TEXT, author TEXT, mine INT, outcome TEXT,
-  rounds INT, fixes_pushed INT, head TEXT, first_at TEXT, at TEXT, closed_at TEXT, state TEXT,
+  rounds INT, fixes_pushed INT, head TEXT, first_at TEXT, at TEXT, closed_at TEXT, state TEXT, author_name TEXT,
   PRIMARY KEY (repo, number));
 CREATE INDEX IF NOT EXISTS history_at ON history (at);
 CREATE TABLE IF NOT EXISTS pr_overrides (repo TEXT, number INT, config TEXT, created_at TEXT, updated_at TEXT,
@@ -43,8 +43,23 @@ CREATE TABLE IF NOT EXISTS paused_prs (repo TEXT, number INT, at TEXT, PRIMARY K
 CREATE TABLE IF NOT EXISTS done_prs (repo TEXT, number INT, done INT, at TEXT, PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS migration_log (seq INTEGER PRIMARY KEY, old_path TEXT, new_path TEXT, kind TEXT, at TEXT);
 """
-# Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs, v3: done_prs.
-UPGRADES = [lambda c: [c.execute(s) for s in SCHEMA.split(";\n") if s.strip()]] * 3
+
+
+def _schema(c):
+    for statement in SCHEMA.split(";\n"):
+        if statement.strip():
+            c.execute(statement)
+
+
+def _author_name(c):
+    for table in ("history", "events"):
+        if "author_name" not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN author_name TEXT")
+
+
+# Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs, v3: done_prs,
+# v4: history.author_name and events.author_name (a fresh db already has them from the schema).
+UPGRADES = [_schema] * 3 + [_author_name]
 
 _local = threading.local()
 COMMITS = []
@@ -345,7 +360,7 @@ def sweep_runs():
                 c.execute("DELETE FROM runs WHERE pid = ?", (r["pid"],))
 
 
-EVENT_FIELDS = ("type", "repo", "number", "title", "url", "author", "head", "verdict", "at")
+EVENT_FIELDS = ("type", "repo", "number", "title", "url", "author", "head", "verdict", "at", "author_name")
 
 
 def _event(row):
@@ -353,14 +368,14 @@ def _event(row):
             **{k: row[k] for k in EVENT_FIELDS[1:]}}
 
 
-def add_event(type, repo, n, title, url, author, head, verdict=None, at=None):
+def add_event(type, repo, n, title, url, author, head, verdict=None, at=None, author_name=None):
     """Appends an event and keeps the last EVENTS_KEEP. The id is stable per type, PR and head, so the same
     head made ready twice is the same notification: the older row is replaced and the event moves to the end."""
     id = f"{type}:{repo}#{int(n)}@{head[:12]}"
     with tx() as c:
-        c.execute("INSERT OR REPLACE INTO events (id, type, repo, number, title, url, author, head, verdict, at) "
-                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                  (id, type, repo, int(n), title, url, author, head, verdict, at or now()))
+        c.execute("INSERT OR REPLACE INTO events (id, type, repo, number, title, url, author, head, verdict, at, "
+                  "author_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  (id, type, repo, int(n), title, url, author, head, verdict, at or now(), author_name))
         c.execute("DELETE FROM events WHERE seq NOT IN (SELECT seq FROM events ORDER BY seq DESC LIMIT ?)",
                   (EVENTS_KEEP,))
     return _event(_one("SELECT * FROM events WHERE id = ?", id))
@@ -383,7 +398,7 @@ def events_after(cursor=None):
 
 
 HISTORY_FIELDS = ("title", "url", "author", "mine", "outcome", "rounds", "fixes_pushed", "head", "first_at", "at",
-                  "closed_at", "state")
+                  "closed_at", "state", "author_name")
 
 
 def _history(row):

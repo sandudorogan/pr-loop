@@ -55,7 +55,7 @@ CLEAN_NOTICE = ("Automatic review pipeline ran on `{sha}`. None of the Opus code
 FRAGMENT = """
 fragment pr on PullRequest {
   number title state isDraft headRefOid baseRefName additions deletions viewerDidAuthor mergeable updatedAt
-  author { login }
+  author { login ... on User { name } }
   repository { nameWithOwner }
   labels(first: 20) { nodes { name } }
   latestOpinionatedReviews(first: 20) { nodes { state viewerDidAuthor } }
@@ -179,8 +179,9 @@ def url(repo, pr):
 
 def announce(type, pr, verdict=None):
     """Records a `ready_for_approval` or `ready_withdrawn` event for the API (api.md §3.3). UIs notify from it."""
-    db.add_event(type, pr["repo"], pr["number"], pr["title"], url(pr["repo"], pr["number"]),
-                 (pr["author"] or {}).get("login", "ghost"), pr["headRefOid"], verdict)
+    who = history.author(pr)
+    db.add_event(type, pr["repo"], pr["number"], pr["title"], url(pr["repo"], pr["number"]), who["author"],
+                 pr["headRefOid"], verdict, author_name=who["author_name"])
 
 
 def sh(*args, repo=MONOREPO):

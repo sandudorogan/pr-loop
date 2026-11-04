@@ -33,7 +33,7 @@ def pr(number=1, repo=MONOREPO, mine=True, requested=False, head=HEAD, additions
     rollup = {"contexts": {"checkRunCountsByState": [{"state": s, "count": n} for s, n in counts.items()]}} \
         if counts is not None else None
     return {"number": number, "title": f"title {number}", "state": "OPEN", "isDraft": False, "headRefOid": head,
-            "baseRefName": "main", "author": {"login": "colleague"}, "additions": additions, "deletions": 0, "viewerDidAuthor": mine,
+            "baseRefName": "main", "author": {"login": "colleague", "name": "Aino Virtanen"}, "additions": additions, "deletions": 0, "viewerDidAuthor": mine,
             "mergeable": mergeable, "repository": {"nameWithOwner": repo}, "repo": repo, "requested": requested,
             "labels": {"nodes": [{"name": l} for l in labels]},
             "latestOpinionatedReviews": {"nodes": [{"state": "APPROVED", "viewerDidAuthor": a} for a in approvals]},

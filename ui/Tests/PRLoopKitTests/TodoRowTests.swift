@@ -20,6 +20,14 @@ import Testing
         let mine = TodoRow.open(try Snapshots.item(0))
         #expect((mine.id, mine.author, mine.repo) == ("iprally/iprally#17190", "you", "iprally/iprally"))
         let done = TodoRow.done(try Snapshots.historyEntry())
-        #expect((done.id, done.author, done.status.label) == ("iprally/iprally#17120", "colleague", "Ready"))
+        #expect((done.id, done.author, done.status.label) == ("iprally/iprally#17120", "Aino Virtanen", "Ready"))
+    }
+
+    @Test("the author reads by name, the login when GitHub has no name")
+    func author() throws {
+        let named = TodoRow.open(try Snapshots.item(2))
+        let unnamed = TodoRow.open(try Snapshots.item(1))
+        #expect((named.author, named.login) == ("Aino Virtanen", "colleague"))
+        #expect((unnamed.author, unnamed.login) == ("colleague", "colleague"))
     }
 }

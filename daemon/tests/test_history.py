@@ -221,8 +221,8 @@ class Api(unittest.TestCase):
     get = test_api_read.Server.get
 
     def row(self, n, repo=MONOREPO, **fields):
-        db.upsert_history(repo, n, **{"title": f"t{n}", "url": f"u{n}", "author": "colleague", "mine": False,
-                                      "outcome": "ready", "head": HEAD, "at": ago(hours=n)} | fields)
+        db.upsert_history(repo, n, **{"title": f"t{n}", "url": f"u{n}", "author": "colleague",
+                                      "author_name": "Aino Virtanen", "mine": False, "outcome": "ready", "head": HEAD, "at": ago(hours=n)} | fields)
 
     def entries(self, query=""):
         status, _, body = self.get(f"/v1/history{query}")

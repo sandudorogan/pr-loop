@@ -157,7 +157,7 @@ class Runtime:
         self.log = (self.log + [{
             "id": f"{kind}:{item['key']}@{item['head'][:12]}", "seq": seq, "type": kind, "key": item["key"],
             "repo": item["repo"], "number": item["number"], "title": item["title"], "url": item["url"],
-            "author": item["author"], "head": item["head"], "verdict": verdict, "at": db.now()}])[-KEEP_EVENTS:]
+            "author": item["author"], "author_name": item["author_name"], "head": item["head"], "verdict": verdict, "at": db.now()}])[-KEEP_EVENTS:]
 
     def bump(self, prs, only_queued):
         with self.lock:
@@ -243,7 +243,8 @@ class Runtime:
     def upsert(self, item, outcome):
         old = next((h for h in self.hist if h["key"] == item["key"]), None)
         entry = {"key": item["key"], "repo": item["repo"], "number": item["number"], "title": item["title"],
-                 "url": item["url"], "author": item["author"], "mine": item["mine"], "state": "settled",
+                 "url": item["url"], "author": item["author"], "author_name": item["author_name"], "mine": item["mine"],
+                 "state": "settled",
                  "outcome": outcome, "rounds": item["review"]["rounds"], "fixes_pushed": (old or {}).get("fixes_pushed", 0),
                  "head": item["head"], "first_at": (old or {}).get("first_at") or db.now(), "at": db.now(),
                  "closed_at": None, "findings": item["findings"], "done": item["key"] in self.finished}

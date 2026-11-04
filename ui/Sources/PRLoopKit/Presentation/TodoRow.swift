@@ -45,8 +45,15 @@ public enum TodoRow: Hashable, Identifiable, Sendable {
 
     public var author: String {
         switch self {
-        case .open(let item): item.isMine ? "you" : item.author
-        case .done(let entry): entry.isMine ? "you" : entry.author
+        case .open(let item): item.authorLabel
+        case .done(let entry): entry.authorLabel
+        }
+    }
+
+    public var login: String {
+        switch self {
+        case .open(let item): item.author
+        case .done(let entry): entry.author
         }
     }
 

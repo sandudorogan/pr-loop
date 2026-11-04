@@ -47,7 +47,7 @@ class Connection(DbCase):
         self.assertEqual(c.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         self.assertEqual(c.execute("PRAGMA busy_timeout").fetchone()[0], 10_000)
         self.assertEqual(c.execute("PRAGMA synchronous").fetchone()[0], 1)
-        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 4)
         self.assertEqual(len(db.meta_get("events_epoch")), 6)
 
     def test_upgrade_from_version_one_adds_paused_prs(self):
@@ -55,7 +55,7 @@ class Connection(DbCase):
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("PRAGMA user_version = 1")
         db.pause_pr(R, 1, True)
-        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(3,)]))
+        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(4,)]))
         db.pause_pr(R, 1, False)
         self.assertEqual(db.paused_prs(), {})
 
@@ -69,12 +69,26 @@ class Connection(DbCase):
         db.mark_done(R, 1, None)
         self.assertEqual(db.done_prs(), {(R, 2): False})
 
+    def test_upgrade_from_version_three_adds_the_author_name(self):
+        os.makedirs(os.path.dirname(self.path))
+        self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        self.sql("CREATE TABLE history (repo TEXT, number INT, title TEXT, url TEXT, author TEXT, mine INT, outcome TEXT, "
+                 "rounds INT, fixes_pushed INT, head TEXT, first_at TEXT, at TEXT, closed_at TEXT, state TEXT, "
+                 "PRIMARY KEY (repo, number))")
+        self.sql("CREATE TABLE events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE, type TEXT, repo TEXT, "
+                 "number INT, title TEXT, url TEXT, author TEXT, head TEXT, verdict TEXT, at TEXT)")
+        self.sql("PRAGMA user_version = 3")
+        db.upsert_history(R, 1, title="t", author="aino", author_name="Aino Virtanen")
+        self.assertEqual([(h["author"], h["author_name"]) for h in db.history()], [("aino", "Aino Virtanen")])
+        event = db.add_event("ready_for_approval", R, 1, "t", "u", "aino", "a" * 40, author_name="Aino Virtanen")
+        self.assertEqual(event["author_name"], "Aino Virtanen")
+
     def test_upgrade_from_version_zero_keeps_data(self):
         os.makedirs(os.path.dirname(self.path))
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("INSERT INTO meta VALUES ('imported_at', 'x')")
         self.assertEqual(db.meta_get("imported_at"), "x")
-        self.assertEqual(self.sql("PRAGMA user_version"), [(3,)])
+        self.assertEqual(self.sql("PRAGMA user_version"), [(4,)])
         self.assertEqual(db.review(R, 1), {})
         db.close()
         self.assertEqual(db.meta_get("imported_at"), "x")
@@ -288,7 +302,7 @@ class History(DbCase):
         self.assertEqual(got[0], {"key": f"{R}#1", "repo": R, "number": 1, "title": "one", "url": "u1", "author": "me",
                                   "mine": True, "outcome": "pushed", "rounds": 0, "fixes_pushed": 1, "head": SHA,
                                   "first_at": "2026-10-24T10:00:00+03:00", "at": "2026-10-25T11:00:00+03:00",
-                                  "closed_at": None, "state": "open"})
+                                  "closed_at": None, "state": "open", "author_name": None})
         db.upsert_history(G, 3, title="g")
         self.assertEqual([h["number"] for h in db.history(repo=G)], [3])
         self.assertEqual(len(db.history(limit=2)), 2)
@@ -303,7 +317,8 @@ class History(DbCase):
     def test_every_column_survives(self):
         fields = {"title": "t", "url": "u", "author": "a", "mine": False, "outcome": "approved", "rounds": 3,
                   "fixes_pushed": 2, "head": SHA, "first_at": "2026-10-23T09:12:00+03:00",
-                  "at": "2026-10-24T15:40:00+03:00", "closed_at": "2026-10-24T16:05:00+03:00", "state": "merged"}
+                  "at": "2026-10-24T15:40:00+03:00", "closed_at": "2026-10-24T16:05:00+03:00", "state": "merged",
+                  "author_name": None}
         db.upsert_history(R, 4, **fields)
         self.assertEqual(db.history()[0], {"key": f"{R}#4", "repo": R, "number": 4, **fields})
 

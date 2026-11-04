@@ -17,12 +17,18 @@ READY = ("clean", "quality-only")
 WORKED = ("posted", "clean", "failed", "needs-human", "too-big")
 STATES = {"open": "settled", "merged": "merged", "closed": "closed"}
 LOOKUP, RECHECK = 20, 1800
-FIELDS = "state title url closedAt viewerDidAuthor headRefOid author { login }"
+FIELDS = "state title url closedAt viewerDidAuthor headRefOid author { login ... on User { name } }"
 LOOKED = {}
 
 
 def url(repo, n):
     return f"https://github.com/{repo}/pull/{n}"
+
+
+def author(pr):
+    """The login, and the display name when the author is a user who set one."""
+    who = pr["author"] or {}
+    return {"author": who.get("login", "ghost"), "author_name": who.get("name") or None}
 
 
 def outcome(status, verdict, mine):
@@ -40,7 +46,7 @@ def remember(pr, result, pushed=0):
     repo, n = pr["repo"], pr["number"]
     found = rounds(repo, n)
     db.upsert_history(repo, n, pushed=pushed, title=pr["title"], url=url(repo, n), mine=pr["viewerDidAuthor"],
-                      author=(pr["author"] or {}).get("login", "ghost"), outcome=result, head=pr["headRefOid"],
+                      **author(pr), outcome=result, head=pr["headRefOid"],
                       state="open", closed_at=None, **({"rounds": found} if found else {}))
 
 
@@ -76,7 +82,8 @@ def settle(graphql, prs, say):
     with db.tx():
         for (repo, n), node in found.items():
             if node["state"] != "OPEN":
-                (repo, n) in entries and db.upsert_history(repo, n, state=node["state"].lower(), closed_at=db.now())
+                (repo, n) in entries and db.upsert_history(repo, n, state=node["state"].lower(), closed_at=db.now(),
+                                                           author_name=author(node)["author_name"])
                 db.drop_pr_override(repo, n)
                 db.pause_pr(repo, n, False)
                 db.mark_done(repo, n, None)
@@ -116,7 +123,7 @@ def seed(graphql, prs, say):
             last, mine = passes[0], node["viewerDidAuthor"]
             closed = node["state"] != "OPEN"
             db.upsert_history(
-                repo, n, title=node["title"], url=url(repo, n), mine=mine, author=(node["author"] or {}).get("login", "ghost"),
+                repo, n, title=node["title"], url=url(repo, n), mine=mine, **author(node),
                 outcome=outcome(last[1], last[2], mine), rounds=max(rounds(repo, n), *(p[4] for p in passes)),
                 fixes_pushed=max(p[5] for p in passes), head=last[3], first_at=iso(passes[-1][0]),
                 at=iso(last[0]), state=node["state"].lower() if closed else "open",

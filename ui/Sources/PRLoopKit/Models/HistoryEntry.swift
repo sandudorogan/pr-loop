@@ -7,6 +7,7 @@ public struct HistoryEntry: Codable, Hashable, Identifiable, Sendable {
     public let title: String
     public let url: URL
     public let author: String
+    public let authorName: String?
     public let isMine: Bool
     public let state: HistoryState
     public let outcome: String
@@ -25,6 +26,7 @@ public struct HistoryEntry: Codable, Hashable, Identifiable, Sendable {
     enum CodingKeys: String, CodingKey {
         case key, repo, number, title, url, author, state, outcome, rounds, head, at, findings
         case isMine = "mine"
+        case authorName = "author_name"
         case fixesPushed = "fixes_pushed"
         case firstAt = "first_at"
         case closedAt = "closed_at"
