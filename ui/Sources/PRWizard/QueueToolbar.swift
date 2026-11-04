@@ -4,7 +4,7 @@ import SwiftUI
 struct QueueToolbar: ToolbarContent {
     let store: QueueStore
     let repo: String?
-    let items: [QueueItem]
+    let rows: [TodoRow]
     @Binding var showsInspector: Bool
     @Binding var search: String
 
@@ -12,6 +12,7 @@ struct QueueToolbar: ToolbarContent {
         ToolbarItem(placement: .principal) { DaemonStatus(store: store, repo: repo) }
         ToolbarItem(placement: .primaryAction) { FilterField(text: $search) }
         ToolbarItemGroup(placement: .primaryAction) {
+            DoneButton(rows: rows, store: store)
             pause
             Button {
                 Task { await store.refresh() }
@@ -33,6 +34,7 @@ struct QueueToolbar: ToolbarContent {
     }
 
     private var pause: some View {
+        let items = rows.compactMap(\.item)
         let refs = items.map(\.ref)
         let resumes = items.resumes
         return Button {

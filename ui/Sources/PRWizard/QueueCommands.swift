@@ -35,7 +35,7 @@ struct QueueCommands: Commands {
             }
         }
         CommandMenu("Pull Request") {
-            PullRequestMenu(items: focus?.items ?? [], store: store, peek: peek, showSettings: focus?.showSettings)
+            PullRequestMenu(rows: focus?.rows ?? [], store: store, peek: peek, showSettings: focus?.showSettings)
         }
         CommandMenu("Daemon") {
             let isPaused = store.snapshot?.isPaused == true

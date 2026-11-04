@@ -12,6 +12,7 @@ public struct StatusStyle: Hashable, Sendable {
             case "fixing": ("hammer", .working, "Fixing")
             case "queued": ("clock", .neutral, "Queued")
             case "ready": ("checkmark.seal.fill", .good, "Ready")
+            case "done": ("checkmark.circle.fill", .neutral, "Done")
             case "approved": ("checkmark.seal.fill", .good, "Approved")
             case "clean": ("checkmark.seal.fill", .good, "Clean")
             case "quality-only": ("checkmark.seal.fill", .good, "Notes only")
@@ -32,5 +33,18 @@ public struct StatusStyle: Hashable, Sendable {
             case "no-changes": ("checkmark.circle", .good, "No changes")
             default: ("questionmark.circle", .neutral, status)
             }
+    }
+
+    /// A ready row says who acts next: I approve a colleague's PR, colleagues review mine.
+    public init(_ item: QueueItem) {
+        switch (item.status, item.isMine) {
+        case ("ready", true): self.init(symbol: "checkmark.seal.fill", tone: .mine, label: "Ready for review")
+        case ("ready", false): self.init(symbol: "checkmark.seal.fill", tone: .good, label: "Ready to approve")
+        default: self.init(item.status)
+        }
+    }
+
+    private init(symbol: String, tone: Tone, label: String) {
+        (self.symbol, self.tone, self.label) = (symbol, tone, label)
     }
 }

@@ -154,6 +154,13 @@ import Testing
         #expect(await transport.last == HTTPRequest(.post, "/v1/prs/iprally/gitops/412/\(paused ? "pause" : "resume")"))
     }
 
+    @Test("done and todo post their own routes", arguments: [true, false])
+    func done(done: Bool) async throws {
+        let transport = FakeTransport(body: Data(#"{"key": "iprally/gitops#412", "done": \#(done)}"#.utf8))
+        #expect(try await DaemonClient(transport: transport).setDone(gitops, done) == done)
+        #expect(await transport.last == HTTPRequest(.post, "/v1/prs/iprally/gitops/412/\(done ? "done" : "todo")"))
+    }
+
     @Test("pause and resume post their routes and return the state", arguments: [true, false])
     func pause(paused: Bool) async throws {
         let transport = FakeTransport(body: Data(#"{"paused": \#(paused)}"#.utf8))

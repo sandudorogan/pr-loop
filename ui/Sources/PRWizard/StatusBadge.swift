@@ -2,10 +2,17 @@ import PRWizardKit
 import SwiftUI
 
 struct StatusBadge: View {
-    let status: String
+    let style: StatusStyle
+
+    init(style: StatusStyle) {
+        self.style = style
+    }
+
+    init(status: String) {
+        style = StatusStyle(status)
+    }
 
     var body: some View {
-        let style = StatusStyle(status)
         Label {
             Text(style.label)
         } icon: {

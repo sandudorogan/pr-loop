@@ -88,6 +88,12 @@ import Observation
         }
     }
 
+    public func setDone(_ prs: [PRRef], _ done: Bool) async {
+        await perform(prs.map(PendingAction.done), on: prs.first) {
+            for pr in prs { _ = try await daemon.setDone(pr, done) }
+        }
+    }
+
     private func apply(_ event: FeedEvent<QueueFeed.Update>) {
         switch event {
         case .value(let update):

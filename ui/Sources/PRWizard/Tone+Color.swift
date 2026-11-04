@@ -7,6 +7,7 @@ extension Tone {
         case .neutral: .secondary
         case .working: .accentColor
         case .good: .green
+        case .mine: .purple
         case .info: .blue
         case .caution: .yellow
         case .attention: .orange

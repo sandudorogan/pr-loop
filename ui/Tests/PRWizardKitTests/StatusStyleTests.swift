@@ -9,6 +9,7 @@ import Testing
             ("fixing", "hammer", .working, "Fixing"),
             ("queued", "clock", .neutral, "Queued"),
             ("ready", "checkmark.seal.fill", .good, "Ready"),
+            ("done", "checkmark.circle.fill", .neutral, "Done"),
             ("approved", "checkmark.seal.fill", .good, "Approved"),
             ("clean", "checkmark.seal.fill", .good, "Clean"),
             ("quality-only", "checkmark.seal.fill", .good, "Notes only"),
@@ -35,5 +36,13 @@ import Testing
     func style(status: String, symbol: String, tone: Tone, label: String) {
         let style = StatusStyle(status)
         #expect((style.symbol, style.tone, style.label) == (symbol, tone, label))
+    }
+
+    @Test(
+        "a ready PR says who acts next",
+        arguments: [(true, Tone.mine, "Ready for review"), (false, .good, "Ready to approve")])
+    func ready(mine: Bool, tone: Tone, label: String) throws {
+        let style = StatusStyle(try Snapshots.item(2, ["mine": .bool(mine)]))
+        #expect((style.tone, style.label) == (tone, label))
     }
 }

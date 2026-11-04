@@ -6,7 +6,7 @@ struct InspectorHeader: View {
 
     var body: some View {
         let item = model.item
-        let status = StatusStyle(item.status)
+        let status = StatusStyle(item)
         let author = item.isMine ? "you" : item.author
         VStack(alignment: .leading, spacing: 6) {
             Text(model.title).font(.caption.weight(.semibold)).foregroundStyle(.tint)
