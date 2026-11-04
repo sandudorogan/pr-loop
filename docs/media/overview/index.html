@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PR Loop overview</title>
+<style>
+:root {
+  --bg: #0b0b10; --panel: #16161d; --panel2: #1d1d26; --line: #2c2c38; --text: #f2f2f7; --dim: #9a9aab; --faint: #5d5d6e;
+  --working: #0a84ff; --good: #30d158; --mine: #bf5af2; --caution: #ff9f0a; --bad: #ff453a; --info: #64d2ff;
+  --brand: linear-gradient(180deg, #d633f2, #6f80ff);
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1280px; height: 720px; overflow: hidden; background: var(--bg); }
+body {
+  font: 400 16px/1.35 -apple-system, system-ui, sans-serif; color: var(--text); position: relative;
+  background:
+    radial-gradient(700px 420px at 15% -10%, #d633f222, transparent 70%),
+    radial-gradient(700px 420px at 95% 110%, #6f80ff26, transparent 70%), var(--bg);
+}
+section { position: absolute; inset: 0; }
+.center { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.abs { position: absolute; }
+.mono { font-family: var(--mono); }
+.dim { color: var(--dim); }
+.faint { color: var(--faint); }
+h1 { font-size: 72px; font-weight: 700; letter-spacing: -1.5px; }
+h2 { position: absolute; top: 52px; left: 0; right: 0; text-align: center; font-size: 34px; font-weight: 700; letter-spacing: -.5px; }
+.grad { background: var(--brand); -webkit-background-clip: text; color: transparent; }
+.chip { padding: 6px 14px; border-radius: 99px; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); font-size: 15px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.caption {
+  position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font-size: 21px; color: var(--text);
+}
+.swap { position: relative; display: inline-block; }
+.swap > * { position: absolute; left: 0; top: 0; white-space: nowrap; }
+.tone { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.t-working { color: var(--working); background: #0a84ff24; }
+.t-good { color: var(--good); background: #30d15824; }
+.t-mine { color: var(--mine); background: #bf5af226; }
+.t-caution { color: var(--caution); background: #ff9f0a24; }
+.t-bad { color: var(--bad); background: #ff453a24; }
+.t-neutral { color: var(--dim); background: #ffffff12; }
+.spin { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #ffffff2a; border-top-color: var(--working); }
+
+/* B: watch */
+.src { display: flex; align-items: center; gap: 16px; height: 86px; }
+.src .lbl { width: 190px; text-align: right; color: var(--dim); font-size: 16px; }
+.pr { width: 330px; padding: 12px 16px; }
+.pr .repo { font-size: 13px; color: var(--dim); }
+.pr .ttl { font-size: 15px; font-weight: 600; margin-top: 2px; }
+.daemon { width: 300px; padding: 22px; text-align: center; border-color: #8a5cf6aa; box-shadow: 0 0 60px #8a5cf633; }
+.daemon .name { font-family: var(--mono); font-size: 19px; font-weight: 600; }
+.pool { margin-top: 10px; padding: 9px; border-radius: 10px; background: var(--panel2); font-size: 15px; }
+.lane { width: 270px; padding: 16px 18px; }
+.lane b { font-size: 18px; }
+
+/* C: loop */
+.station { width: 262px; padding: 16px; }
+.station .head { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim); margin-bottom: 12px; }
+.row > span:first-child { white-space: nowrap; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 36px; font-size: 15px; }
+.row .res { position: relative; width: 104px; height: 22px; }
+.row .res > * { position: absolute; right: 0; top: 0; }
+.comment { width: 560px; padding: 14px 18px; }
+.sev { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+
+/* D: app window */
+.win { left: 80px; top: 50px; width: 1120px; height: 540px; border-radius: 14px; overflow: hidden; background: #1e1e22; border: 1px solid #3a3a44; box-shadow: 0 30px 80px #0009; }
+.bar { height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 16px; background: #2a2a30; border-bottom: 1px solid #3a3a44; }
+.lights i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 7px; }
+.pill { display: flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 99px; background: #ffffff10; font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+.filter { width: 170px; padding: 5px 10px; border-radius: 7px; background: #ffffff10; color: var(--faint); font-size: 13px; }
+.side { position: absolute; top: 52px; bottom: 0; left: 0; width: 214px; background: #232328; border-right: 1px solid #34343c; padding: 12px 10px; font-size: 13px; }
+.side .it { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 7px; }
+.side .sel { background: #ffffff14; }
+.side .sub { color: var(--faint); font-size: 11px; }
+.badge { min-width: 20px; text-align: center; padding: 0 6px; border-radius: 99px; background: var(--good); color: #000; font-size: 11px; font-weight: 700; }
+.table { position: absolute; top: 52px; left: 214px; width: 590px; bottom: 0; font-size: 13px; }
+.th, .tr, .sh { display: grid; grid-template-columns: 26px 56px 222px 92px 140px 50px; align-items: center; padding: 0 10px; }
+.th { height: 30px; color: var(--faint); border-bottom: 1px solid #34343c; font-size: 12px; }
+.sh { height: 32px; display: flex; gap: 6px; font-weight: 700; color: var(--dim); font-size: 12px; }
+.tr { height: 34px; }
+.tr:nth-child(odd) { background: #ffffff05; }
+.tr.selected { background: #0a64d8; }
+.tr.selected .tone { color: #fff; background: #ffffff30; }
+.tr .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px; }
+.cell { position: relative; height: 22px; }
+.cell > * { position: absolute; left: 0; top: 0; }
+.insp { position: absolute; top: 52px; right: 0; bottom: 0; width: 316px; border-left: 1px solid #34343c; background: #1b1b1f; padding: 16px 18px; font-size: 13px; }
+.insp h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--faint); margin: 16px 0 8px; }
+.insp .kv { display: flex; justify-content: space-between; height: 26px; align-items: center; }
+.peek { width: 400px; padding: 14px 16px; background: #2b2b33; border: 1px solid #44444f; border-radius: 12px; box-shadow: 0 18px 50px #000a; font-size: 13px; }
+.peek .r { display: flex; justify-content: space-between; align-items: center; height: 28px; }
+.note { width: 380px; padding: 14px 16px; display: flex; gap: 12px; background: #2e2e36ee; border: 1px solid #4a4a55; border-radius: 16px; box-shadow: 0 18px 50px #000a; }
+
+/* E: config */
+.layer { width: 520px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+.op { width: 520px; text-align: center; color: var(--faint); font-size: 20px; height: 26px; }
+.code { width: 470px; padding: 20px 22px; font-family: var(--mono); font-size: 15px; line-height: 1.6; white-space: pre; }
+.k { color: #bf5af2; } .s { color: #64d2ff; } .n { color: #ff9f0a; }
+
+/* F: install */
+.term { left: 190px; top: 170px; width: 900px; height: 280px; border-radius: 12px; background: #141418; border: 1px solid #34343c; overflow: hidden; }
+.term .tb { height: 34px; display: flex; align-items: center; padding: 0 14px; background: #24242a; }
+.term pre { padding: 20px 24px; font-family: var(--mono); font-size: 16px; line-height: 1.75; }
+.ok { color: var(--good); }
+</style>
+</head>
+<body>
+
+<!-- A · title -->
+<section class="center" data-in="0" data-out="5.2" data-fx="fade">
+  <img src="icon.png" width="170" height="170" data-in="0.2" data-d="0.9" data-fx="pop">
+  <h1 data-in="0.7">PR Loop</h1>
+  <p style="font-size: 24px; margin-top: 8px" class="dim" data-in="1.1">Reviews and fixes your GitHub PRs while you work.</p>
+  <div style="display: flex; gap: 10px; margin-top: 28px" data-in="1.8">
+    <span class="chip">macOS daemon</span><span class="chip">Claude Code</span><span class="chip">Codex</span><span class="chip">MIT</span>
+  </div>
+</section>
+
+<!-- B · it watches every PR -->
+<section data-in="5.3" data-out="13.6" data-fx="fade">
+  <h2 data-in="5.5">It watches every PR that needs you</h2>
+  <div class="abs" style="left: 40px; top: 240px">
+    <div class="src" data-in="6.2" data-fx="left">
+      <div class="lbl" data-out="9.7" data-fx="fade">You opened it</div>
+      <div data-out="9.6" data-dx="400" data-dy="70"><div class="card pr"><div class="repo">acme/web #1842</div><div class="ttl">feat(search): keep filters on back</div></div></div>
+    </div>
+    <div class="src" data-in="6.7" data-fx="left">
+      <div class="lbl" data-out="9.85" data-fx="fade">Your review is requested</div>
+      <div data-out="9.75" data-dx="400" data-dy="0"><div class="card pr"><div class="repo">acme/web #1838 · Maya Chen</div><div class="ttl">refactor(ui): one sub per hop</div></div></div>
+    </div>
+    <div class="src" data-in="7.2" data-fx="left">
+      <div class="lbl" data-out="10.0" data-fx="fade">It is assigned to you</div>
+      <div data-out="9.9" data-dx="400" data-dy="-86"><div class="card pr"><div class="repo">acme/api #1855 · Leo Park</div><div class="ttl">fix(api): retry the export job once</div></div></div>
+    </div>
+  </div>
+  <div class="abs card daemon" style="left: 640px; top: 236px" data-in="7.8" data-fx="pop">
+    <div class="name grad">pr-loop --daemon</div>
+    <div class="dim" style="font-size: 14px; margin-top: 4px">one launchd process · every repo</div>
+    <div class="pool">review pool <b>×3</b></div>
+    <div class="pool">fix pool <b>×3</b></div>
+    <div class="pool mono dim" style="font-size: 13px">state.db</div>
+  </div>
+  <svg class="abs" style="left: 940px; top: 240px" width="60" height="250">
+    <path d="M2 125 C 30 125, 30 40, 58 40" stroke="#8a5cf6" stroke-width="2" fill="none" data-draw="10.4" data-d="0.5"/>
+    <path d="M2 125 C 30 125, 30 190, 58 190" stroke="#8a5cf6" stroke-width="2" fill="none" data-draw="10.9" data-d="0.5"/>
+  </svg>
+  <div class="abs card lane" style="left: 996px; top: 240px; width: 250px" data-in="10.6" data-fx="right">
+    <b>Review lane</b><div class="dim" style="font-size: 14px; margin-top: 4px">every PR above, 3 reviewers</div>
+  </div>
+  <div class="abs card lane" style="left: 996px; top: 390px; width: 250px" data-in="11.1" data-fx="right">
+    <b>Fix lane</b><div class="dim" style="font-size: 14px; margin-top: 4px">your PRs only, headless Codex</div>
+  </div>
+  <div class="caption" data-in="8.2">One process watches every repo with a checkout under <span class="mono">~/workdir</span>.</div>
+</section>
+
+<!-- C · the loop -->
+<section data-in="13.7" data-out="30" data-fx="fade">
+  <h2 data-in="13.9">Review. Fix. Repeat.</h2>
+  <div class="abs swap" style="right: 72px; top: 64px; width: 90px; height: 24px">
+    <span class="tone t-neutral" data-in="14.4" data-out="23.6" data-fx="fade">Round 1</span>
+    <span class="tone t-mine" data-in="23.9" data-fx="pop">Round 2</span>
+  </div>
+  <svg class="abs" style="left: 0; top: 148px" width="1280" height="80">
+    <path d="M1061 76 C 1061 10, 980 10, 640 10 C 300 10, 199 10, 199 76" stroke="#bf5af2" stroke-width="2.5" fill="none" data-draw="22.9" data-d="0.9"/>
+    <path d="M191 66 L199 78 L207 66" stroke="#bf5af2" stroke-width="2.5" fill="none" data-in="23.7" data-fx="fade"/>
+  </svg>
+  <div class="abs dim" style="left: 0; right: 0; top: 166px; text-align: center; font-size: 14px" data-in="23.2" data-fx="fade">new head → next round, only the new commits</div>
+
+  <div class="abs" style="left: 94px; top: 240px; display: flex; gap: 24px; align-items: flex-start">
+    <div class="card station" style="width: 210px" data-in="14.2">
+      <div class="head">PR head</div>
+      <div style="font-weight: 600">acme/web #1842</div>
+      <div class="swap mono dim" style="height: 22px; width: 120px; margin-top: 6px; font-size: 14px">
+        <span data-in="14.2" data-out="23.4" data-fx="fade">0aa1c3e</span>
+        <span style="color: var(--mine)" data-in="23.6" data-fx="fade">7c41d2a</span>
+      </div>
+    </div>
+    <div class="card station" style="width: 270px" data-in="14.6">
+      <div class="head">Review · 3 reviewers</div>
+      <div class="row"><span>Claude Opus</span><span class="res">
+        <span class="spin" data-in="15.0" data-out="17.0" data-fx="fade"></span>
+        <span class="tone t-caution" data-in="17.1" data-out="24.0" data-fx="pop">2 findings</span>
+        <span class="spin" data-in="24.2" data-out="25.5" data-fx="fade"></span>
+        <span class="tone t-good" data-in="25.6" data-fx="pop">clean</span></span></div>
+      <div class="row"><span>Codex</span><span class="res">
+        <span class="spin" data-in="15.1" data-out="17.6" data-fx="fade"></span>
+        <span class="tone t-caution" data-in="17.7" data-out="24.0" data-fx="pop">2 findings</span>
+        <span class="spin" data-in="24.2" data-out="26.0" data-fx="fade"></span>
+        <span class="tone t-good" data-in="26.1" data-fx="pop">clean</span></span></div>
+      <div class="row"><span>Claude Haiku</span><span class="res">
+        <span class="spin" data-in="15.2" data-out="16.4" data-fx="fade"></span>
+        <span class="tone t-good" data-in="16.5" data-out="24.0" data-fx="pop">clean</span>
+        <span class="spin" data-in="24.2" data-out="25.0" data-fx="fade"></span>
+        <span class="tone t-good" data-in="25.1" data-fx="pop">clean</span></span></div>
+    </div>
+    <div class="card station" style="width: 290px" data-in="15.0">
+      <div class="head">Fix · your PRs</div>
+      <div class="row"><span>Codex, sandboxed</span><span class="res">
+        <span class="spin" data-in="19.2" data-out="21.0" data-fx="fade"></span>
+        <span class="tone t-good" data-in="21.1" data-fx="pop">4 fixed</span></span></div>
+      <div class="row"><span>gate: format</span><span class="res"><span class="tone t-good" data-in="21.5" data-fx="pop">✓ green</span></span></div>
+      <div class="row"><span>gate: test</span><span class="res"><span class="tone t-good" data-in="22.0" data-fx="pop">✓ green</span></span></div>
+    </div>
+    <div class="card station" style="width: 250px" data-in="15.4">
+      <div class="head">Push</div>
+      <div class="row"><span>commit</span><span class="res"><span class="tone t-good" data-in="22.4" data-fx="pop">✓</span></span></div>
+      <div class="row"><span>reply · resolve</span><span class="res"><span class="tone t-good" data-in="22.6" data-fx="pop">✓</span></span></div>
+      <div class="row"><span>push</span><span class="res"><span class="tone t-mine" data-in="22.8" data-fx="pop">7c41d2a</span></span></div>
+    </div>
+  </div>
+
+  <div class="abs card comment" style="left: 360px; top: 440px" data-in="18.2" data-out="22.6">
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px">
+      <b>opus</b><span class="dim">commented on</span><span class="mono" style="font-size: 13px">search/events.cljs:57</span>
+      <span class="sev t-bad" style="margin-left: auto">HIGH</span><span class="dim" style="font-size: 13px">conf 0.9</span>
+    </div>
+    <div style="margin-top: 8px; font-size: 16px">Filters reset when the route params change.</div>
+    <div class="mono faint" style="margin-top: 8px; font-size: 12px">&lt;!-- agent-review: reviewer=opus round=1 sha=0aa1c3e --&gt;</div>
+  </div>
+  <div class="abs" style="left: 0; right: 0; top: 470px; text-align: center" data-in="26.8" data-fx="pop">
+    <span class="tone t-mine" style="font-size: 24px; padding: 10px 26px">✓ Ready for review</span>
+  </div>
+
+  <div class="caption" data-in="14.6" data-out="18.8" data-fx="fade">Three reviewers post their findings as inline comments.</div>
+  <div class="caption" data-in="19.0" data-out="22.9" data-fx="fade">On your PRs, Codex fixes the findings, runs your gates and pushes.</div>
+  <div class="caption" data-in="23.1" data-out="26.6" data-fx="fade">The push starts the next round.</div>
+  <div class="caption" data-in="26.8" data-fx="fade">Nothing left to fix: the PR waits for a human.</div>
+</section>
+
+<!-- D · the app -->
+<section data-in="30.1" data-out="47.6" data-fx="fade">
+  <div class="abs win" data-in="30.2" data-d="0.8" data-fx="pop">
+    <div class="bar">
+      <span class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+      <b style="margin-left: 160px; font-size: 14px">PR Loop</b>
+      <div class="pill" style="margin-left: 150px"><span class="dot"></span>Running · review
+        <span class="swap" style="width: 26px; height: 18px"><span data-in="0" data-out="36.4" data-fx="fade">1/3</span><span data-in="36.5" data-out="40" data-fx="fade">2/3</span><span data-in="40.1" data-out="44" data-fx="fade">1/3</span><span data-in="44.1" data-fx="fade">0/3</span></span>· fix
+        <span class="swap" style="width: 26px; height: 18px"><span data-in="0" data-out="40" data-fx="fade">0/3</span><span data-in="40.1" data-out="42.6" data-fx="fade">1/3</span><span data-in="42.7" data-fx="fade">0/3</span></span></div>
+      <div class="filter" style="margin-left: auto">Filter</div>
+    </div>
+    <div class="side">
+      <div class="it sel"><span>All repos</span><span class="swap" style="width: 22px; height: 16px">
+        <span class="badge" data-in="0" data-out="42.6" data-fx="fade">1</span><span class="badge" data-in="42.7" data-out="44" data-fx="pop">2</span><span class="badge" data-in="44.1" data-fx="pop">3</span></span></div>
+      <div class="faint" style="font-size: 11px; font-weight: 700; margin: 14px 10px 6px">Repos</div>
+      <div class="it"><div>acme/web<div class="sub">review · fix</div></div><span class="swap" style="width: 22px; height: 16px"><span class="badge" data-in="0" data-out="42.6" data-fx="fade">1</span><span class="badge" data-in="42.7" data-fx="pop">2</span></span></div>
+      <div class="it"><div>acme/api<div class="sub">review · fix</div></div><span class="badge" data-in="44.1" data-fx="pop">1</span></div>
+      <div class="it"><div>acme/infra<div class="sub">fix only</div></div></div>
+    </div>
+    <div class="table">
+      <div class="th"><span></span><span>PR</span><span>Title</span><span>Author</span><span>Status</span><span>Detail</span></div>
+      <div class="sh">⌄ To Approve</div>
+      <div class="tr"><span class="ok">✓</span><span class="mono">#1838</span><span class="t">refactor(ui): one sub per hop in the filters</span><span>Maya Chen</span>
+        <span><span class="tone t-good">Ready to approve</span></span><span></span></div>
+      <div class="tr"><span class="cell"><span class="faint" data-in="0" data-out="36.4" data-fx="fade">1</span><span style="color: var(--working)" data-in="36.5" data-out="44.0" data-fx="fade">▶</span><span class="ok" data-in="44.1" data-fx="fade">✓</span></span>
+        <span class="mono">#1855</span><span class="t">fix(api): retry the export job once</span><span>Leo Park</span>
+        <span class="cell"><span class="tone t-neutral" data-in="0" data-out="36.4" data-fx="fade">Up next</span><span class="tone t-working" data-in="36.5" data-out="44.0" data-fx="fade">Reviewing</span><span class="tone t-good" data-in="44.1" data-fx="pop">Ready to approve</span></span>
+        <span class="cell mono dim"><span data-timer="36.5" data-in="36.5" data-out="44.0" data-fx="fade"></span></span></div>
+      <div class="sh">⌄ My PRs</div>
+      <div class="tr" data-select="33.2"><span class="cell"><span data-in="0" data-out="42.6" data-fx="fade">▶</span><span data-in="42.7" data-fx="fade">✓</span></span>
+        <span class="mono">#1842</span><span class="t">feat(search): keep filters on back navigation</span><span>you</span>
+        <span class="cell"><span class="tone t-working" data-in="0" data-out="40.0" data-fx="fade">Reviewing</span><span class="tone t-caution" data-in="40.1" data-out="42.6" data-fx="fade">Fixing</span><span class="tone t-mine" data-in="42.7" data-fx="pop">Ready for review</span></span>
+        <span class="cell mono"><span data-timer="-40" data-in="0" data-out="42.6" data-fx="fade"></span></span></div>
+      <div class="tr"><span class="faint">·</span><span class="mono">#77</span><span class="t">chore: bump the search image</span><span>you</span>
+        <span><span class="tone t-neutral">Waiting</span></span><span></span></div>
+      <div class="sh">› Done <span class="faint" style="font-weight: 400">&nbsp;3</span></div>
+    </div>
+    <div class="insp">
+      <div data-in="33.4" data-fx="fade">
+        <div style="font-size: 16px; font-weight: 700">acme/web #1842</div>
+        <div class="dim" style="margin-top: 2px">feat(search): keep filters on back…</div>
+        <h4>Live run</h4>
+        <div class="kv"><span class="dim">Lane</span><span class="swap" style="width: 60px; height: 18px"><span data-in="0" data-out="40" data-fx="fade">review</span><span data-in="40.1" data-out="42.6" data-fx="fade">fix</span><span class="faint" data-in="42.7" data-fx="fade">—</span></span></div>
+        <div class="kv"><span>Claude Opus</span><span class="res swap" style="width: 82px; height: 22px"><span class="tone t-working" data-in="0" data-out="37.8" data-fx="fade">running</span><span class="tone t-caution" data-in="37.9" data-fx="pop">posted</span></span></div>
+        <div class="kv"><span>Codex</span><span class="swap" style="width: 82px; height: 22px"><span class="tone t-working" data-in="0" data-out="38.4" data-fx="fade">running</span><span class="tone t-caution" data-in="38.5" data-fx="pop">posted</span></span></div>
+        <div class="kv"><span>Claude Haiku</span><span class="tone t-good">clean</span></div>
+        <h4>Findings</h4>
+        <div class="kv"><span class="dim">Round</span><span>1</span></div>
+        <div class="kv"><span class="dim">At the fix floor</span><span class="swap" style="width: 20px; height: 18px"><span data-in="0" data-out="38.4" data-fx="fade">2</span><span data-in="38.5" data-fx="pop">4</span></span></div>
+        <h4>Fix</h4>
+        <div class="kv"><span class="dim">Status</span><span class="swap" style="width: 110px; height: 22px"><span class="faint" data-in="0" data-out="42.6" data-fx="fade">—</span><span class="tone t-good" data-in="42.7" data-fx="pop">pushed</span></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="abs peek" style="left: 850px; top: 166px; width: 360px" data-in="35.0" data-out="39.6" data-fx="pop">
+    <div style="display: flex; justify-content: space-between"><b>Round 1 · head 0aa1c3e</b><span class="dim">4 at the fix floor</span></div>
+    <div class="r" style="margin-top: 6px"><span>Claude Opus</span><span><span class="sev t-bad">1 HIGH</span> <span class="sev t-caution">1 MED</span></span></div>
+    <div class="r"><span>Codex</span><span class="sev t-caution">2 MED</span></div>
+    <div class="r"><span>Claude Haiku · quality</span><span class="tone t-good">clean</span></div>
+    <div style="border-top: 1px solid #44444f; margin-top: 6px; padding-top: 8px; line-height: 1.7">
+      <div><span class="sev t-bad">HIGH</span> Filters reset when the route params change</div>
+      <div><span class="sev t-caution">MED</span> Back navigation drops the sort order</div>
+      <div><span class="sev t-caution">MED</span> History entry written twice</div>
+    </div>
+  </div>
+  <div class="abs note" style="right: 40px; top: 18px" data-in="44.4" data-fx="right">
+    <img src="icon.png" width="40" height="40">
+    <div style="font-size: 13px"><div style="display: flex; justify-content: space-between"><b>Ready for your approval</b><span class="faint">now</span></div>
+      <div>acme/api #1855 · Leo Park</div><div class="dim">fix(api): retry the export job once</div></div>
+  </div>
+  <div class="caption" data-in="31.0" data-out="34.8" data-fx="fade">PR Loop.app shows the queue as a to-do list.</div>
+  <div class="caption" data-in="35.0" data-out="39.7" data-fx="fade">Press Space to peek at the findings of each reviewer.</div>
+  <div class="caption" data-in="39.9" data-out="44.2" data-fx="fade">Each pass runs live: review, then fix.</div>
+  <div class="caption" data-in="44.4" data-fx="fade">One notification: a colleague's PR is ready for your approval.</div>
+</section>
+
+<!-- E · config -->
+<section data-in="47.7" data-out="54.6" data-fx="fade">
+  <h2 data-in="47.9">Set it once. Override where you need to.</h2>
+  <div class="abs" style="left: 90px; top: 160px">
+    <div class="card layer" data-in="48.4" data-fx="left"><b>All repos</b><span class="dim">defaults · config.json</span></div>
+    <div class="op" data-in="48.8" data-fx="fade">⊕</div>
+    <div class="card layer" data-in="48.9" data-fx="left"><b>Project <span class="mono" style="font-weight: 400">acme/infra</span></b><span class="dim">config.json</span></div>
+    <div class="op" data-in="49.3" data-fx="fade">⊕</div>
+    <div class="card layer" data-in="49.4" data-fx="left"><b>PR <span class="mono" style="font-weight: 400">#1842</span></b><span class="dim">state.db · drops on merge</span></div>
+    <div class="op" data-in="49.8" data-fx="fade">⊗</div>
+    <div class="card layer" data-in="49.9" data-fx="left"><b>Labels</b><span class="mono dim" style="font-size: 14px">no-auto-review · no-auto-fix</span></div>
+  </div>
+  <div class="abs card code" style="left: 700px; top: 186px" data-in="50.6" data-fx="right"><span class="faint">~/.config/pr-loop/config.json</span>
+{
+  <span class="k">"review"</span>: { <span class="k">"workers"</span>: <span class="n">3</span> },
+  <span class="k">"projects"</span>: {
+    <span class="s">"acme/infra"</span>: {
+      <span class="k">"review"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span> }
+    }
+  }
+}</div>
+  <div class="caption" data-in="50.9">One JSON file. The daemon reloads it on each refresh, with no restart.</div>
+</section>
+
+<!-- F · install and end card -->
+<section data-in="54.7" data-fx="fade">
+  <div data-in="54.7" data-out="60.4" data-fx="fade">
+    <h2 data-in="54.9">Install in one step</h2>
+    <div class="abs term" data-in="55.0" data-fx="pop">
+      <div class="tb"><span class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span></div>
+<pre><span class="faint">$</span> <span data-type="55.5" data-d="1.4">git clone git@github.com:sandudorogan/pr-loop.git ~/workdir/pr-loop</span>
+<span class="faint">$</span> <span data-type="57.1" data-d="0.7">~/workdir/pr-loop/install.py</span>
+<span data-in="58.0" data-fx="fade">  1 check   python3 · git · gh · claude · codex    <span class="ok">✓</span></span>
+<span data-in="58.4" data-fx="fade">  2 link    commands, runners, plist, config       <span class="ok">✓</span></span>
+<span data-in="58.8" data-fx="fade">  3 start   launchd local.pr-loop                  <span class="ok">✓</span></span>
+<span data-in="59.2" data-fx="fade">  4 app     /Applications/PR Loop.app              <span class="ok">✓</span></span></pre>
+    </div>
+  </div>
+  <div class="center" style="position: absolute; inset: 0" data-in="60.6" data-fx="fade">
+    <img src="icon.png" width="140" height="140" data-in="60.7" data-d="0.9" data-fx="pop">
+    <h1 data-in="61.0">PR Loop</h1>
+    <p class="mono dim" style="font-size: 20px; margin-top: 10px" data-in="61.4">github.com/sandudorogan/pr-loop</p>
+  </div>
+</section>
+
+<script>
+const DURATION = 64;
+const ease = x => 1 - (1 - x) ** 3;
+const progress = (t, start, dur) => ease(Math.min(1, Math.max(0, (t - start) / dur)));
+const FX = {
+  fade: () => '',
+  up: q => `translateY(${(1 - q) * 22}px)`,
+  left: q => `translateX(${(q - 1) * 40}px)`,
+  right: q => `translateX(${(1 - q) * 40}px)`,
+  pop: q => `scale(${0.86 + 0.14 * q})`,
+};
+const all = sel => [...document.querySelectorAll(sel)];
+const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const typed = all('[data-type]').map(el => [el, el.textContent]);
+
+function render(t) {
+  all('[data-in], [data-out]').forEach(el => {
+    const { d = 0.6, fx = 'up', dx = 0, dy = 0 } = el.dataset;
+    const qIn = el.dataset.in === undefined ? 1 : progress(t, +el.dataset.in, +d);
+    const qOut = el.dataset.out === undefined ? 0 : progress(t, +el.dataset.out, dx || dy ? 0.7 : 0.4);
+    el.style.opacity = qIn * (dx || dy ? 1 - qOut ** 3 : 1 - qOut);
+    el.style.transform = `translate(${dx * qOut}px, ${dy * qOut}px) scale(${1 - 0.4 * (dx || dy ? qOut : 0)}) ${FX[fx](qIn)}`;
+  });
+  all('path[data-draw]').forEach(p => {
+    const len = p.getTotalLength();
+    p.style.strokeDasharray = len;
+    p.style.strokeDashoffset = len * (1 - progress(t, +p.dataset.draw, +(p.dataset.d ?? 0.6)));
+  });
+  all('.spin').forEach(el => el.style.rotate = `${t * 400}deg`);
+  all('[data-timer]').forEach(el => el.textContent = clock(Math.max(0, t - el.dataset.timer)));
+  all('[data-select]').forEach(el => el.classList.toggle('selected', t >= +el.dataset.select));
+  typed.forEach(([el, text]) => el.textContent = text.slice(0, Math.round(text.length * Math.min(1, Math.max(0, (t - el.dataset.type) / el.dataset.d)))));
+}
+
+const start = performance.now();
+const params = new URLSearchParams(location.search);
+if (params.has('t')) render(+params.get('t'));
+else if (!navigator.webdriver) (function loop() { render(((performance.now() - start) / 1000) % DURATION); requestAnimationFrame(loop); })();
+</script>
+</body>
+</html>

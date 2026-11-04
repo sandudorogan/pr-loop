@@ -2,6 +2,11 @@
 
 A macOS daemon that reviews and fixes your GitHub PRs with Claude Code and Codex. MIT licensed.
 
+[![PR Loop in 64 seconds](docs/media/overview.gif)](docs/media/overview.mp4)
+
+The [video](docs/media/overview.mp4) runs 64 s, with no sound. To render it again after a UI change, edit
+`docs/media/overview/index.html` and run `bun record.mjs` in that folder.
+
 It watches every open PR you opened, that requests your review or that is assigned to you, in any repo.
 Three reviewers post findings as inline comments.
 On your own PRs, headless Codex then fixes the feedback, red CI and base conflicts, and pushes.
