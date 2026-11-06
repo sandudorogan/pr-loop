@@ -195,13 +195,34 @@ private struct QueueHeader: View {
             Text(verbatim: "\(count)").monospacedDigit().foregroundStyle(.secondary)
             Spacer()
         }
-        .padding(.leading, style == nil ? 0 : 18)
+        .padding(style == nil ? .top : .leading, style == nil ? 12 : 18)
+        .background(PlainTableStyle())
         .contentShape(Rectangle())
         .draggable(dragID)
         .dropDestination(for: String.self) { ids, _ in ids.first.map(drop) ?? false }
         .contextMenu {
             Button("Move Up") { up?() }.disabled(up == nil)
             Button("Move Down") { down?() }.disabled(down == nil)
+        }
+    }
+}
+
+/// Keeps the enclosing table on AppKit's plain style. Every section header is a group row, and the inset and bordered
+/// styles put 20 pt above each one, so a stage sat as far from its section as the next section. SwiftUI has no
+/// `.plain` table style on macOS and puts its own back on updates, hence the observer.
+private struct PlainTableStyle: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Probe() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class Probe: NSView {
+        private var watch: NSKeyValueObservation?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            let table = sequence(first: self as NSView, next: \.superview).lazy.compactMap { $0 as? NSTableView }.first
+            watch = table?.observe(\.style, options: .initial) { table, _ in
+                if table.style != .plain { table.style = .plain }
+            }
         }
     }
 }

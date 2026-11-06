@@ -330,6 +330,10 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
 - **Inspector is an `HStack` column.** On macOS 26 `.inspector` floats over the table in a narrow window, and
   `HSplitView` lays a SwiftUI child out at its `maxWidth`, so the content clips. Keep the column; `ResizeHandle`
   sets its width, from 280 pt up to what leaves the table `QueueTable.minWidth`.
+- **Queue table stays `.plain`.** Each `Section` header is an NSTableView group row. The inset and bordered styles add
+  20 pt of private spacing above each group row, and SwiftUI has no `.plain` table style on macOS. `PlainTableStyle` in
+  `QueueTable.swift` sets AppKit's `.plain` and watches `style`, because SwiftUI puts its own style back on updates.
+  The space between sections is the top padding of their headers.
 - **No `@FocusState` in a toolbar item.** It never takes focus from there. ⌘F calls `NSWindow.focusToolbarField()`.
   The filter goes before the buttons: NSToolbar overflows from the trailing end, and SwiftUI has no visibility priority.
 
