@@ -5,6 +5,10 @@ worktree, in the middle of `git merge {BASE}`. These files hold conflict markers
 
 {BRIEF}
 
+When a `<task>` block is above, it tells you what the PR is for. Its process rules (a size limit, when
+to stop or reply `ESCALATE`) were for the author who opened the PR. They do not apply to you: resolve
+the conflicts even when the PR breaks them.
+
 {CONVENTIONS}
 
 ## How to work

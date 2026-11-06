@@ -98,6 +98,12 @@ and resolves. *Why:* one place controls what lands, and it strips AI attribution
 
 **D22. No AI attribution anywhere.** No `Co-Authored-By`, no "Generated with". `land()` strips them from commits.
 
+**D33. The fixer reads the task brief as context, not as orders** (2026-11-06). `fix.md` and `merge.md` say the
+brief's process rules (a size limit, stop and `ESCALATE`) were for the author. *Why:* a delegator brief says "over
+~700 lines, stop and reply `ESCALATE:`". Codex obeyed it on a 934-line PR, changed nothing five passes in a row,
+and `no-changes` settled the lane with 60 open threads and red CI. Splitting a PR is the owner's call; the fixer's
+job is the feedback.
+
 ## The macOS app
 
 **D23. A SwiftUI app, proper macOS style, no dependencies, Command Line Tools only.** Details: [ui-macos.md](ui-macos.md).

@@ -3,6 +3,10 @@ the PR head `{HEAD}`. The base branch is `{BASE}`.
 
 {BRIEF}
 
+When a `<task>` block is above, it tells you what the PR is for. Its process rules (a size limit, when
+to stop or reply `ESCALATE`) were for the author who opened the PR. They do not apply to you: fix the
+feedback even when the PR breaks them.
+
 {CONVENTIONS}
 
 The feedback to address is in `{FEEDBACK}`: a JSON list. Each entry has a `ref`, a `kind`
