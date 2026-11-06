@@ -31,6 +31,12 @@ class Marker(unittest.TestCase):
         for text in (body, inline):
             self.assertEqual(prr.MARKER_RE.search(text).groups(), ("quality", "2", A))
 
+    def test_the_badge_follows_the_fix_floor_not_the_engine_verdict(self):
+        sc = {"base_sha": None, "head": A, "base_branch": "main", "round": 5}
+        badge = lambda fyi: prr.build_body(sc, "opus", "L", {"summary": "s", "verdict": "approve"}, [], [], "", fyi)
+        self.assertIn("**Verdict:** notes only, nothing to fix", badge(True))
+        self.assertIn("**Verdict:** needs attention", badge(False))
+
     def test_a_notes_only_review_adds_the_fyi_marker(self):
         sc = {"base_sha": None, "head": A, "base_branch": "main", "round": 1, "pr": 5}
         table = {"a.py": {2}}
@@ -82,6 +88,13 @@ class Scope(unittest.TestCase):
         sc = self.scope([review("opus", 1, A)], linear=False)
         self.assertEqual((sc["round"], sc["base_sha"], sc["diff_range"]), (2, None, f"origin/main...{C}"))
         self.assertIn("rebased or merged main", sc["round_note"])
+
+    def test_late_rounds_state_the_fix_floor(self):
+        early = self.scope([review("opus", 2, B), review("opus", 1, A)])
+        late = self.scope([review("opus", 3, B), review("opus", 2, A)])
+        self.assertEqual((early["round"], late["round"]), (3, 4))
+        self.assertNotIn("only high and critical", early["round_note"])
+        self.assertIn("only high and critical findings go to the fixer", late["round_note"])
 
     def test_the_last_round_before_the_head_is_the_diff_base(self):
         sc = self.scope([review("opus", 2, B), review("opus", 1, A)])

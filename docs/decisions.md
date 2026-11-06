@@ -104,6 +104,13 @@ brief's process rules (a size limit, stop and `ESCALATE`) were for the author. *
 and `no-changes` settled the lane with 60 open threads and red CI. Splitting a PR is the owner's call; the fixer's
 job is the feedback.
 
+**D34. A posted review has one verdict, and the code sets it** (2026-11-06). The header badge comes from the fix
+floor only ("notes only, nothing to fix" or "needs attention"); the engine's `verdict` field no longer picks it.
+The opus and codex prompts define severity by what it does to the merge, and `summary` makes no ship call. From
+round 4 the round note states the floor. *Why:* on iprally#17430 round 5, Opus rated a regression `medium`, the
+round-4 floor made the review notes only, and its summary opened "No-ship as is." The engine did not know the floor
+and had no scale for severity, so its prose and its score disagreed.
+
 ## The macOS app
 
 **D23. A SwiftUI app, proper macOS style, no dependencies, Command Line Tools only.** Details: [ui-macos.md](ui-macos.md).

@@ -160,6 +160,9 @@ def scope(pr):
     else:
         diff_range, base_ref = f"origin/{base_branch}...{head}", f"origin/{base_branch}"
         note = f"This is review round {rnd} — the first review of this PR. Review the whole change."
+    if rnd >= LATE_ROUND:
+        note += (f" From round {LATE_ROUND} on, only high and critical findings go to the fixer."
+                 " Anything lower posts as a note and does not block the merge.")
 
     posted_at_head = {m["reviewer"] for m in at_head}
     clean_at_head = set(cleared(pr, head))
@@ -418,8 +421,7 @@ def split_findings(findings, table):
 
 
 def build_body(sc, reviewer, label, data, inline, carried, mk, fyi):
-    verdict = data.get("verdict", "needs-attention")
-    badge = "notes only, nothing to fix" if fyi else "needs attention" if verdict == "needs-attention" else "approve"
+    badge = "notes only, nothing to fix" if fyi else "needs attention"
     span = (f"`{sc['base_sha'][:12]}..{sc['head'][:12]}`" if sc["base_sha"]
             else f"`{sc['base_branch']}...{sc['head'][:12]}`")
     head = [

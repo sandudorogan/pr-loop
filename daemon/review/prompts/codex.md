@@ -48,6 +48,15 @@ A finding must answer: what can go wrong, why this code path is vulnerable, what
 An empty findings array with verdict `approve` is a valid answer if you cannot support a substantive finding.
 </finding_bar>
 
+<severity>
+Rate each finding by what it does to the merge. The severity is your verdict:
+- `critical`: data loss, a security hole, or an outage. The change must not merge.
+- `high`: a regression or wrong result that a user or caller will hit. The change must not merge until it is fixed.
+- `medium`: a real defect with narrow reach or an easy workaround. Fix it, but it does not block the merge alone.
+- `low`: a note for the author.
+If you would block the merge on a finding, rate it `high` or `critical`.
+</severity>
+
 <line_numbers>
 `file` is the repo-relative path exactly as git reports it.
 `line_start` and `line_end` are line numbers in the NEW version of the file — the right-hand side of the diff.
@@ -69,6 +78,7 @@ Your final message must be only valid JSON that matches this schema:
 
 {SCHEMA}
 
-Write `summary` as a terse ship / no-ship assessment, not a neutral recap.
-Use `needs-attention` if there is any material risk worth blocking on.
+Write `summary` as a terse risk assessment: what the change gets wrong and what it costs, not a neutral recap.
+Do not write a ship, no-ship, approve or block call in `summary`. The review header states the verdict from your severities.
+Use `needs-attention` if any finding is `high` or `critical`.
 </output>
