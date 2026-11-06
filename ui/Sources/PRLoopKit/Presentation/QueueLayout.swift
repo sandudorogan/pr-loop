@@ -1,7 +1,7 @@
 import Foundation
 
 /// The owner's order of the sections and of each section's stages. Kinds missing from a stored layout (an older
-/// app wrote it) keep their default place at the end.
+/// app wrote it) keep their default place at the end. Kinds this app no longer has drop.
 public struct QueueLayout: Hashable, Sendable {
     public private(set) var sections: [QueueSection.Kind]
     public private(set) var stages: [QueueSection.Kind: [QueueStage.Kind]]
@@ -67,19 +67,21 @@ public struct QueueLayout: Hashable, Sendable {
 
 /// `@AppStorage` keeps the layout as JSON. It goes through `Stored`: a `Codable` type that is also
 /// `RawRepresentable` as a String encodes itself through `rawValue`, which recurses until the stack overflows.
+/// Stages are stored as strings, so a retired kind (`waiting`) drops instead of failing the whole layout.
 extension QueueLayout: RawRepresentable {
     private struct Stored: Codable {
         let sections: [QueueSection.Kind]
-        let stages: [QueueSection.Kind: [QueueStage.Kind]]
+        let stages: [QueueSection.Kind: [String]]
     }
 
     public init?(rawValue: String) {
         guard let stored = try? JSONDecoder().decode(Stored.self, from: Data(rawValue.utf8)) else { return nil }
-        self.init(sections: stored.sections, stages: stored.stages)
+        self.init(sections: stored.sections, stages: stored.stages.mapValues { $0.compactMap(QueueStage.Kind.init) })
     }
 
     public var rawValue: String {
-        let data = try? JSONEncoder().encode(Stored(sections: sections, stages: stages))
+        let stored = Stored(sections: sections, stages: stages.mapValues { $0.map(\.rawValue) })
+        let data = try? JSONEncoder().encode(stored)
         return data.map { String(decoding: $0, as: UTF8.self) } ?? "{}"
     }
 }

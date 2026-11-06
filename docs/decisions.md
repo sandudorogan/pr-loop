@@ -135,10 +135,15 @@ in different ways. Done holds every §3.13 history entry off the to-do list (mer
 done), so the empty-state history view went away. The owner marks a PR done or moves it back (`api.md §3.18`).
 A done PR takes no new pass: done means off my plate. A new review request does not undo a manual mark; my
 approval is done only until a re-request, as before.
-Each of To Approve and My PRs splits into stages (Ready, In work, Up next, Waiting, Paused), and every section and
+Each of To Approve and My PRs splits into stages (Ready, In work, Up next, Waiting, Paused; D35 splits Waiting), and every section and
 stage collapses. The owner orders both levels: drag a header onto another one of its level, or Move Up/Down
 from its menu. *Why:* the stages were already there as an order, without headers, and the owner wanted to fold
 them and choose what comes first.
+
+**D35. Waiting splits into Fix queued and Parked** (2026-11-06). An idle PR with `fix_queued` is Fix queued: the
+fix lane runs it without the owner. Any other idle PR is Parked (tests-red, ci-stuck, held, skipped): nothing runs
+until the owner acts. *Why:* Waiting held 23 PRs, and the four the fixer was about to take sat among nineteen that
+needed the owner, so the list did not say where to look.
 
 ## Process of work
 

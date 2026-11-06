@@ -15,10 +15,10 @@ import Testing
     @Test("a stage moves inside its own section only")
     func stage() {
         var layout = QueueLayout()
-        let moved = layout.drop("stage:mine.waiting", on: "stage:mine.ready")
+        let moved = layout.drop("stage:mine.parked", on: "stage:mine.ready")
         #expect(moved)
-        #expect(layout.stageOrder(of: .mine) == [.waiting, .ready, .active, .queued, .paused])
-        #expect(layout.stageOrder(of: .toApprove) == [.ready, .active, .queued, .waiting, .paused])
+        #expect(layout.stageOrder(of: .mine) == [.parked, .ready, .active, .queued, .fixQueued, .paused])
+        #expect(layout.stageOrder(of: .toApprove) == [.ready, .active, .queued, .fixQueued, .parked, .paused])
         let acrossSections = layout.drop("stage:mine.ready", on: "stage:toApprove.paused")
         #expect(!acrossSections)
         let ontoASection = layout.drop("stage:mine.ready", on: "section:mine")
@@ -38,6 +38,14 @@ import Testing
         #expect(QueueLayout(rawValue: "nonsense") == nil)
     }
 
+    @Test("a layout stored before the Waiting split keeps its order, and the new stages go last")
+    func retiredStage() throws {
+        let old = #"{"sections": ["mine", "toApprove", "done"], "stages": ["mine", ["paused", "waiting", "ready"]]}"#
+        let layout = try #require(QueueLayout(rawValue: old))
+        #expect(layout.sectionOrder == [.mine, .toApprove, .done])
+        #expect(layout.stageOrder(of: .mine) == [.paused, .ready, .active, .queued, .fixQueued, .parked])
+    }
+
     @Test("sections and stages follow the layout")
     func sections() throws {
         var layout = QueueLayout()
@@ -47,7 +55,7 @@ import Testing
         #expect(sections.map(\.kind) == [.mine, .toApprove])
         #expect(
             sections.map { $0.stages.map(\.style.label) } == [
-                ["In work", "Waiting"], ["Up next", "Ready to approve"],
+                ["In work", "Parked"], ["Up next", "Ready to approve"],
             ])
     }
 }

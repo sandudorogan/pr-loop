@@ -28,7 +28,7 @@ public struct QueueFilter: Hashable, Sendable {
                 kind == .done
                 ? []
                 : layout.stageOrder(of: kind).compactMap { stage in
-                    let rows = mine.filter { QueueStage.Kind($0.group) == stage }.map(TodoRow.open)
+                    let rows = mine.filter { QueueStage.Kind($0) == stage }.map(TodoRow.open)
                     return rows.isEmpty ? nil : QueueStage(section: kind, kind: stage, rows: rows)
                 }
             let rows = kind == .done ? finished : stages.flatMap(\.rows)

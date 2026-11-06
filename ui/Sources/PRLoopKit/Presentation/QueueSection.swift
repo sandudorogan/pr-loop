@@ -24,15 +24,16 @@ public struct QueueSection: Hashable, Identifiable, Sendable {
 /// One stage of a section, like "Ready for review" in My PRs.
 public struct QueueStage: Hashable, Identifiable, Sendable {
     public enum Kind: String, CaseIterable, Codable, Sendable {
-        case ready, active, queued, waiting, paused
+        case ready, active, queued, fixQueued, parked, paused
 
-        init(_ group: Group) {
+        /// An idle PR waits on the fix lane (`fix_queued`), or is parked: nothing runs until the owner acts.
+        init(_ item: QueueItem) {
             self =
-                switch group {
+                switch item.group {
                 case .ready: .ready
                 case .active: .active
                 case .queued: .queued
-                case .idle, .unknown: .waiting
+                case .idle, .unknown: item.isFixQueued ? .fixQueued : .parked
                 case .paused: .paused
                 }
         }
@@ -52,7 +53,8 @@ public struct QueueStage: Hashable, Identifiable, Sendable {
         case (.ready, _): StatusStyle(symbol: "checkmark.seal.fill", tone: .good, label: "Ready to approve")
         case (.active, _): StatusStyle(symbol: "play.fill", tone: .working, label: "In work")
         case (.queued, _): StatusStyle(symbol: "clock", tone: .neutral, label: "Up next")
-        case (.waiting, _): StatusStyle(symbol: "hourglass", tone: .neutral, label: "Waiting")
+        case (.fixQueued, _): StatusStyle(symbol: "hourglass", tone: .neutral, label: "Fix queued")
+        case (.parked, _): StatusStyle(symbol: "parkingsign.circle", tone: .neutral, label: "Parked")
         case (.paused, _): StatusStyle(symbol: "pause.fill", tone: .neutral, label: "Paused")
         }
     }

@@ -41,7 +41,7 @@ import Testing
         #expect(all.map(\.title) == ["To Approve", "My PRs", "Done"])
         #expect(
             all.map { $0.stages.map(\.id) } == [
-                ["toApprove.ready", "toApprove.queued"], ["mine.active", "mine.waiting"], [],
+                ["toApprove.ready", "toApprove.queued"], ["mine.active", "mine.parked"], [],
             ])
         #expect(
             all.map { $0.rows.map(\.id) } == [
@@ -50,6 +50,14 @@ import Testing
                 ["iprally/iprally#17120"],
             ])
         #expect(QueueFilter(repo: "iprally/gitops").sections(try Snapshots.queue().items).map(\.kind) == [.mine])
+    }
+
+    @Test("an idle PR the fix lane still owes a pass is fix queued, any other idle PR is parked")
+    func idle() throws {
+        let owed = try Snapshots.item(3, ["fix_queued": true])
+        let parked = try Snapshots.item(3, ["number": 413, "key": "iprally/gitops#413"])
+        let stages = QueueFilter().sections([parked, owed]).flatMap(\.stages)
+        #expect(stages.map(\.id) == ["mine.fixQueued", "mine.parked"])
     }
 
     @Test("a paused PR goes last in its section")
