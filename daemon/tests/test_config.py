@@ -63,7 +63,7 @@ class Defaults(unittest.TestCase):
         karma = c.effective(c.DEFAULTS, "iprally/iprally")["fix"]["gates"][1]
         self.assertEqual((karma["cwd"], karma["timeout_s"], karma["slot"]), ("ui", 1800, True))
         self.assertEqual(karma["prelude"], ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null")
-        self.assertEqual(karma["setup"]["run"], "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test")
+        self.assertEqual(karma["setup"]["run"], "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test")
         self.assertEqual(karma["run"], "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init "
                                        "--client.args {item}")
 

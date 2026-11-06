@@ -11,7 +11,7 @@ from prs import pr_fix as fix
 from pr_loop import config, gates
 
 NODE = ". ~/.config/nvm/nvm.sh && nvm use 22.15.1 >/dev/null"
-BUILD = "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+BUILD = "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
 IPRALLY = config.effective(config.DEFAULTS, "iprally/iprally")["fix"]["gates"]
 CLJFMT, KARMA = IPRALLY
 STEP_6 = ("6. Add or update a test when a fix changes behaviour. Do not run tests that need a JVM or a\n"

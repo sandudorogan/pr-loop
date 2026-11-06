@@ -17,7 +17,7 @@ import Testing
         let (store, daemon) = try await loaded()
         await store.load()
         #expect(await daemon.calls == [.config])
-        #expect(store.original?.rev == "5c663cb8963c")
+        #expect(store.original?.rev == "ed1f0bca4af9")
         #expect(!store.isDirty)
     }
 
@@ -80,7 +80,7 @@ import Testing
         let (store, daemon) = try await loaded(patch: [.success(saved)])
         store.set("fix.workers", to: 1, in: .allRepos)
         await store.apply()
-        #expect(await daemon.calls.last == .patchConfig(["fix": ["workers": 1]], baseRev: "5c663cb8963c"))
+        #expect(await daemon.calls.last == .patchConfig(["fix": ["workers": 1]], baseRev: "ed1f0bca4af9"))
         #expect(store.original?.rev == "aaaaaaaaaaaa")
         #expect(!store.isDirty)
         #expect(store.savedTo == "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json")
@@ -95,7 +95,7 @@ import Testing
         store.set("fix.model", to: .null, in: gitops)
         let draft = store.draft.config
         await store.apply()
-        #expect(await daemon.calls.last == .putConfig(draft, baseRev: "5c663cb8963c"))
+        #expect(await daemon.calls.last == .putConfig(draft, baseRev: "ed1f0bca4af9"))
         #expect(draft[["projects", "iprally/gitops", "fix", "model"]] == .null)
     }
 
@@ -107,7 +107,7 @@ import Testing
         await store.load()
         store.set("fix.model", to: .null, in: .allRepos)
         await store.apply()
-        #expect(await daemon.calls.last == .patchConfig(["fix": ["model": .null]], baseRev: "5c663cb8963c"))
+        #expect(await daemon.calls.last == .patchConfig(["fix": ["model": .null]], baseRev: "ed1f0bca4af9"))
     }
 
     @Test("an explicit null override in the file survives the load")

@@ -137,7 +137,7 @@
           },
           "setup": {
             "name": "shadow-cljs compile karma-test",
-            "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+            "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
           },
           "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
           "timeout_s": 1800,

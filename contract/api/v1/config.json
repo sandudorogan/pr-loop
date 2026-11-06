@@ -1,5 +1,5 @@
 {
-  "rev": "5c663cb8963c", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
+  "rev": "ed1f0bca4af9", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
   "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json", "source": "file", "error": null,
   "config": {
     "version": 1, "detect": {"roots": ["~/workdir"]}, "lanes": {"separate": false},
@@ -20,7 +20,7 @@
               },
               "setup": {
                 "name": "shadow-cljs compile karma-test",
-                "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+                "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
               },
               "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
               "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
@@ -79,7 +79,7 @@
               },
               "setup": {
                 "name": "shadow-cljs compile karma-test",
-                "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+                "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
               },
               "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
               "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
@@ -162,7 +162,7 @@
             },
             "setup": {
               "name": "shadow-cljs compile karma-test",
-              "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"
+              "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
             },
             "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
             "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],

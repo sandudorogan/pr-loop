@@ -31,7 +31,7 @@ DEFAULTS = json.loads(r'''
        "targets": {"map": [["^ui/src/cljs/(.+)\\.cljs$", "ui/test/\\1_test.cljs"]], "keep": "^ui/test/(.+_test)\\.cljs$",
                    "exists": true, "item": {"/": ".", "_": "-"}, "valid": "^[\\w.-]+$"},
        "setup": {"name": "shadow-cljs compile karma-test",
-                 "run": "(cd .. && npm run postinstall) && npx shadow-cljs compile karma-test"},
+                 "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"},
        "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
        "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
        "note": "Do not run tests that need a JVM or a browser (lein, Karma): they abort in this sandbox. The caller runs the Karma namespaces you touch after you finish and sends any failure back to you."}

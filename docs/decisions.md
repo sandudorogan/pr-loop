@@ -111,6 +111,13 @@ round 4 the round note states the floor. *Why:* on iprally#17430 round 5, Opus r
 round-4 floor made the review notes only, and its summary opened "No-ship as is." The engine did not know the floor
 and had no scale for severity, so its prose and its score disagreed.
 
+**D36. iprally's Karma gate installs before it builds** (2026-11-06). The setup runs the root
+`npm install --prefer-offline --no-save`, which runs `postinstall` itself, not `npm run postinstall` alone.
+*Why:* 15 worktrees had lost `loyto/packages/react_resizable_panels/node_modules`. The wrapper build then took the
+root's react-resizable-panels 3.0.6, `postinstall` failed, and every pass on those PRs went `tests-red` and parked.
+`postinstall` cannot restore a package. `--no-save` keeps the lockfile as it is, since `pr_fix.py` commits with
+`git add -A`. A worktree that is already installed costs about 8 s more.
+
 ## The macOS app
 
 **D23. A SwiftUI app, proper macOS style, no dependencies, Command Line Tools only.** Details: [ui-macos.md](ui-macos.md).

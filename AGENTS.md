@@ -322,8 +322,9 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
   outside a worktree must say "work here, do not create a worktree or branch".
 - **Round ranges.** A round diffs `last-reviewed..head` only when that range is linear. A merge or rebase
   falls back to `origin/<base>...head`, or the reviewer blames other PRs' code.
-- **Stale generated packages.** iprally's Karma gate runs the root `npm run postinstall` first: a base merge leaves
-  `loyto/packages/*/output/` stale and the gate runs 0 tests.
+- **Stale generated packages.** iprally's Karma gate runs the root `npm install --no-save` first (D36), which also
+  runs `postinstall`: a base merge leaves `loyto/packages/*/output/` stale and the gate runs 0 tests, and a worktree
+  missing a package fails `postinstall`, so every pass goes `tests-red`.
 - **No `@Environment(Model.self)` in a table cell.** A `Table` with a conditional `TableColumn` (Project, shown
   for "All repos" only) rebuilds its cells without the window's environment when the column set changes, and the
   lookup traps ("No Observable object of type PeekModel found"). Read the model in the table view and pass it in.
