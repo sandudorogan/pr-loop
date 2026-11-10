@@ -340,14 +340,15 @@ def respond(pr, items, answers, ci_notes):
 
 
 def rerun(jobs):
-    """Reruns each job whose run has finished and returns the rest, since GitHub refuses a rerun mid-run."""
-    waiting = []
-    for job in jobs:
-        if gh(f"repos/{REPO}/actions/runs/{job['run']}")["status"] == "completed":
-            gh("-X", "POST", f"repos/{REPO}/actions/jobs/{job['id']}/rerun")
-        else:
-            waiting.append(job)
-    return waiting
+    """Reruns the failed jobs of each finished run and returns the rest, since GitHub refuses a rerun mid-run.
+
+    One call per run: a rerun starts a new attempt, and GitHub refuses the job ids of an earlier one.
+    """
+    runs = {run: gh(f"repos/{REPO}/actions/runs/{run}") for run in {j["run"] for j in jobs}}
+    for run, at in runs.items():
+        if at["status"] == "completed" and at["conclusion"] != "success":
+            gh("-X", "POST", f"repos/{REPO}/actions/runs/{run}/rerun-failed-jobs")
+    return [j for j in jobs if runs[j["run"]]["status"] != "completed"]
 
 
 def run(pr):

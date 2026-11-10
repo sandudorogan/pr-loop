@@ -28,6 +28,28 @@ class MineLast(unittest.TestCase):
         self.assertTrue(fix.mine_last([{"author": {"login": "me"}, "body": None}], "me"))
 
 
+class Rerun(unittest.TestCase):
+    def rerun(self, jobs, runs):
+        calls = []
+
+        def gh(*args):
+            calls.append(args)
+            return runs.get(int(args[-1].split("/")[-1])) if len(args) == 1 else None
+
+        with patch.object(fix, "gh", gh):
+            return fix.rerun(jobs), [a[-1].split("actions/")[1] for a in calls if a[0] == "-X"]
+
+    def test_two_jobs_of_one_finished_run_take_one_rerun(self):
+        jobs = [{"id": 1, "run": 7, "head": "a"}, {"id": 2, "run": 7, "head": "a"}]
+        waiting, posts = self.rerun(jobs, {7: {"status": "completed", "conclusion": "failure"}})
+        self.assertEqual((waiting, posts), ([], ["runs/7/rerun-failed-jobs"]))
+
+    def test_a_running_run_waits_and_a_green_one_is_dropped(self):
+        jobs = [{"id": 1, "run": 7, "head": "a"}, {"id": 2, "run": 8, "head": "a"}]
+        runs = {7: {"status": "in_progress", "conclusion": None}, 8: {"status": "completed", "conclusion": "success"}}
+        self.assertEqual(self.rerun(jobs, runs), (jobs[:1], []))
+
+
 class Stuck(unittest.TestCase):
     state = {"ci_tries": {"build": ["a", "b", "c"], "lint": ["a", "b"], "e2e": ["a", "b", "c", "d"]}}
 
