@@ -170,11 +170,16 @@ def failed_jobs(jobs, state):
 
 # ---------------------------------------------------------------- worktree
 
+def base_tip(branch):
+    """The base branch's tip on origin. GitHub's baseRefOid moves only when the PR head is pushed."""
+    return sh(["git", "ls-remote", "origin", f"refs/heads/{branch}"]).split()[0]
+
+
 def resumes(red, meta):
     """A tests-red tree carries on while the PR head stands still and, on a PR that conflicts with its base,
     while the base does too: a stacked PR's tests often go green only with the base's newer commits."""
     return red.get("head") == meta["headRefOid"] and (
-        meta["mergeable"] != "CONFLICTING" or red.get("base") == meta["baseRefOid"])
+        meta["mergeable"] != "CONFLICTING" or red.get("base") == meta["baseTip"])
 
 
 def worktree(meta, red, resume):
@@ -364,9 +369,10 @@ def rerun(jobs):
 
 def run(pr):
     meta = json.loads(sh(["gh", "pr", "view", str(pr), "--repo", REPO, "--json",
-                          "state,headRefName,headRefOid,baseRefName,baseRefOid,mergeable"]))
+                          "state,headRefName,headRefOid,baseRefName,mergeable"]))
     if meta["state"] != "OPEN":
         return {"pr": pr, "status": meta["state"].lower()}
+    meta["baseTip"] = base_tip(meta["baseRefName"])
     state = load(pr)
     state.pop("handled_checks", None)
     if state.get("reruns"):
@@ -435,7 +441,7 @@ def run(pr):
     report = {"pr": pr, "worktree": wt, "session": session, "summary": result["summary"], "merged": conflict or caught_up,
               "tests": [{k: t[k] for k in ("ns", "ok")} for t in tests]}
     if red:
-        state["red"] = {"head": meta["headRefOid"], "base": meta["baseRefOid"], "paths": sorted(dirty(wt)), "result": result}
+        state["red"] = {"head": meta["headRefOid"], "base": meta["baseTip"], "paths": sorted(dirty(wt)), "result": result}
         save(pr, state)
         return {**report, "status": "tests-red", "gate": ", ".join(dict.fromkeys(t["gate"] for t in red)),
                 "failing": [t["ns"] for t in red]}

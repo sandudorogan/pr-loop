@@ -117,7 +117,7 @@ class Resumes(unittest.TestCase):
     red = {"head": "h", "base": "b"}
 
     def meta(self, head="h", base="b", mergeable="MERGEABLE"):
-        return {"headRefOid": head, "baseRefOid": base, "mergeable": mergeable}
+        return {"headRefOid": head, "baseTip": base, "mergeable": mergeable}
 
     def test_a_red_tree_resumes_on_the_same_head(self):
         self.assertTrue(fix.resumes(self.red, self.meta(base="moved")))
@@ -186,6 +186,12 @@ class Worktree(unittest.TestCase):
         self.git("push", "-q", "-f", "origin", "g:f")
         with self.assertRaises(SystemExit):
             self.worktree({}, False, rewritten)
+
+    def test_the_base_tip_follows_a_push_to_the_base(self):
+        self.git("checkout", "-q", "main")
+        moved = self.commit("other", "main moved")
+        self.git("push", "-q", "origin", "main")
+        self.assertEqual(fix.base_tip("main"), moved)
 
     def test_red_work_stays_only_while_the_pass_resumes(self):
         Path(self.wt, "feature").write_text("red work")
