@@ -1,3 +1,7 @@
+from pathlib import Path
+import os
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -107,6 +111,89 @@ class Conversation(unittest.TestCase):
         self.assertEqual(items[0], {"ref": "comment:1", "kind": "comment", "author": "rev", "body": "body 1",
                                     "url": "https://github.com/o/r/pull/7#issuecomment-1", "id": 1})
         gh.assert_any_call(f"repos/{fix.REPO}/commits/abc")
+
+
+class Resumes(unittest.TestCase):
+    red = {"head": "h", "base": "b"}
+
+    def meta(self, head="h", base="b", mergeable="MERGEABLE"):
+        return {"headRefOid": head, "baseRefOid": base, "mergeable": mergeable}
+
+    def test_a_red_tree_resumes_on_the_same_head(self):
+        self.assertTrue(fix.resumes(self.red, self.meta(base="moved")))
+        self.assertTrue(fix.resumes(self.red, self.meta(mergeable="CONFLICTING")))
+
+    def test_a_new_head_or_a_moved_base_under_a_conflict_starts_over(self):
+        self.assertFalse(fix.resumes(self.red, self.meta(head="new")))
+        self.assertFalse(fix.resumes(self.red, self.meta(base="moved", mergeable="CONFLICTING")))
+        self.assertFalse(fix.resumes({"head": "h"}, self.meta(mergeable="CONFLICTING")))
+        self.assertFalse(fix.resumes({}, self.meta()))
+
+
+class Worktree(unittest.TestCase):
+    """worktree() against a real origin: a clone at `root`, the PR branch `f` on top of `main`."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        origin, self.root = (os.path.join(self.dir.name, d) for d in ("origin", "root"))
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", origin], check=True)
+        subprocess.run(["git", "clone", "-q", origin, self.root], check=True, capture_output=True)
+        self.commit("base", "main")
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "-b", "f")
+        self.head = self.commit("feature", "f")
+        self.git("push", "-q", "origin", "f")
+        self.git("checkout", "-q", "main")
+        self.git("branch", "-q", "-D", "f")
+        real = fix.sh
+        self.patches = [patch.object(fix, "REPO_ROOT", self.root),
+                        patch.object(fix, "sh", lambda args, cwd=None, **kw: real(args, cwd or self.root, **kw))]
+        for p in self.patches:
+            p.start()
+        self.wt = self.worktree({}, False)
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.dir.cleanup()
+
+    def git(self, *args, cwd=None):
+        return subprocess.run(["git", "-C", cwd or self.root, *args], check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    def commit(self, name, text, cwd=None):
+        Path(cwd or self.root, name).write_text(text)
+        self.git("add", name, cwd=cwd)
+        self.git("commit", "-qm", name, cwd=cwd)
+        return self.git("rev-parse", "HEAD", cwd=cwd)
+
+    def worktree(self, red, resume, head=None):
+        return fix.worktree({"headRefName": "f", "headRefOid": head or self.head}, red, resume)
+
+    def test_a_rewritten_branch_whose_commits_the_head_holds_gives_way(self):
+        self.git("checkout", "-q", "main")
+        self.commit("other", "main moved")
+        self.git("checkout", "-q", "-b", "g")
+        rebased = self.commit("feature", "f")
+        self.git("push", "-q", "-f", "origin", "g:f")
+        self.worktree({}, False, rebased)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.wt), rebased)
+
+    def test_a_commit_only_the_worktree_holds_stops_the_pass(self):
+        self.commit("local", "not pushed", cwd=self.wt)
+        self.git("checkout", "-q", "-b", "g", self.head)
+        rewritten = self.commit("feature", "rewritten")
+        self.git("push", "-q", "-f", "origin", "g:f")
+        with self.assertRaises(SystemExit):
+            self.worktree({}, False, rewritten)
+
+    def test_red_work_stays_only_while_the_pass_resumes(self):
+        Path(self.wt, "feature").write_text("red work")
+        red = {"head": self.head, "paths": ["feature"]}
+        self.worktree(red, True)
+        self.assertEqual(Path(self.wt, "feature").read_text(), "red work")
+        self.worktree(red, False)
+        self.assertEqual(Path(self.wt, "feature").read_text(), "f")
 
 
 if __name__ == "__main__":

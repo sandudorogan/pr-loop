@@ -23,7 +23,8 @@ comes back to Codex with the earlier refutations, CI_TRIES looks in a row at mos
 waits for a human. A conflict with the base is merged first, as its own commit, with Codex resolving
 the markers. Prints one JSON result whose `status` is pushed | refuted-only | no-changes |
 nothing-to-fix | ci-stuck | tests-red | limited. A tests-red pass leaves its work in the worktree;
-the next pass on the same head tests it again and carries on from there, and a new head discards it.
+the next pass on the same head tests it again and carries on from there, and a new head discards it, as does
+a base that moved under a conflict: its merge is what the gates lack.
 Any other local change (a pass that died mid-way) is stashed, never lost.
 """
 import argparse, fcntl, json, os, re, shutil, subprocess, sys, tempfile
@@ -169,10 +170,18 @@ def failed_jobs(jobs, state):
 
 # ---------------------------------------------------------------- worktree
 
-def worktree(meta, red):
+def resumes(red, meta):
+    """A tests-red tree carries on while the PR head stands still and, on a PR that conflicts with its base,
+    while the base does too: a stacked PR's tests often go green only with the base's newer commits."""
+    return red.get("head") == meta["headRefOid"] and (
+        meta["mergeable"] != "CONFLICTING" or red.get("base") == meta["baseRefOid"])
+
+
+def worktree(meta, red, resume):
     """The PR branch's worktree, created when missing, fast-forwarded to the PR head. Local changes are
-    allowed only when they are the work of a tests-red pass, and dropped once the PR head moves on.
-    Any other change is stashed: a pass that died mid-way must not park the PR for good."""
+    allowed only when they are the work of a tests-red pass, and dropped once that pass no longer resumes.
+    Any other change is stashed: a pass that died mid-way must not park the PR for good. Local commits
+    the PR head already holds as patches (the branch was rebased or rewritten) give way to the head."""
     branch, head = meta["headRefName"], meta["headRefOid"]
     for block in sh(["git", "worktree", "list", "--porcelain"]).strip().split("\n\n"):
         fields = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
@@ -191,14 +200,16 @@ def worktree(meta, red):
         sh(["git", "stash", "push", "-q", "-u", "-m", f"pr_fix: stray changes at {head[:12]}", "--", *stray], cwd=wt)
     left = dirty(wt)
     sh(["git", "fetch", "origin", head], cwd=wt)
-    if left and red["head"] != head:
+    if left and not resume:
         sh(["git", "reset", "-q", "--hard", head], cwd=wt)
         sh(["git", "clean", "-fdq", "--", *left], cwd=wt)
     ancestor = lambda a, b: subprocess.run(["git", "merge-base", "--is-ancestor", a, b], cwd=wt).returncode == 0
     if ancestor("HEAD", head):
         sh(["git", "merge", "--ff-only", "-q", head], cwd=wt)
     elif not ancestor(head, "HEAD"):
-        die(f"{wt} holds commits that PR head {head[:12]} does not")
+        if "+" in sh(["git", "cherry", head, "HEAD"], cwd=wt).split():
+            die(f"{wt} holds commits that PR head {head[:12]} does not")
+        sh(["git", "reset", "-q", "--hard", head], cwd=wt)
     return wt
 
 
@@ -353,7 +364,7 @@ def rerun(jobs):
 
 def run(pr):
     meta = json.loads(sh(["gh", "pr", "view", str(pr), "--repo", REPO, "--json",
-                          "state,headRefName,headRefOid,baseRefName,mergeable"]))
+                          "state,headRefName,headRefOid,baseRefName,baseRefOid,mergeable"]))
     if meta["state"] != "OPEN":
         return {"pr": pr, "status": meta["state"].lower()}
     state = load(pr)
@@ -366,14 +377,14 @@ def run(pr):
     save(pr, state)
     items = feedback(pr, meta["headRefOid"], state) + failed_jobs(jobs, state)
     prior = state.get("red", {})
-    resume = prior.get("head") == meta["headRefOid"]
+    resume = resumes(prior, meta)
     conflict = meta["mergeable"] == "CONFLICTING" and not resume
     if not items and not conflict and not resume:
         red_jobs = stuck(jobs, state)
         return {"pr": pr, "status": "ci-stuck", "summary": f"{', '.join(red_jobs)} red after {CI_TRIES} refuted looks, "
                                                            f"needs a human"} if red_jobs else \
             {"pr": pr, "status": "nothing-to-fix"}
-    wt = worktree(meta, prior)
+    wt = worktree(meta, prior, resume)
     conv = project_conventions(wt, meta, items)
     os.makedirs(names.SCRATCH, exist_ok=True)
     scratch = tempfile.mkdtemp(prefix=f"{pr}-", dir=names.SCRATCH)
@@ -424,7 +435,7 @@ def run(pr):
     report = {"pr": pr, "worktree": wt, "session": session, "summary": result["summary"], "merged": conflict or caught_up,
               "tests": [{k: t[k] for k in ("ns", "ok")} for t in tests]}
     if red:
-        state["red"] = {"head": meta["headRefOid"], "paths": sorted(dirty(wt)), "result": result}
+        state["red"] = {"head": meta["headRefOid"], "base": meta["baseRefOid"], "paths": sorted(dirty(wt)), "result": result}
         save(pr, state)
         return {**report, "status": "tests-red", "gate": ", ".join(dict.fromkeys(t["gate"] for t in red)),
                 "failing": [t["ns"] for t in red]}
