@@ -164,6 +164,31 @@ class Gates(Configured):
         self.assertEqual(run.call_args.kwargs["timeout"], 600)
         self.assertEqual(rq.load(NEW, rq.FIXES)["1"]["key"], rq.feedback_key(pr(repo=NEW)))
 
+    def test_errors_count_from_zero_on_a_new_head(self):
+        self.write({"projects": {NEW: {"root": "/src/w", "fix": {"max_errors": 3}}}})
+        rq.record(NEW, "1", {"sha": "b" * 40, "key": "k", "status": "error", "errors": 3}, rq.FIXES)
+        with patch.object(rq.subprocess, "run", return_value=CompletedProcess([], 1, "", "boom")), \
+                patch.object(rq, "log"), patch.object(rq, "in_review"):
+            rq.fix(pr(repo=NEW), [])
+        self.assertEqual({k: rq.load(NEW, rq.FIXES)["1"][k] for k in ("errors", "key")}, {"errors": 1, "key": None})
+
+    def test_no_auto_fix_still_merges_a_conflicting_base(self):
+        self.write({"projects": {NEW: {"root": "/src/w"}}})
+        reviewed = {"1": {"sha": HEAD, "status": "held"}}
+        conflict = pr(repo=NEW, labels=[rq.NO_FIX], mergeable="CONFLICTING")
+        self.assertTrue(rq.fixable(conflict, reviewed, {}))
+        self.assertFalse(rq.fixable(pr(repo=NEW, labels=[rq.NO_FIX]), reviewed, {}))
+        with patch.object(rq.subprocess, "run", return_value=CompletedProcess([], 0, "{}", "")) as run, \
+                patch.object(rq, "log"), patch.object(rq, "in_review"):
+            rq.fix(conflict, [])
+            rq.fix(pr(repo=NEW, mergeable="CONFLICTING"), [])
+        self.assertEqual([c.args[0][-1] for c in run.call_args_list], ["--merge-only", "1"])
+
+    def test_a_project_with_the_fix_lane_off_merges_nothing(self):
+        self.write({"projects": {NEW: {"root": "/src/w", "fix": {"enabled": False}}}})
+        conflict = pr(repo=NEW, labels=[rq.NO_FIX], mergeable="CONFLICTING")
+        self.assertFalse(rq.fixable(conflict, {"1": {"sha": HEAD, "status": "held"}}, {}))
+
 
 class Reviewers(Configured):
     def test_only_enabled_reviewers_run_and_skipped_ones_count_as_stopped(self):

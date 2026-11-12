@@ -11,7 +11,7 @@ head and the PR carries feedback no fix pass has seen: a new review, thread comm
 A push from it is the next review round.
 
 Labels opt a PR out: no-auto-review skips the reviewers (the fix lane then acts on feedback alone),
-no-auto-fix keeps the fix lane off it. --pr N reviews a labeled PR anyway.
+no-auto-fix keeps the fix lane off it, but for a base conflict: that pass merges the base and nothing else. --pr N reviews a labeled PR anyway.
 
 One process serves every project it detects: the repos of my PRs, of the PRs that request or are assigned to me,
 and the config's projects, worked when a checkout under detect.roots (or the project's root) has them. The config
@@ -282,6 +282,12 @@ def unfixed(pr):
     return pr["repo"] not in checkouts() or not lanes_of(pr)["fix"]["enabled"]
 
 
+def merge_only(pr):
+    """A no-auto-fix PR that conflicts with its base: the label keeps Codex off the feedback, not off the merge."""
+    return (pr["mergeable"] == "CONFLICTING" and labeled(pr, NO_FIX) and pr["repo"] in checkouts()
+            and effective_for(pr["repo"], pr["number"])["fix"]["enabled"])
+
+
 def colleague_approved(pr):
     return any(not r["viewerDidAuthor"] and r["state"] == "APPROVED" for r in pr["latestOpinionatedReviews"]["nodes"])
 
@@ -524,10 +530,10 @@ def feedback_key(pr):
 
 def fixable(pr, state, fixes):
     """My PR whose head the reviewers are done with (or skip), carrying feedback, a conflict or red CI no fix
-    pass has seen."""
+    pass has seen. A no-auto-fix PR qualifies on a conflict alone."""
     seen = state.get(str(pr["number"]), {})
     reviewed = unreviewed(pr) or seen.get("sha") == pr["headRefOid"] and seen.get("status") != "limited"
-    return (pr["viewerDidAuthor"] and not unfixed(pr) and reviewed
+    return (pr["viewerDidAuthor"] and (not unfixed(pr) or merge_only(pr)) and reviewed
             and fixes.get(str(pr["number"]), {}).get("key") != feedback_key(pr))
 
 
@@ -567,7 +573,7 @@ def fix(pr, first):
     knobs = lanes_of(pr)["fix"]
     in_review(repo, n, True, "fix")
     try:
-        out = subprocess.run([sys.executable, PR_FIX, "run", "--pr", str(n)], **child(repo), capture_output=True,
+        out = subprocess.run([sys.executable, PR_FIX, "run", "--pr", str(n), *["--merge-only"] * merge_only(pr)], **child(repo), capture_output=True,
                              text=True, timeout=knobs["pass_timeout_s"])
     finally:
         in_review(repo, n, False)
@@ -579,7 +585,8 @@ def fix(pr, first):
     log(repo, n, f"fix {status}: {note}" + (", retrying on the next refresh" if status == "limited" else ""))
     if status == "limited":
         return
-    errors = load(repo, FIXES).get(str(n), {}).get("errors", 0) + 1 if status in ("error", "tests-red") else 0
+    last = load(repo, FIXES).get(str(n), {})
+    errors = (last.get("errors", 0) if last.get("sha") == head else 0) + 1 if status in ("error", "tests-red") else 0
     with db.tx():
         record(repo, str(n), {"sha": head, "key": feedback_key(pr) if not errors or errors >= knobs["max_errors"] else None,
                               "status": status, "note": note, "errors": errors, "at": f"{datetime.now():%F %T}"}, FIXES)

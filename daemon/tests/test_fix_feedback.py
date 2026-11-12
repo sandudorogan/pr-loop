@@ -202,5 +202,30 @@ class Worktree(unittest.TestCase):
         self.assertEqual(Path(self.wt, "feature").read_text(), "f")
 
 
+class MergeOnly(unittest.TestCase):
+    def run_pass(self, mergeable):
+        meta = f'{{"state": "OPEN", "headRefName": "b", "headRefOid": "h", "baseRefName": "main", "mergeable": "{mergeable}"}}'
+        with patch.object(fix, "sh", return_value=meta), patch.object(fix, "base_tip", return_value="t"), \
+                patch.object(fix, "load", return_value={"red": {"head": "h", "paths": ["x"]}}), \
+                patch.object(fix, "save"), patch.object(fix, "checks", return_value=[]), \
+                patch.object(fix, "feedback") as feedback, patch.object(fix, "worktree", return_value="/wt") as wt, \
+                patch.object(fix, "project_conventions"), patch.object(fix, "merge", return_value=("s", True)), \
+                patch.object(fix, "land", return_value="p") as land:
+            out = fix.run(1, merge_only=True)
+        feedback.assert_not_called()
+        return out, wt, land
+
+    def test_a_conflict_is_merged_and_the_feedback_left_alone(self):
+        out, wt, land = self.run_pass("CONFLICTING")
+        self.assertEqual((out["status"], out["pushed"], out["fixed"]), ("pushed", "p", 0))
+        wt.assert_called_once_with(unittest.mock.ANY, {}, False)
+        land.assert_called_once_with("/wt", "b", "h", "", "")
+
+    def test_no_conflict_left_is_nothing_to_fix(self):
+        out, wt, land = self.run_pass("MERGEABLE")
+        self.assertEqual(out["status"], "nothing-to-fix")
+        wt.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

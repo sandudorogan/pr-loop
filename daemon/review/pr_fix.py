@@ -3,6 +3,7 @@
 
 Usage:
   pr_fix.py run  --pr N    fix, format, test, commit, push, then 👍 + resolve, or reply + resolve
+  pr_fix.py run  --pr N --merge-only    merge a conflicting base, push, leave the feedback alone (no-auto-fix)
   pr_fix.py dump --pr N    print the feedback the next run would hand to Codex
 
 Codex runs sandboxed (workspace-write, no network) and never touches git, so every step that
@@ -367,11 +368,13 @@ def rerun(jobs):
     return [j for j in jobs if runs[j["run"]]["status"] != "completed"]
 
 
-def run(pr):
+def run(pr, merge_only=False):
     meta = json.loads(sh(["gh", "pr", "view", str(pr), "--repo", REPO, "--json",
                           "state,headRefName,headRefOid,baseRefName,mergeable"]))
     if meta["state"] != "OPEN":
         return {"pr": pr, "status": meta["state"].lower()}
+    if merge_only and meta["mergeable"] != "CONFLICTING":
+        return {"pr": pr, "status": "nothing-to-fix"}
     meta["baseTip"] = base_tip(meta["baseRefName"])
     state = load(pr)
     state.pop("handled_checks", None)
@@ -381,8 +384,8 @@ def run(pr):
     green = {c["name"] for c in jobs if c["conclusion"] == "success"}
     state["ci_tries"] = {n: r for n, r in state.get("ci_tries", {}).items() if n not in green}
     save(pr, state)
-    items = feedback(pr, meta["headRefOid"], state) + failed_jobs(jobs, state)
-    prior = state.get("red", {})
+    items = [] if merge_only else feedback(pr, meta["headRefOid"], state) + failed_jobs(jobs, state)
+    prior = {} if merge_only else state.get("red", {})
     resume = resumes(prior, meta)
     conflict = meta["mergeable"] == "CONFLICTING" and not resume
     if not items and not conflict and not resume:
@@ -473,6 +476,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=("run", "dump"))
     ap.add_argument("--pr", type=int, required=True)
+    ap.add_argument("--merge-only", action="store_true")
     a = ap.parse_args()
     names.migrate()
     configure(config.effective_for(REPO, a.pr, cfg=LOADED.config))
@@ -487,7 +491,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             die(f"another fix pass runs on #{a.pr}")
-        print(json.dumps(run(a.pr), indent=2))
+        print(json.dumps(run(a.pr, a.merge_only), indent=2))
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ One process serves every project. Clients (the CLI, the app) read and change its
   is listed `no-checkout`, and its PRs are `skipped` rows. The daemon logs `projects: …` when the list changes.
 - **New projects take the defaults:** both lanes on. Built-in overrides: `iprally/gitops` has review off, `iprally/iprally` has its fixer gates.
 - **Review lane:** my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before, in every active project.
-- **Fix lane:** my PRs only. Input = unresolved threads, review bodies on the head, colleagues' PR comments after the head commit, failed Actions jobs, base conflict.
+- **Fix lane:** my PRs only. Input = unresolved threads, review bodies on the head, colleagues' PR comments after the head commit, failed Actions jobs, base conflict. `no-auto-fix` leaves only the conflict: a merge-only pass.
 - **Pools:** one shared review pool and one shared fix pool. `lanes.separate` gives each active project its own pair,
   sized by its effective `workers`. The switch is live: running passes finish in their old pool (`daemon/pr_loop/pools.py`).
 - Every PR dict carries `repo`. Lanes, locks and state key on `(repo, number)`: PR numbers of two repos overlap.

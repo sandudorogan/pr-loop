@@ -118,6 +118,14 @@ root's react-resizable-panels 3.0.6, `postinstall` failed, and every pass on tho
 `postinstall` cannot restore a package. `--no-save` keeps the lockfile as it is, since `pr_fix.py` commits with
 `git add -A`. A worktree that is already installed costs about 8 s more.
 
+**D37. `no-auto-fix` still merges a conflicting base** (2026-11-13). On a labeled PR of mine that conflicts with
+its base, the fix lane runs `pr_fix.py run --merge-only`: it merges the base (Codex resolves the markers), pushes,
+and hands Codex no feedback and no red CI. A project whose `fix.enabled` is false still merges nothing. A fix
+pass's error count starts over on a new head. *Why:* iprally#17604 was approved, labeled `no-auto-fix` to keep
+Codex off the review threads after a revert, and then sat CONFLICTING with no row that said so. The label is
+about feedback; a conflict blocks the merge the owner wants. The old count (3, from an earlier head) would have
+parked the first failed merge at once.
+
 ## The macOS app
 
 **D23. A SwiftUI app, proper macOS style, no dependencies, Command Line Tools only.** Details: [ui-macos.md](ui-macos.md).
