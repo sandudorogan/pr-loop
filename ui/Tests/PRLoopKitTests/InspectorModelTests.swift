@@ -27,11 +27,24 @@ import Testing
         #expect(try model(gitops).fixedHead == "This head")
     }
 
-    @Test("reads the verdict in the status words")
-    func verdict() throws {
-        #expect(try model(live).verdict == "Findings posted")
-        #expect(try model(ready).verdict == "Notes only")
-        #expect(try model(queued).verdict == nil)
+    @Test("words the review by its verdict when it has one")
+    func reviewStatus() throws {
+        #expect(try model(live).reviewStatus == "posted")
+        #expect(try model(ready).reviewStatus == "quality-only")
+        #expect(try model(queued).reviewStatus == nil)
+    }
+
+    @Test("puts each pass on one line and leaves out what is zero or off")
+    func passLines() throws {
+        #expect(try model(live).reviewLine == "Older head 0aa1c3e9b2d4 · 1 round with findings")
+        #expect(try model(live).fixLine == "Older head 0aa1c3e9b2d4")
+        #expect(try model(queued).reviewLine == nil)
+        let fix: JSONValue = .object([
+            "sha": .string("77aa0c1e2f3d4b5a69788796a5b4c3d2e1f00f1e"), "current": .bool(true),
+            "status": .string("tests-red"), "note": .string("Karma red"), "errors": .number(3),
+            "parked": .bool(true), "at": .string("2026-10-25T10:31:12+03:00"),
+        ])
+        #expect(try model(gitops, ["fix": fix]).fixLine == "This head · 3 failed passes in a row · parked")
     }
 
     @Test("counts failed fix passes", arguments: [(0, "None"), (1, "1 failed pass"), (3, "3 failed passes in a row")])

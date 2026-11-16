@@ -4,7 +4,7 @@ import SwiftUI
 
 struct QueueTable: View {
     /// The narrowest detail column that shows every column at its minimum without a horizontal scroller.
-    static let minWidth: CGFloat = 566
+    static let minWidth: CGFloat = 647
 
     let sections: [QueueSection]
     @Binding var layout: QueueLayout
@@ -33,6 +33,7 @@ struct QueueTable: View {
                 .findingsPeek(row.id, popover(row), peek: peek)
             }
             .width(min: 120).customizationID("title")
+            TableColumn("Scope") { ScopeCell(row: $0) }.width(min: 64, ideal: 104).customizationID("scope")
             TableColumn("Author") { Text($0.author).lineLimit(1).help("@\($0.login)") }
                 .width(min: 48, ideal: 100).customizationID("author")
             TableColumn("Status") { row in
@@ -147,6 +148,25 @@ private struct MarkCell: View {
             } else if item.isPaused {
                 Image(systemName: "pause.fill").foregroundStyle(.secondary).accessibilityLabel("Paused")
             }
+        }
+    }
+}
+
+/// The judge's verdict as a badge, faded when it describes an older head; the reason is its tooltip.
+private struct ScopeCell: View {
+    let row: TodoRow
+
+    var body: some View {
+        if let scope = row.item?.scope {
+            HStack(spacing: 4) {
+                if let style = scope.style {
+                    Chip(tint: style.tone.color) { Label(style.label, systemImage: style.symbol) }
+                        .opacity(scope.isCurrent ? 1 : 0.5)
+                        .accessibilityLabel("Scope: \(style.label)")
+                }
+                if scope.status == .running { ProgressView().controlSize(.mini) }
+            }
+            .help(scope.help)
         }
     }
 }

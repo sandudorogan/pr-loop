@@ -31,13 +31,14 @@ public struct QueueItem: Codable, Hashable, Identifiable, Sendable {
     public let fix: FixResult?
     public let isFixQueued: Bool
     public let override: [String]
+    public let scope: Scope?
 
     public var id: String { key }
     public var ref: PRRef { PRRef(repo: repo, number: number) }
 
     enum CodingKeys: String, CodingKey {
         case key, repo, number, title, url, author, labels, head, base, additions, deletions
-        case group, rank, status, detail, active, review, findings, fix, override
+        case group, rank, status, detail, active, review, findings, fix, override, scope
         case isMine = "mine"
         case authorName = "author_name"
         case isDraft = "draft"

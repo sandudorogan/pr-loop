@@ -7,24 +7,18 @@ struct InspectorHeader: View {
     var body: some View {
         let item = model.item
         let status = StatusStyle(item)
-        let author = item.authorLabel
         VStack(alignment: .leading, spacing: 6) {
-            Text(model.title).font(.caption.weight(.semibold)).foregroundStyle(.tint)
             Text(item.title).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
-            Text("by \(author) · pushed \(item.pushedAt, format: .relative(presentation: .named))")
-                .font(.callout).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("by \(item.authorLabel) · pushed \(item.pushedAt, format: .relative(presentation: .named)) ·")
+                Text(verbatim: "+\(item.additions)").foregroundStyle(.green)
+                Text(verbatim: "−\(item.deletions)").foregroundStyle(.red)
+            }
+            .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+            .help("\(model.head) → \(item.base)")
             Flow {
                 Chip(tint: status.tone.color) { Label(status.label, systemImage: status.symbol) }
                 if item.isDraft { Chip(tint: .secondary) { Label("Draft", systemImage: "pencil") } }
-                Chip(tint: .secondary) {
-                    HStack(spacing: 4) {
-                        Text(verbatim: "+\(item.additions)").foregroundStyle(.green)
-                        Text(verbatim: "−\(item.deletions)").foregroundStyle(.red)
-                    }
-                    .monospacedDigit()
-                }
-                Chip(tint: .purple) { Label(item.base, systemImage: "arrow.triangle.merge") }
-                Chip(tint: .secondary) { Text(model.head).monospaced() }
                 ForEach(item.labels, id: \.self) { label in
                     Chip(tint: .teal) { Label(label, systemImage: "tag") }
                 }
@@ -59,7 +53,7 @@ struct InspectorRowStyle: LabeledContentStyle {
     }
 }
 
-private struct Chip<Content: View>: View {
+struct Chip<Content: View>: View {
     let tint: Color
     @ViewBuilder let content: Content
 
@@ -74,7 +68,7 @@ private struct Chip<Content: View>: View {
     }
 }
 
-private struct Flow: Layout {
+struct Flow: Layout {
     var spacing: CGFloat = 6
 
     /// An unknown width stacks one chip per row, so the ideal width is the widest chip, never the sum.

@@ -1,6 +1,8 @@
 import PRLoopKit
 import SwiftUI
 
+/// Most important first: the PR, what runs on it now, its scope, its findings. The last passes sit at the bottom, and
+/// shas, base and notes live in tooltips.
 struct PRInspector: View {
     enum Tab: String {
         case status, settings
@@ -13,11 +15,12 @@ struct PRInspector: View {
 
     var body: some View {
         if items.count == 1, let item = items.first {
+            let model = InspectorModel(item)
             VStack(spacing: 0) {
-                bar
+                bar(model)
                 Divider()
                 switch tab {
-                case .status: status(InspectorModel(item))
+                case .status: status(model)
                 case .settings: PRSettingsTab(item: item)
                 }
             }
@@ -27,12 +30,24 @@ struct PRInspector: View {
         }
     }
 
-    private var bar: some View {
+    private func bar(_ model: InspectorModel) -> some View {
         HStack {
-            Text(tab == .status ? "Status" : "PR Settings").font(.headline)
+            Text(tab == .status ? model.title : "PR Settings").font(.headline)
             Spacer()
             switch tab {
-            case .status: Button("PR Settings", systemImage: "gearshape") { tab = .settings }.help("PR settings")
+            case .status:
+                Menu {
+                    PullRequestMenu(
+                        rows: [.open(model.item)], store: store, peek: PeekFocus(model: peek, id: model.item.id),
+                        showSettings: { tab = .settings })
+                } label: {
+                    Label("Actions", systemImage: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Actions")
+                Button("PR Settings", systemImage: "gearshape") { tab = .settings }.help("PR settings")
             case .settings: Button("Close", systemImage: "xmark") { tab = .status }.help("Back to the status")
             }
         }
@@ -45,27 +60,18 @@ struct PRInspector: View {
     private func status(_ model: InspectorModel) -> some View {
         let item = model.item
         return Form {
-            Section {
-                InspectorHeader(model: model)
-                Menu("Actions") {
-                    PullRequestMenu(
-                        rows: [.open(item)], store: store, peek: PeekFocus(model: peek, id: item.id),
-                        showSettings: { tab = .settings })
-                }
-            }
+            Section { InspectorHeader(model: model) }
             if let active = item.active { LiveSection(model: model, active: active) }
-            ReviewSection(model: model)
-            Section {
-                if let findings = item.findings {
+            if let scope = item.scope { ScopeSection(scope: scope) }
+            if let findings = item.findings {
+                Section {
                     FindingsView(findings: findings)
-                    Text(findings.conventionsLine).font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text(item.detail).foregroundStyle(.secondary)
+                } header: {
+                    SectionTitle(title: "Findings", symbol: "exclamationmark.bubble", tint: .orange)
+                        .help(findings.conventionsLine)
                 }
-            } header: {
-                SectionTitle(title: "Findings", symbol: "exclamationmark.bubble", tint: .orange)
             }
-            FixSection(model: model)
+            if item.review != nil || item.fix != nil { PassesSection(model: model) }
         }
         .formStyle(.grouped)
         .labeledContentStyle(InspectorRowStyle())
@@ -78,8 +84,7 @@ private struct LiveSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Lane", value: model.lane ?? "")
-            LabeledContent("Running for") { Text(active.since, style: .timer).monospacedDigit() }
+            LabeledContent(model.lane ?? "") { Text(active.since, style: .timer).monospacedDigit() }
             ForEach(active.reviewers ?? []) { progress in
                 LabeledContent(model.reviewerLabel(progress.id)) {
                     HStack(spacing: 6) {

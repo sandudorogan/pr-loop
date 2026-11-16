@@ -169,6 +169,13 @@ fix lane runs it without the owner. Any other idle PR is Parked (tests-red, ci-s
 until the owner acts. *Why:* Waiting held 23 PRs, and the four the fixer was about to take sat among nineteen that
 needed the owner, so the list did not say where to look.
 
+**D39. The inspector shows the most important first and nothing twice** (2026-11-16). Order: header, live run,
+scope, findings, last passes. The header bar carries the `repo #N` title and the Actions menu. Gone: the Review and
+Fix sections' Status, Verdict, Hold "No", Errors "None", the Note that repeats the table's Detail, the head and base
+chips, and the Findings fallback that repeated Detail. The review verdict replaces its status when it has one. Shas,
+base, file paths, notes and conventions are tooltips. *Why:* the owner reads the inspector to decide; status words
+that the table row already shows, and zero values, pushed the scope verdict and the findings below the fold.
+
 ## Process of work
 
 **D28. No PRs in this repo.** Each change lands as commits pushed straight to `main` from a worktree. The main

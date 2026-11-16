@@ -202,13 +202,13 @@ menu bar extra is on. With it off, the app quits (`applicationShouldTerminateAft
 | Sidebar toggle | Our own button in the sidebar's toolbar. The system toggle is removed (`.toolbar(removing: .sidebarToggle)`) because it shows no on state. It drives `NavigationSplitView(columnVisibility:)` from `@SceneStorage("sidebarShown")`. |
 | Sections | A to-do list (`QueueFilter.sections`, decisions D32): To Approve (colleagues' items), My PRs (`mine` items), Done (the `done` entries of `GET /v1/history?limit=200&repo=`, `api.md §3.13`). Items with `done: true` (a done PR whose run still finishes) stay out of the first two. To Approve and My PRs split into stages (`QueueStage`): Ready ("Ready to approve" / "Ready for review"), In work (`active`), Up next (`queued`), Fix queued (`idle` or unknown with `fix_queued`), Parked (`idle` or unknown, nothing owed: tests-red, ci-stuck, held, skipped), Paused. Done has no stages. Every section and stage is a `Section` with its own header (`QueueHeader`: chevron, stage symbol, title, count); a folded one emits no rows. The folded ids (`toApprove`, `mine.ready`, …) are `@SceneStorage("folded")`, Done by default. Empty sections and stages hide. A row is a `TodoRow`: `.open(QueueItem)` or `.done(HistoryEntry)`. |
 | Order | `QueueLayout` in `@AppStorage("queueLayout")` (JSON): the section order and each section's stage order, by default To Approve, My PRs, Done and Ready, In work, Up next, Fix queued, Parked, Paused. Stages are stored as strings: a kind the app no longer has (`waiting`) drops, the rest of the layout stays. A header drags onto another header of its level (`.draggable` / `.dropDestination` with its `dragID`, `section:mine` or `stage:mine.ready`), or moves from its menu (Move Up / Move Down, to the next visible header). Inside a stage the daemon's `items` order; Done keeps the history order (`at` descending). No column sort. |
-| Columns | mark (▶ / rank / ✓ / pause; a done row ◯✓) · PR · Project (All repos only) · Title (`[Draft]` tag) · Author (`you` when `mine`, else `author_name`, else the login; `.help` shows `@login`) · Status (badge + override cue; a done row shows its `outcome`) · Detail (a timer while `active`; a done row "Merged · 2 days ago"). A ready row is green "Ready to approve" for a colleague's PR and purple "Ready for review" for mine (`StatusStyle(item)`, `Tone.mine`). Minimums sum to `QueueTable.minWidth` = 566 pt. Customization is `@SceneStorage("todoColumns")`. |
+| Columns | mark (▶ / rank / ✓ / pause; a done row ◯✓) · PR · Project (All repos only) · Title (`[Draft]` tag) · Scope (the judge's verdict as a badge, faded for an older head, a spinner while a pass runs; `.help` = reason, note, error) · Author (`you` when `mine`, else `author_name`, else the login; `.help` shows `@login`) · Status (badge + override cue; a done row shows its `outcome`) · Detail (a timer while `active`; a done row "Merged · 2 days ago"). A ready row is green "Ready to approve" for a colleague's PR and purple "Ready for review" for mine (`StatusStyle(item)`, `Tone.mine`). Minimums sum to `QueueTable.minWidth` = 647 pt. Customization is `@SceneStorage("todoColumns")`. |
 | Selection | Multi, keyed by `PRRef.id`. ⏎ or double-click opens the PR. **A non-empty selection opens the inspector.** Deselect leaves it as it is. |
 | Override cue | `items[].override` non-empty → `slider.horizontal.3` after the status badge, with the paths in `.help` and the accessibility label. |
 | Toolbar | Principal: daemon status (Running · review busy/workers · fix busy/workers, Paused, Fetching, GitHub fetch failed, Disconnected + Retry). With `lanes.separate` and one repo selected, it counts that repo's pools. Trailing group, in this order: Filter, Mark Done/Move to To-Do, Pause/Resume (the selected PRs), Refresh, Inspector toggle. |
 | Filter | A plain `TextField` in a `.primaryAction` toolbar item (`FilterField`), placed before the buttons, so NSToolbar overflows the buttons first. It matches number, title or project. Esc clears it. ⌘F calls `NSWindow.focusToolbarField()`. |
-| Inspector | A column in the detail `HStack`, after a `ResizeHandle`. Width is `@SceneStorage("inspectorWidth")`, from 280 pt up to what leaves the table its 566 pt. Shown state is `@SceneStorage("inspector")`. |
-| Window minimum | SwiftUI drops a minimum on the detail column, so the window carries it: `max(820, sidebar 228 (when shown) + 566 + inspector + 1)`. Opening the inspector in a narrow window grows the window. |
+| Inspector | A column in the detail `HStack`, after a `ResizeHandle`. Width is `@SceneStorage("inspectorWidth")`, from 280 pt up to what leaves the table its 647 pt. Shown state is `@SceneStorage("inspector")`. |
+| Window minimum | SwiftUI drops a minimum on the detail column, so the window carries it: `max(820, sidebar 228 (when shown) + 647 + inspector + 1)`. Opening the inspector in a narrow window grows the window. |
 
 **Commands.** `PullRequestMenu` is one view for the Pull Request menu, the row context menu and the inspector's
 Actions menu. `ActionAvailability` (Kit) enables each action and gives the reason for a disabled one.
@@ -235,11 +235,15 @@ trigger. VoiceOver reads `accessibilityCustomContent` on the row: "Findings", "A
 `FindingsView` draws the content: round, short head, "N at or above the fix floor", one row per reviewer (result
 word, severity capsules, link), and the daemon's `top` (≤ 3). `SeverityStyle` gives symbol + tone per severity.
 
-**Inspector.** One selected PR shows a header bar ("Status" or "PR Settings", a button to switch) and the tab.
+**Inspector.** One selected PR shows a header bar ("iprally #N" or "PR Settings", the Actions menu, a button to switch) and the tab.
 None or many selected: "No Selection" / "Multiple Selection". The tab is `@SceneStorage("inspectorTab")` on
 `QueueWindow`, so "PR Settings…" can select the row, open the inspector and switch the tab. The Status tab shows
-the header, an Actions menu, Live run (lane, timer, reviewer states), Review, Findings (with all followed
-convention files) and Fix. Its strings come from `InspectorModel`.
+most important first (D39): the header (title; author, push time, +/−, with head → base as its tooltip; status,
+draft and label chips), Live run (lane and timer in one row, reviewer states), Scope (verdict and reason, what it
+does against what it claims, the out-of-scope changes with their notes, touches as chips, all changes folded; file
+paths are tooltips), Findings (worst first, then each reviewer; followed conventions as the header's tooltip) and
+Last passes (one row each for review and fix: badge, then head, rounds, hold, errors only when set; the note is the
+tooltip). Its strings come from `InspectorModel` and `ScopeStyle`.
 
 ### 6.2 Empty, loading and error states
 

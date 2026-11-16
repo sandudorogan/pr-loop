@@ -14,11 +14,11 @@ struct FindingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            ForEach(findings.reviewers) { ReviewerRow(reviewer: $0) }
             if !findings.top.isEmpty {
-                Divider()
                 ForEach(findings.top, id: \.self) { TopFindingRow(finding: $0) }
+                Divider()
             }
+            ForEach(findings.reviewers) { ReviewerRow(reviewer: $0) }
         }
     }
 }
