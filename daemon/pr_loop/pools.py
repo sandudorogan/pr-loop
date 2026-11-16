@@ -8,12 +8,16 @@ active project. Every pool is a set of threads in this process.
 A switch builds the new set under the one lock all pools share: kept pools resize, new ones start, removed ones drop
 their queue and retire their workers after the running pass. `held` spans every pool, so a PR that runs in a retiring
 pool is never handed out by its new one.
-"""
-import threading
 
-from pr_loop import config, queue as q
+The scope pool (`scope.workers`, 0 while `scope.enabled` is off) is always one shared pool beside them. It keeps its
+own `held` and takes no per-PR lock: a scope pass reads the PR and never holds up its review or fix.
+"""
+import contextlib, threading
+
+from pr_loop import config, queue as q, scope
 
 LANES = "review", "fix"
+SCOPE = "scope", None
 
 
 def name(lane, repo):
@@ -29,6 +33,8 @@ def wanted(cfg, listing):
 
 
 def spawn(lane, pool):
+    if lane == "scope":
+        return q.worker(pool, True, scope.run, lock=lambda repo, n: contextlib.nullcontext(True))
     return q.worker(pool, True, q.reviewer(None, False) if lane == "review" else q.fix)
 
 
@@ -40,7 +46,7 @@ class Pools:
         """Builds the pool set `cfg` asks for, live, and returns the workers it started."""
         want, started = wanted(cfg, listing), []
         with self.cond:
-            for key in self.pools.keys() - want.keys():
+            for key in self.pools.keys() - want.keys() - {SCOPE}:
                 gone = self.pools.pop(key)
                 gone.refill([])
                 gone.resize(0, list)
@@ -48,6 +54,9 @@ class Pools:
                 pool = self.pools.setdefault((lane, repo), q.Pending(cond=self.cond, held=self.held))
                 pool.paused = self.paused
                 started += pool.resize(workers, lambda: spawn(lane, pool))
+            lens = self.pools.setdefault(SCOPE, q.Pending(cond=self.cond))
+            lens.paused = self.paused
+            started += lens.resize(cfg["scope"]["workers"] * cfg["scope"]["enabled"], lambda: spawn("scope", lens))
         return started
 
     def refill(self, lane, prs):

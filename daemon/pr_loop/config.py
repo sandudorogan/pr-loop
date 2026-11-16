@@ -76,6 +76,7 @@ DEFAULTS = json.loads(r'''
     "ci_apps": ["github-actions"],
     "gates": []
   },
+  "scope": {"enabled": true, "workers": 2, "model": null, "effort": "medium", "timeout_s": 900},
   "refresh": {"interval_s": 300, "idle_s": 60}
 }
 ''')
@@ -207,6 +208,8 @@ CONFIG = whole({
     "detect": whole({"roots": Arr(TEXT, 1, 10)}), "lanes": whole({"separate": BOOL}),
     "projects": Keyed(re.compile(r"[\w.-]+/[\w.-]+"), Obj({"root": TEXT, "review": REVIEW, "fix": FIX}), 50),
     "review": whole(REVIEW.fields), "fix": whole(FIX.fields),
+    "scope": whole({"enabled": BOOL, "workers": integer(1, 8), "model": NULL_TEXT,
+                    "effort": one_of(CODEX_EFFORTS, null=True), "timeout_s": integer(60, 3600)}),
     "refresh": whole({"interval_s": integer(60, 3600), "idle_s": integer(15, 3600)}),
 })
 PR_LEVEL = Obj({"review": without_workers(REVIEW), "fix": without_workers(FIX)})

@@ -165,7 +165,7 @@ class Validate(unittest.TestCase):
         self.assertIn("review.workers", self.paths(doc(review={"workers": True})))
 
     def test_a_missing_key_in_a_complete_doc_is_a_problem(self):
-        self.assertEqual(self.paths({}), {"version", "detect", "lanes", "projects", "review", "fix", "refresh"})
+        self.assertEqual(self.paths({}), {"version", "detect", "lanes", "projects", "review", "fix", "scope", "refresh"})
 
     def test_too_many_projects_and_roots(self):
         many = {f"o/n{i}": {} for i in range(51)}

@@ -3,7 +3,7 @@ API JSON, `render()` prints it as the `-l` lines."""
 import hashlib, json
 from datetime import datetime
 
-from pr_loop import config, db, history, pools, projects, queue as q
+from pr_loop import config, db, history, pools, projects, queue as q, scope
 from pr_loop.names import tag
 
 GROUPS = {0: "active", 1: "queued", 3: "ready", 4: "idle", 5: "paused"}
@@ -19,6 +19,7 @@ def read(prs):
              for repo in projects.repos(q.cfg(), prs)}
     for repo, rows in repos.items():
         rows["results"] = {int(n): db.reviewer_results(repo, n) for n in rows["reviews"]}
+        rows["scopes"] = db.scopes(repo)
     return {"repos": repos, "runs": db.live_runs(), "config": q.cfg(), "checkouts": q.found(),
             "overrides": db.pr_overrides(), "paused": db.paused_prs(), "done": db.done_prs()}
 
@@ -80,6 +81,7 @@ def entry(pr, rows, runs, cfg, first, override, paused, done):
         | {"current": fixed["sha"] == head, "parked": fixed["errors"] >= config.effective(cfg, repo, override)["fix"]["max_errors"], "at": iso(fixed["at"])}
         if fixed else None,
         "fix_queued": q.fixing(pr, rows["reviews"], rows["fixes"]), "override": config.paths(override or {}),
+        "scope": scope.item(rows["scopes"].get(n), head),
         "fixable": q.fixable(pr, rows["reviews"], rows["fixes"]),
     }
 

@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["intent", "changes", "touches"],
+  "properties": {
+    "intent": { "type": "string" },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "area", "what", "files"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["added", "modified", "removed", "chore"] },
+          "area": { "type": "string" },
+          "what": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "touches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "what", "files"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["migration", "api-contract", "auth", "dependencies", "config", "infra", "ci", "feature-flag", "copy"] },
+          "what": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

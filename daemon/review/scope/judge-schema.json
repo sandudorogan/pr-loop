@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stated", "verdict", "reason", "scope"],
+  "properties": {
+    "stated": { "type": "string" },
+    "verdict": { "type": "string", "enum": ["focused", "some-creep", "sprawling"] },
+    "reason": { "type": "string" },
+    "scope": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "in_scope", "note"],
+        "properties": {
+          "index": { "type": "integer" },
+          "in_scope": { "type": "boolean" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

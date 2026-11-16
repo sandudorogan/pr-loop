@@ -5,5 +5,6 @@ public struct DaemonConfig: Codable, Hashable, Sendable {
     public var projects: [String: ProjectOverride]
     public var review: ReviewConfig
     public var fix: FixConfig
+    public var scope: ScopeConfig
     public var refresh: RefreshConfig
 }

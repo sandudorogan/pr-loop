@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS pr_overrides (repo TEXT, number INT, config TEXT, cre
   PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS paused_prs (repo TEXT, number INT, at TEXT, PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS done_prs (repo TEXT, number INT, done INT, at TEXT, PRIMARY KEY (repo, number));
+CREATE TABLE IF NOT EXISTS scopes (repo TEXT, number INT, sha TEXT, of TEXT, status TEXT, summary TEXT, files TEXT,
+  error TEXT, errors INT, at TEXT, PRIMARY KEY (repo, number));
 CREATE TABLE IF NOT EXISTS migration_log (seq INTEGER PRIMARY KEY, old_path TEXT, new_path TEXT, kind TEXT, at TEXT);
 """
 
@@ -58,8 +60,8 @@ def _author_name(c):
 
 
 # Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs, v3: done_prs,
-# v4: history.author_name and events.author_name (a fresh db already has them from the schema).
-UPGRADES = [_schema] * 3 + [_author_name]
+# v4: history.author_name and events.author_name (a fresh db already has them from the schema), v5: scopes.
+UPGRADES = [_schema] * 3 + [_author_name, _schema]
 
 _local = threading.local()
 COMMITS = []
@@ -259,6 +261,30 @@ def rearm_fix(repo, n):
 
 
 FIX_STATE_JSON = ("handled_reviews", "handled_jobs", "deferred", "ci_tries", "reruns", "red")
+
+
+def _scope(row):
+    return {k: row[k] for k in ("sha", "of", "status", "error", "errors", "at")} | {
+        "summary": _load(row["summary"]), "files": _load(row["files"]) or {}}
+
+
+def scope(repo, n):
+    """{sha, of, status, summary, files, error, errors, at}, or {} for a PR the scope lane never took. `sha` is the
+    head of the last pass, `of` the head its `summary` describes."""
+    row = _one("SELECT * FROM scopes WHERE repo = ? AND number = ?", repo, int(n))
+    return {} if row is None else _scope(row)
+
+
+def scopes(repo):
+    """{number: scope} of every PR of the repo."""
+    return {r["number"]: _scope(r) for r in _all("SELECT * FROM scopes WHERE repo = ?", repo)}
+
+
+def put_scope(repo, n, entry):
+    e = {"of": None, "summary": None, "files": {}, "error": None, "errors": 0, "at": now()} | entry
+    with tx() as c:
+        _put(c, "scopes", repo, n, sha=e["sha"], of=e["of"], status=e["status"], summary=_dump(e["summary"]),
+             files=_dump(e["files"]), error=e["error"], errors=e["errors"], at=e["at"])
 
 
 def _fix_state(row):

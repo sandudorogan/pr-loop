@@ -13,6 +13,7 @@ daemon's state through the control API ([api.md](api.md)), and through nothing e
                                                                 ├─ refresh thread  one GraphQL call / 5 min
                                                                 ├─ review pool ×3  ─▶ pr_review.py × {opus, codex, quality}
                                                                 ├─ fix pool ×3     ─▶ pr_fix.py ─▶ codex exec, fix.gates
+                                                                ├─ scope pool ×2   ─▶ pr_scope.py ─▶ codex blind summary, judge
                                                                 └─ prune thread    every 30 min
                                                                         │
                                                                         ▼
@@ -91,6 +92,8 @@ Rules for every front end, present and future:
 
 - **Review lane:** my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before.
 - **Fix lane:** my PRs only. Input: unresolved threads, review bodies on the head, colleagues' PR comments after the head commit, failed Actions jobs, a base conflict. `no-auto-fix` leaves only the conflict: a merge-only pass (D37).
+- **Scope lane** (D38): every PR on the to-do list. Codex summarizes the diff blind to the PR text, then judges it
+  against the title and body: `focused`, `some-creep`, `sprawling`. Its own pool beside the other two; it never blocks them.
 - **Projects** are detected from those PRs, plus the keys of `projects` in the config. A project is worked only with a
   main checkout under `detect.roots/*/` (or `projects[repo].root`). Without one, it is `no-checkout` (api.md §4.7).
 - **Pools** are shared by default: one review pool and one fix pool, because the real limits are per machine.

@@ -36,6 +36,7 @@ One process serves every project. Clients (the CLI, the app) read and change its
    ├────────── fix pool (3 workers) ────── pr_fix.py run: codex (sandbox) → fix.gates → commit
    │                                       ▼
    │                           push = new head → next review round
+   ├─ scope pool (2 workers) ── pr_scope.py run: codex blind summary → codex judge → scopes row (verdict)
    └─ prune thread: every 30 min, the worktrees of merged or approved PRs in every project
 ```
 
@@ -46,6 +47,9 @@ One process serves every project. Clients (the CLI, the app) read and change its
 - **New projects take the defaults:** both lanes on. Built-in overrides: `iprally/gitops` has review off, `iprally/iprally` has its fixer gates.
 - **Review lane:** my PRs, PRs that request my review, PRs assigned to me, PRs I reviewed before, in every active project.
 - **Fix lane:** my PRs only. Input = unresolved threads, review bodies on the head, colleagues' PR comments after the head commit, failed Actions jobs, base conflict. `no-auto-fix` leaves only the conflict: a merge-only pass.
+- **Scope lane** (PR Lens, D38): every PR on the to-do list. Pass 1 summarizes the diff blind to the PR text, pass 2
+  judges it against the title and body: `focused` · `some-creep` · `sprawling`. Its own pool and held set, no per-PR
+  lock, no `runs` row: it never blocks a review or a fix. Own diff unchanged on a new head = summary kept, no Codex.
 - **Pools:** one shared review pool and one shared fix pool. `lanes.separate` gives each active project its own pair,
   sized by its effective `workers`. The switch is live: running passes finish in their old pool (`daemon/pr_loop/pools.py`).
 - Every PR dict carries `repo`. Lanes, locks and state key on `(repo, number)`: PR numbers of two repos overlap.
@@ -111,7 +115,10 @@ The daemon and each UI are separate trees. They share only the API contract.
 | Path | Role |
 | --- | --- |
 | `daemon/pr_loop/queue.py` | Daemon, queue fetch, gates, both lanes, the local paths of the CLI (`--wait` loop, `-l` and `--next` with the daemon down, `--pr`, tick, `--prune`) |
-| `daemon/pr_loop/pools.py` | The worker pools (api.md §4.7): shared, or one review + fix pair per project; `held` spans every pool so no PR runs twice |
+| `daemon/pr_loop/pools.py` | The worker pools (api.md §4.7): shared, or one review + fix pair per project; `held` spans every pool so no PR runs twice. Plus the one scope pool, with its own `held` |
+| `daemon/pr_loop/scope.py` | The scope lane: `due()` gate, `run()` (own-diff check, then `pr_scope.py`), `item()` = the §3.2 `scope` |
+| `daemon/review/pr_scope.py` | One scope pass on one PR: blind summary in a temp dir without `.git`, then the judge; JSON on stdout, exit 2 at the Codex usage limit |
+| `daemon/review/scope/` | The two PR Lens prompts and their output schemas |
 | `daemon/pr_loop/cli.py` | The CLI (api.md §5): `-l`, `--next`, `--bg`, `--wait`'s bump, `--pause`, `--resume`, `config` go to the API; daemon down: `-l`/`--next` run on `state.db`, `--bg`/`--wait` kickstart `names.LABEL` |
 | `daemon/pr_loop/client.py` | `client.call(method, path, body)` over `api.sock`; raises `Down` (no daemon) or `Failed` (api.md §2 error) |
 | `daemon/pr_loop/api.py` | Control API (`api.md`): HTTP/1.1 + JSON on `api.sock`, a server thread in the daemon; `python3 -m pr_loop.api --fake [--socket PATH]` serves the fixtures; `--fake-speed S` and `--fake-empty` (or `PRL_FAKE_SPEED`, `PRL_FAKE_EMPTY=1`) set its knobs |
@@ -171,6 +178,7 @@ One code path owns each table:
 | `done_prs` | API (`POST …/done`, `…/todo`) | `(repo, number)` → `{done, at}`; done = off the to-do list and both lanes; "not done" keeps an approved PR listed |
 | `fix_state` | pr_fix.py | Codex session, handled reviews/jobs, deferred threads, `ci_tries`, `reruns`, `red` |
 | `clean_reviews` | pr_review.py | `(repo, number, sha, reviewer)` heads a reviewer cleared; 30 days |
+| `scopes` | scope lane | `(repo, number)` → `{sha, of, status, summary, files, error, errors, at}`: `sha` = last pass's head, `of` = the head `summary` describes |
 | `meta` | daemon | `paused`, `events_epoch`, `imported_at`, `history_seeded` |
 | `migration_log` | `migrate()` | every old JSON file moved to `legacy/` |
 
@@ -264,12 +272,13 @@ fix status      pushed · refuted-only · no-changes · nothing-to-fix · ci-stu
    `VERSION=X.Y.Z script/package` → `build/PR-Loop-X.Y.Z.{dmg,zip}` + `build/SHA256SUMS`; without `VERSION` the app reads `1.0.<commit count>`.
    `script/notes vX.Y.Z` prints the release body: install steps + commits since the previous tag.
    Never plain `swift test`: under the Command Line Tools it runs 0 tests and exits 0.
-3. Dry-run what you can: `pr-loop -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`.
+3. Dry-run what you can: `pr-loop -n`, `pr_review.py run --pr N --reviewer opus --dry-run`, `pr_fix.py dump --pr N`,
+   `PR_LOOP_REPO=o/n PR_LOOP_REPO_ROOT=<checkout> pr_scope.py run --pr N` (prints the summary, writes nothing).
 4. Push straight to `main` (`git push origin HEAD:main`). Open no PRs here. Then `git -C ~/workdir/review-queue pull --ff-only`.
    Release the app: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z` (the git config refuses a bare tag). CI builds and publishes it; tag only a commit on `main`.
 5. Restart only for daemon code (`daemon/pr_loop/*.py`). Check `pr-loop -l` for ▶ rows first: a restart kills in-flight passes.
    `launchctl kickstart -k gui/$(id -u)/local.pr-loop`
-   `pr_review.py`, `pr_fix.py`, prompts and the config load fresh per run: no restart.
+   `pr_review.py`, `pr_fix.py`, `pr_scope.py`, prompts and the config load fresh per run: no restart.
 6. Plist template or `links.json` change: `~/workdir/review-queue/install.py --no-app` (boots the daemon out, then in).
 
 Commit style: `~/.gitmessage` (type prefix, 50-char imperative subject, body says what broke and why this fix).

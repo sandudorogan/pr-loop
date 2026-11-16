@@ -126,6 +126,15 @@ Codex off the review threads after a revert, and then sat CONFLICTING with no ro
 about feedback; a conflict blocks the merge the owner wants. The old count (3, from an earlier head) would have
 parked the first failed merge at once.
 
+**D38. PR Lens is the scope lane** (2026-11-16). Every PR on my to-do list (mine, requested, assigned, reviewed) gets
+the two PR Lens Codex passes: a blind summary of what the diff does (no title, body, branch name or commit message in
+reach), then a judge that compares it with the PR's claim and says `focused`, `some-creep` or `sprawling`. *Why:* one
+daemon serves every PR (the ground truth), so a second service that polled the same PRs on its own port went away.
+The lane has its own pool (`scope.workers`) and its own held set, takes no per-PR lock and writes no `runs` row: a
+scope pass reads, so it never holds up a review or a fix of the same PR. A new head whose own diff is unchanged (a
+base merge, a rebase) keeps its summary with no Codex call. `scope` is top-level config only, with no project or PR
+override, because nothing acts on its result but me.
+
 ## The macOS app
 
 **D23. A SwiftUI app, proper macOS style, no dependencies, Command Line Tools only.** Details: [ui-macos.md](ui-macos.md).

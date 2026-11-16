@@ -61,7 +61,7 @@ import Testing
             Issue.record("config is not an object")
             return
         }
-        #expect(object.keys == ["version", "detect", "lanes", "projects", "review", "fix", "refresh"])
+        #expect(object.keys == ["version", "detect", "lanes", "projects", "review", "fix", "scope", "refresh"])
     }
 
     @Test("the envelope's raw config and a typed model's unknown keys keep the source order")

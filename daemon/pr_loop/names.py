@@ -9,6 +9,7 @@ CONTRACT = os.path.join(os.path.dirname(ROOT), "contract")
 REVIEW_DIR = os.path.join(ROOT, "review")
 PR_REVIEW = os.path.join(REVIEW_DIR, "pr_review.py")
 PR_FIX = os.path.join(REVIEW_DIR, "pr_fix.py")
+PR_SCOPE = os.path.join(REVIEW_DIR, "pr_scope.py")
 
 MONOREPO = "iprally/iprally"
 REPOS = {MONOREPO: {"root": f"{HOME}/workdir/iprally"}, "iprally/gitops": {"root": f"{HOME}/workdir/gitops"}}

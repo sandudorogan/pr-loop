@@ -58,6 +58,9 @@ def script():
                                                            "digest": digest("medium", "low"), "url": "u/q"})
     db.put_review(MONOREPO, 14, review())
     db.put_fix(MONOREPO, 14, fix("refuted-only"))
+    db.put_scope(MONOREPO, 14, {"sha": HEAD, "of": HEAD, "status": "ready", "summary": {
+        "verdict": "some-creep", "reason": "r", "intent": "i", "stated": "s", "touches": [],
+        "changes": [{"kind": "added", "area": "A", "what": "w", "files": ["a.py"], "in_scope": False, "note": "n"}]}})
     db.put_review(MONOREPO, 15, review())
     db.put_fix(MONOREPO, 15, fix("tests-red", OLD, errors=3))
     db.put_review(MONOREPO, 16, review(status="failed", verdict=None, note="opus failed 3×"))

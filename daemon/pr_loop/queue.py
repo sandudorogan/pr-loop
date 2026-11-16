@@ -30,7 +30,7 @@ from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
-from pr_loop import __version__, api, config, db, history, names, pools, projects, snapshot
+from pr_loop import __version__, api, config, db, history, names, pools, projects, scope, snapshot
 from pr_loop.names import (FIXES, LABEL, LOG, MONOREPO, NO_FIX, NO_REVIEW, PR_FIX, PR_REVIEW, REPOS, STATE,
                               env_repo, tag)
 
@@ -654,7 +654,7 @@ class Pending:
             return not self.prs and len(self.busy) < self.workers
 
 
-def work(pending, wait, job):
+def work(pending, wait, job, lock=None):
     try:
         while True:
             try:
@@ -667,7 +667,7 @@ def work(pending, wait, job):
                 return
             repo, n = key = pr_key(picked[0])
             try:
-                with claimed(repo, n) as mine:
+                with (lock or claimed)(repo, n) as mine:
                     if mine:
                         job(*picked)
                     else:
@@ -680,8 +680,8 @@ def work(pending, wait, job):
         pending.retire()
 
 
-def worker(pending, wait, job):
-    thread = threading.Thread(target=work, args=(pending, wait, job), daemon=True)
+def worker(pending, wait, job, lock=None):
+    thread = threading.Thread(target=work, args=(pending, wait, job, lock), daemon=True)
     thread.start()
     return thread
 
@@ -746,11 +746,14 @@ class Runtime:
             say(line)
 
     def feed(self):
-        """Refills both lanes from the last fetch."""
+        """Refills every lane from the last fetch. Scope takes every PR on the to-do list."""
         worked, served = workable(self.prs), checkouts()
         state, fixed = {r: load(r) for r in served}, {r: load(r, FIXES) for r in served}
         self.pools.refill("review", worked)
         self.pools.refill("fix", [pr for pr in worked if fixable(pr, state[pr["repo"]], fixed[pr["repo"]])])
+        lens, marks = {r: db.scopes(r) for r in served}, db.done_prs()
+        self.pools.refill("scope", [pr for pr in worked if cfg()["scope"]["enabled"] and not done(pr, marks)
+                                    and scope.due(pr, lens[pr["repo"]].get(pr["number"]))])
 
     def attach(self, pools):
         """The daemon's pools, which config writes rebuild and pause stops. They start paused when the db says so."""

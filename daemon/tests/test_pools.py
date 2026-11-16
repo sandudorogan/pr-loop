@@ -10,8 +10,8 @@ from pr_loop import config, pools, snapshot
 
 NEW = "acme/widgets"
 LISTING = [{"repo": MONOREPO, "review": True, "fix": True}, {"repo": GITOPS, "review": False, "fix": True}]
-SHARED = {"review": 3, "fix": 3}
-SEPARATE = {f"review:{MONOREPO}": 3, f"fix:{MONOREPO}": 3, f"fix:{GITOPS}": 3}
+SHARED = {"review": 3, "fix": 3, "scope": 2}
+SEPARATE = {f"review:{MONOREPO}": 3, f"fix:{MONOREPO}": 3, f"fix:{GITOPS}": 3, "scope": 2}
 
 
 def cfg(separate=False, **projects):
@@ -44,7 +44,7 @@ class Lanes(unittest.TestCase):
 
     def stop(self):
         self.gate.set()
-        self.lanes.apply(cfg(separate=True), [])
+        self.lanes.apply(config.merge(cfg(separate=True), {"scope": {"enabled": False}}), [])
         for t in self.threads:
             t.join(5)
 
@@ -83,7 +83,7 @@ class Switch(Lanes):
 
     def test_off_retires_every_project_pool_and_routes_all_repos_to_the_shared_ones(self):
         self.lanes.apply(cfg(separate=True), LISTING)
-        old = list(self.lanes.pools.values())
+        old = [p for key, p in self.lanes.pools.items() if key != pools.SCOPE]
         self.lanes.apply(cfg(), LISTING)
         self.until(lambda: all(p.live == 0 for p in old))
         self.assertEqual(self.lanes.sizes(), SHARED)
@@ -102,10 +102,24 @@ class Switch(Lanes):
         self.assertTrue(all(p.paused for p in self.lanes.pools.values()))
 
 
+class Scope(Lanes):
+    def test_a_scope_pass_runs_beside_the_review_of_the_same_pr(self):
+        self.lanes.apply(cfg(), LISTING)
+        self.gate.clear()
+        self.lanes.refill("review", [pr(1)])
+        self.lanes.refill("scope", [pr(1)])
+        self.until(lambda: self.keys() == [(MONOREPO, 1)] * 2)
+        self.assertEqual({p for p, _ in self.ran}, {self.pool("review"), self.pool("scope")})
+
+    def test_scope_off_leaves_its_pool_without_workers(self):
+        self.lanes.apply(config.merge(cfg(), {"scope": {"enabled": False}}), LISTING)
+        self.assertEqual(self.lanes.sizes()["scope"], 0)
+
+
 class Projects(Lanes):
     def test_each_project_pool_takes_its_effective_worker_counts(self):
         self.lanes.apply(cfg(True, **{MONOREPO: {"review": {"workers": 2}}, GITOPS: {"fix": {"workers": 1}}}), LISTING)
-        self.assertEqual(self.lanes.sizes(), {f"review:{MONOREPO}": 2, f"fix:{MONOREPO}": 3, f"fix:{GITOPS}": 1})
+        self.assertEqual(self.lanes.sizes(), {f"review:{MONOREPO}": 2, f"fix:{MONOREPO}": 3, f"fix:{GITOPS}": 1, "scope": 2})
         self.assertEqual(self.pool("review", MONOREPO).live, 2)
 
     def test_the_shared_pools_ignore_the_project_counts(self):

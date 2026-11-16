@@ -362,6 +362,15 @@ Snapshot rules (they reproduce `show()` and `row()` in `queue.py`):
 | `fix.parked` | bool | `errors >= fix.max_errors`: no pass until the feedback key moves or `POST …/fix` |
 | `fix_queued` | bool | `fixing()`: the fix lane still owes this head a pass |
 | `override` | [string] | config paths the PR overrides (§4.10), e.g. `["review.enabled", "review.reviewers"]`; `[]` = none. The row shows a badge |
+| `scope` | object \| null | the scope lane's result (D38): what the PR changes and whether that matches its claim; null before its first pass |
+| `scope.status` | `running` \| `ready` \| `failed` \| `limited` | the pass on the head: in flight, done, failed (retried up to 3×), Codex at its usage limit (retried) |
+| `scope.head`, `current` | string \| null, bool | the head the summary describes, `head == item.head`. A running or failed pass keeps the older summary |
+| `scope.error` | string \| null | the last line of the failed pass |
+| `scope.verdict` | `focused` \| `some-creep` \| `sprawling` \| null | the judge: every change in scope, one or two small extras, or a large or unrelated part. The list shows it |
+| `scope.reason` | string \| null | one sentence on the verdict |
+| `scope.intent`, `stated` | string \| null | what the diff does, told blind to the PR text; what the title and body promise |
+| `scope.changes[]` | `{kind, area, what, files, in_scope, note}` | one observable difference each; `kind` = `added` \| `modified` \| `removed` \| `chore`; `note` says why an out-of-scope change does not belong |
+| `scope.touches[]` | `{kind, what, files}` | sensitive surfaces: `migration`, `api-contract`, `auth`, `dependencies`, `config`, `infra`, `ci`, `feature-flag`, `copy` |
 
 | `group` | `status` values | `detail` example |
 | --- | --- | --- |
@@ -820,6 +829,10 @@ by mtime (§4.5).
 | `fix.ci_apps` | [string] | `checks()` keeps `github-actions` only | GitHub App slugs whose check runs count as CI |
 | `fix.ci_tries` | int 1–10 | `CI_TRIES = 3` | refuted looks at one red job before `ci-stuck` |
 | `fix.gates` | [gate] ≤ 10 | `gate()`, `karma()`, `namespaces()`, `NODE` in `pr_fix.py` | the fixer's local checks, in order (§4.9). Default `[]`; iprally's built-in override reproduces today's cljfmt + Karma |
+| `scope.enabled` | bool | PR Lens | the scope lane (D38) on every PR of the to-do list |
+| `scope.workers` | int 1–8 | PR Lens `workers = 2` | scope pool size; one shared pool in either `lanes.separate` mode |
+| `scope.model`, `scope.effort` | string \| null, codex effort \| null | null, `medium` | `codex exec -c model=…`, `-c model_reasoning_effort=…` for both passes |
+| `scope.timeout_s` | int 60–3600 | 900 | per Codex pass in `pr_scope.py` |
 | `refresh.interval_s` | int 60–3600 | `REFRESH = 300` | queue fetch period |
 | `refresh.idle_s` | int 15–`interval_s` | `IDLE_REFRESH = 60` | fetch period while a review worker idles |
 

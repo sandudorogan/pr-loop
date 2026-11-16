@@ -1,5 +1,5 @@
 {
-  "rev": "ed1f0bca4af9", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
+  "rev": "668bc2914bbf", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
   "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json", "source": "file", "error": null,
   "config": {
     "version": 1, "detect": {"roots": ["~/workdir"]}, "lanes": {"separate": false},
@@ -58,6 +58,7 @@
       "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
       "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
     },
+    "scope": {"enabled": true, "workers": 2, "model": null, "effort": "medium", "timeout_s": 900},
     "refresh": {"interval_s": 300, "idle_s": 60}
   },
   "defaults": {
@@ -117,6 +118,7 @@
       "merge_prompt": "merge.md", "turn_timeout_s": 2700, "pass_timeout_s": 14400, "max_errors": 3, "test_retries": 2,
       "ci_tries": 3, "ci_apps": ["github-actions"], "gates": []
     },
+    "scope": {"enabled": true, "workers": 2, "model": null, "effort": "medium", "timeout_s": 900},
     "refresh": {"interval_s": 300, "idle_s": 60}
   },
   "effective": {

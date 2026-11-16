@@ -47,7 +47,7 @@ class Connection(DbCase):
         self.assertEqual(c.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         self.assertEqual(c.execute("PRAGMA busy_timeout").fetchone()[0], 10_000)
         self.assertEqual(c.execute("PRAGMA synchronous").fetchone()[0], 1)
-        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 5)
         self.assertEqual(len(db.meta_get("events_epoch")), 6)
 
     def test_upgrade_from_version_one_adds_paused_prs(self):
@@ -55,7 +55,7 @@ class Connection(DbCase):
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("PRAGMA user_version = 1")
         db.pause_pr(R, 1, True)
-        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(4,)]))
+        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(5,)]))
         db.pause_pr(R, 1, False)
         self.assertEqual(db.paused_prs(), {})
 
@@ -83,12 +83,22 @@ class Connection(DbCase):
         event = db.add_event("ready_for_approval", R, 1, "t", "u", "aino", "a" * 40, author_name="Aino Virtanen")
         self.assertEqual(event["author_name"], "Aino Virtanen")
 
+    def test_upgrade_from_version_four_adds_scopes(self):
+        os.makedirs(os.path.dirname(self.path))
+        self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        self.sql("PRAGMA user_version = 4")
+        db.put_scope(R, 1, {"sha": "b", "of": "a", "status": "running", "summary": {"verdict": "focused"}})
+        self.assertEqual({k: db.scope(R, 1)[k] for k in ("sha", "of", "status", "summary", "files", "errors")},
+                         {"sha": "b", "of": "a", "status": "running", "summary": {"verdict": "focused"}, "files": {},
+                          "errors": 0})
+        self.assertEqual((list(db.scopes(R)), db.scope(R, 2)), ([1], {}))
+
     def test_upgrade_from_version_zero_keeps_data(self):
         os.makedirs(os.path.dirname(self.path))
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("INSERT INTO meta VALUES ('imported_at', 'x')")
         self.assertEqual(db.meta_get("imported_at"), "x")
-        self.assertEqual(self.sql("PRAGMA user_version"), [(4,)])
+        self.assertEqual(self.sql("PRAGMA user_version"), [(5,)])
         self.assertEqual(db.review(R, 1), {})
         db.close()
         self.assertEqual(db.meta_get("imported_at"), "x")

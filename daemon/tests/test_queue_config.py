@@ -92,10 +92,10 @@ class Live(Configured):
         rt.attach(lanes)
         with patch.object(rq, "worker", return_value=None) as spawned, patch.object(rq, "say"):
             rt.apply()
-            self.assertEqual((lanes.sizes(), spawned.call_count), ({"review": 3, "fix": 3}, 6))
+            self.assertEqual((lanes.sizes(), spawned.call_count), ({"review": 3, "fix": 3, "scope": 2}, 8))
             self.write({"review": {"workers": 5}, "fix": {"workers": 1}})
             rt.apply()
-        self.assertEqual((lanes.sizes(), spawned.call_count), ({"review": 5, "fix": 1}, 8))
+        self.assertEqual((lanes.sizes(), spawned.call_count), ({"review": 5, "fix": 1, "scope": 2}, 10))
         self.assertEqual(rt.info()["refresh"]["interval_s"], 300)
 
     def test_a_save_beside_a_symlink_is_seen(self):
