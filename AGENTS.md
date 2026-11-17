@@ -333,7 +333,8 @@ Clear a false clean: run the reviewer with `--force`, or delete its `clean_revie
   falls back to `origin/<base>...head`, or the reviewer blames other PRs' code.
 - **Stale generated packages.** iprally's Karma gate runs the root `npm install --no-save` first (D36), which also
   runs `postinstall`: a base merge leaves `loyto/packages/*/output/` stale and the gate runs 0 tests, and a worktree
-  missing a package fails `postinstall`, so every pass goes `tests-red`.
+  missing a package fails `postinstall`, so every pass goes `tests-red`. A stale `loyto/node_modules` shadows the
+  root packages for the wrapper builds, so the setup deletes it first (D40).
 - **No `@Environment(Model.self)` in a table cell.** A `Table` with a conditional `TableColumn` (Project, shown
   for "All repos" only) rebuilds its cells without the window's environment when the column set changes, and the
   lookup traps ("No Observable object of type PeekModel found"). Read the model in the table view and pass it in.

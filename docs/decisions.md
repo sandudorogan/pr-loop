@@ -118,6 +118,12 @@ root's react-resizable-panels 3.0.6, `postinstall` failed, and every pass on tho
 `postinstall` cannot restore a package. `--no-save` keeps the lockfile as it is, since `pr_fix.py` commits with
 `git add -A`. A worktree that is already installed costs about 8 s more.
 
+**D40. iprally's Karma setup deletes `loyto/node_modules` first** (2026-11-17). *Why:* `postinstall` builds the
+`loyto/packages/*` wrappers, and Node resolves their imports from `loyto/node_modules` before the root. On #17786 a
+stale `loyto/node_modules` held echarts 5.5.0, the echarts wrapper needs 6.1.0's `theme/v5.js`, and 10 passes went
+`tests-red` before Karma started. The root install and `ui/shadow-cljs.edn` (`:js-package-dirs`) never read that
+folder, so the gate loses nothing. A standalone `npm install` in `loyto/` puts it back.
+
 **D37. `no-auto-fix` still merges a conflicting base** (2026-11-13). On a labeled PR of mine that conflicts with
 its base, the fix lane runs `pr_fix.py run --merge-only`: it merges the base (Codex resolves the markers), pushes,
 and hands Codex no feedback and no red CI. A project whose `fix.enabled` is false still merges nothing. A fix

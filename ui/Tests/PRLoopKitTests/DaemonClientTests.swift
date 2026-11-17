@@ -49,7 +49,7 @@ import Testing
     @Test("config reads GET /v1/config")
     func config() async throws {
         let transport = try FakeTransport(fixture: "config.json")
-        #expect(try await DaemonClient(transport: transport).config().rev == "668bc2914bbf")
+        #expect(try await DaemonClient(transport: transport).config().rev == "1d81e5f4c14e")
         #expect(await transport.last == HTTPRequest(.get, "/v1/config"))
     }
 

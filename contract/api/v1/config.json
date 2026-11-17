@@ -1,5 +1,5 @@
 {
-  "rev": "668bc2914bbf", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
+  "rev": "1d81e5f4c14e", "path": "/Users/sandu.dorogan/.config/pr-loop/config.json",
   "real_path": "/Users/sandu.dorogan/.local/share/chezmoi/.pr-loop/config.json", "source": "file", "error": null,
   "config": {
     "version": 1, "detect": {"roots": ["~/workdir"]}, "lanes": {"separate": false},
@@ -20,7 +20,7 @@
               },
               "setup": {
                 "name": "shadow-cljs compile karma-test",
-                "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
+                "run": "(cd .. && rm -rf loyto/node_modules && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
               },
               "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
               "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
@@ -80,7 +80,7 @@
               },
               "setup": {
                 "name": "shadow-cljs compile karma-test",
-                "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
+                "run": "(cd .. && rm -rf loyto/node_modules && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
               },
               "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
               "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
@@ -164,7 +164,7 @@
             },
             "setup": {
               "name": "shadow-cljs compile karma-test",
-              "run": "(cd .. && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
+              "run": "(cd .. && rm -rf loyto/node_modules && npm install --prefer-offline --no-save --no-audit --no-fund) && npx shadow-cljs compile karma-test"
             },
             "run": "npx karma start --single-run --client.args iprally_ui.karma_runner_test.init --client.args {item}",
             "timeout_s": 1800, "slot": true, "protect": ["shadow-cljs.edn", "karma.conf.js", "package.json"],
