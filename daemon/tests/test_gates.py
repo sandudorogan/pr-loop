@@ -241,6 +241,7 @@ class TestsRed(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         with patch.object(fix, "sh", side_effect=lambda args, **kw: json.dumps(meta) if args[0] == "gh" else ""), \
+                patch.object(fix, "base_tip", return_value="t"), \
                 patch.object(fix, "load", return_value={}), patch.object(fix, "save"), \
                 patch.object(fix, "checks", return_value=[]), patch.object(fix, "failed_jobs", return_value=[]), \
                 patch.object(fix, "feedback", return_value=[{"ref": "t", "kind": "thread", "path": "a"}]), \
