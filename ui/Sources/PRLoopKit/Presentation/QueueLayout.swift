@@ -14,6 +14,15 @@ public struct QueueLayout: Hashable, Sendable {
         self.stages = stages
     }
 
+    /// Field-wise: as `RawRepresentable`, the standard library would compare and hash `rawValue`, and the JSON
+    /// encoder writes its keys in a random order.
+    public static func == (a: Self, b: Self) -> Bool { a.sections == b.sections && a.stages == b.stages }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(sections)
+        hasher.combine(stages)
+    }
+
     public var sectionOrder: [QueueSection.Kind] { Self.complete(sections) }
 
     public func stageOrder(of section: QueueSection.Kind) -> [QueueStage.Kind] {
