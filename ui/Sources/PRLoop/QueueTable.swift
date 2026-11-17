@@ -38,7 +38,7 @@ struct QueueTable: View {
                 .width(min: 48, ideal: 100).customizationID("author")
             TableColumn("Status") { row in
                 HStack(spacing: 4) {
-                    StatusBadge(style: row.status)
+                    StatusBadge(style: row.status).help(row.item?.active?.fix?.help ?? "")
                     if let help = row.item?.overrideHelp {
                         Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary).help(help)
                             .accessibilityLabel(help)

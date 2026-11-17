@@ -39,6 +39,7 @@ SCHEMA = os.path.join(DIR, "fix-schema.json")
 AGENT_MARKER = "<!-- agent-review:"
 FYI_MARKER = "<!-- agent-review-fyi -->"
 CI_LOG_CHARS = 20000
+REVIEWER = re.compile(r"agent-review: reviewer=(\S+)")
 LOG_NOISE = re.compile(r"^﻿?\d{4}-\d\d-\d\dT\S+Z |\x1b\[[0-9;]*m", re.M)
 ATTRIBUTION = re.compile(r"^(co-authored-by:|.*generated with \[?claude)", re.I | re.M)
 
@@ -167,6 +168,22 @@ def failed_jobs(jobs, state):
              "log": LOG_NOISE.sub("", sh(["gh", "api", "--allow-escape-sequences",
                                          f"repos/{REPO}/actions/jobs/{c['id']}/logs"]))[-CI_LOG_CHARS:]}
             for c in jobs if failed(c) and c["id"] not in state.get("handled_jobs", []) and c["name"] not in stuck_names]
+
+
+def headline(item):
+    """One line on what an item asks: an agent comment's `[severity] title`, else its first line. The app's hover."""
+    if item["kind"] == "ci":
+        return {"kind": "ci", "title": item["name"], "author": None, "path": None, "line": None}
+    first = item["comments"][0] if item["kind"] == "thread" else item
+    line = next((l for l in first["body"].splitlines() if l.strip() and not l.lstrip().startswith("<!--")), "")
+    agent = REVIEWER.search(first["body"])
+    return {"kind": item["kind"], "title": re.sub(r"[*`]", "", line).strip()[:120],
+            "author": agent[1] if agent else first["author"], "path": item.get("path"), "line": item.get("line")}
+
+
+def progress(pr, step, items=(), conflict=False):
+    """The pass's step and what it works on, in its `runs` row (api.md §3.2 `active.fix`). No row, no change."""
+    db.run_fix(REPO, pr, {"step": step, "since": db.now(), "conflict": conflict, "items": [headline(i) for i in items]})
 
 
 # ---------------------------------------------------------------- worktree
@@ -369,6 +386,7 @@ def rerun(jobs):
 
 
 def run(pr, merge_only=False):
+    progress(pr, "collecting")
     meta = json.loads(sh(["gh", "pr", "view", str(pr), "--repo", REPO, "--json",
                           "state,headRefName,headRefOid,baseRefName,mergeable"]))
     if meta["state"] != "OPEN":
@@ -393,18 +411,21 @@ def run(pr, merge_only=False):
         return {"pr": pr, "status": "ci-stuck", "summary": f"{', '.join(red_jobs)} red after {CI_TRIES} refuted looks, "
                                                            f"needs a human"} if red_jobs else \
             {"pr": pr, "status": "nothing-to-fix"}
+    step = lambda name: progress(pr, name, items, conflict)
     wt = worktree(meta, prior, resume)
     conv = project_conventions(wt, meta, items)
     os.makedirs(names.SCRATCH, exist_ok=True)
     scratch = tempfile.mkdtemp(prefix=f"{pr}-", dir=names.SCRATCH)
     try:
         if conflict:
+            step("merging")
             session, merged = merge(pr, wt, meta, state.get("session"), scratch, conv)
             if not merged:
                 return {"pr": pr, "status": "limited", "worktree": wt, "session": session}
             state["session"] = session
             save(pr, state)
         if not items and not resume:
+            step("pushing")
             pushed = land(wt, meta["headRefName"], meta["headRefOid"], "", "")
             return {"pr": pr, "worktree": wt, "status": "pushed" if pushed else "no-changes", "pushed": pushed,
                     "merged": True, "fixed": 0, "refuted": 0, "deferred": 0,
@@ -412,6 +433,7 @@ def run(pr, merge_only=False):
         path = os.path.join(scratch, "feedback.json")
         json.dump([{k: v for k, v in i.items() if k not in ("top", "id", "count", "run")} for i in items], open(path, "w"), indent=2)
         prompt = fix_prompt(pr, meta, path, conv)
+        step("fixing")
         session, result = (state.get("session"), prior["result"]) if resume else \
             codex(wt, prompt, state.get("session"), scratch)
         for attempt in range(TEST_RETRIES + 1):
@@ -419,11 +441,13 @@ def run(pr, merge_only=False):
                 return {"pr": pr, "status": "limited", "worktree": wt, "session": session}
             state["session"] = session
             save(pr, state)
+            step("testing")
             tests = gates.run(GATES, wt, changed(wt))
             red = [t for t in tests if t["ok"] is False]
             if not red or attempt == TEST_RETRIES:
                 break
             logs = "\n\n".join(f"### {t['ns']}\nFull log: {saved(scratch, t)}\n...\n{t['log'][-3000:]}" for t in red)
+            step("fixing")
             session, result = codex(wt, gates.retry(GATES, red, logs), session, scratch)
         by_ref = {i["ref"]: i for i in items}
         refuted = [(by_ref[a["ref"]], a["reply"]) for a in result["items"] if a["disposition"] == "refuted"
@@ -435,6 +459,7 @@ def run(pr, merge_only=False):
         caught_up = False
         if retry and not red and not changed(wt) and not conflict:
             before = sh(["git", "rev-parse", "HEAD"], cwd=wt).strip()
+            step("merging")
             session, ok = merge(pr, wt, meta, session, scratch, conv)
             if not ok:
                 return {"pr": pr, "status": "limited", "worktree": wt, "session": session}
@@ -449,6 +474,7 @@ def run(pr, merge_only=False):
         return {**report, "status": "tests-red", "gate": ", ".join(dict.fromkeys(t["gate"] for t in red)),
                 "failing": [t["ns"] for t in red]}
     state.pop("red", None)
+    step("pushing")
     pushed = land(wt, meta["headRefName"], meta["headRefOid"], result["commit_message"], result["summary"])
     base = f"origin/{meta['baseRefName']}"
     respond(pr, items, result["items"], {

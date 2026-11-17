@@ -217,7 +217,7 @@ class Runtime:
             now = db.now()
             item.update(group="active", status="reviewing", detail=f"since {now[11:19]}", active={
                 "lane": "review", "since": now,
-                "reviewers": [{"id": r["id"], "state": "running", "attempt": 1, "since": now} for r in ids]})
+                "reviewers": [{"id": r["id"], "state": "running", "attempt": 1, "since": now} for r in ids], "fix": None})
             self.publish()
         self.run([lambda r=r: r.update(state="clean", since=db.now()) for r in item["active"]["reviewers"]]
                  + [lambda: self.reviewed(item, ids)])
@@ -264,7 +264,10 @@ class Runtime:
             self.hold(item)
             before, now = {k: item[k] for k in ("group", "status", "detail")}, db.now()
             item.update(group="active", status="fixing", detail=f"since {now[11:19]}",
-                        active={"lane": "fix", "since": now, "reviewers": None})
+                        active={"lane": "fix", "since": now, "reviewers": None, "fix": {
+                            "step": "fixing", "since": now, "conflict": False, "items": [
+                                {"kind": "thread", "title": f"[{t['severity']}] {t['title']}", "author": t["reviewer"],
+                                 "path": t["file"], "line": t["line"]} for t in (item["findings"] or {}).get("top", [])]}})
             self.publish()
         self.run([lambda: self.fixed(item, before)])
 

@@ -18,7 +18,10 @@ OLD, HEAD = "0" * 40, "a" * 40
 SINCE = "2026-10-25T12:01:02+00:00"
 RUNTIME = {"generated_at": "2026-10-25T12:03:10+00:00", "fetched_at": "2026-10-25T12:00:41+00:00", "paused": False,
            "refresh": {"last_at": "2026-10-25T12:00:41+00:00", "last_error": None}}
-NULLABLE = {"items[].active.reviewers", "items[].review.verdict"}
+NULLABLE = {"items[].active.reviewers", "items[].active.fix", "items[].review.verdict"}
+FIXING = {"step": "fixing", "since": "2026-10-25T12:05:30+00:00", "conflict": False, "items": [
+    {"kind": "thread", "title": "[high] One sub per hop", "author": "opus", "path": "a.cljs", "line": 4},
+    {"kind": "ci", "title": "lint", "author": None, "path": None, "line": None}]}
 
 
 def digest(*severities):
@@ -70,6 +73,7 @@ def script():
     db.put_review(MONOREPO, 22, review(status="clean", verdict="clean", note="no findings"))
     db.put_fix(GITOPS, 10, fix("nothing-to-fix"))
     db.run_start(GITOPS, 21, "fix", since="2026-10-25T12:05:00+00:00")
+    db.run_fix(GITOPS, 21, FIXING)
     return [item(10), item(11, author="colleague", mine=False, requested=True),
             item(12, author="colleague", mine=False), item(13, author=None, mine=False, requested=True),
             item(14), item(15), item(16, mine=False, requested=True),
@@ -204,8 +208,9 @@ class Snapshot(unittest.TestCase):
         items = self.items()
         self.assertEqual([(r["id"], r["state"], r["attempt"]) for r in items["iprally/iprally#10"]["active"]["reviewers"]],
                          [("opus", "running", 1), ("codex", "waiting", 2)])
+        self.assertEqual(items["iprally/iprally#10"]["active"]["fix"], None)
         self.assertEqual(items["iprally/gitops#21"]["active"], {"lane": "fix", "since": "2026-10-25T12:05:00+00:00",
-                                                                "reviewers": None})
+                                                                "reviewers": None, "fix": FIXING})
 
     def test_review_and_fix_rows(self):
         items = self.items()

@@ -7,7 +7,7 @@
     "separate": false,
     "pools": [
       {"id": "review", "lane": "review", "repo": null, "workers": 3, "busy": 1, "pending": 1},
-      {"id": "fix", "lane": "fix", "repo": null, "workers": 3, "busy": 0, "pending": 0}
+      {"id": "fix", "lane": "fix", "repo": null, "workers": 3, "busy": 1, "pending": 0}
     ]
   },
   "projects": [
@@ -27,7 +27,7 @@
      "checkout": null, "prs": 1, "error": null, "conventions": null, "gates": []}
   ],
   "refresh": {"last_at": "2026-10-25T12:00:41+03:00", "last_error": null},
-  "counts": {"active": 1, "queued": 1, "ready": 1, "idle": 1, "paused": 0},
+  "counts": {"active": 2, "queued": 1, "ready": 1, "idle": 1, "paused": 0},
   "items": [
     {
       "key": "iprally/iprally#17190",
@@ -54,7 +54,7 @@
       "active": {"lane": "review", "since": "2026-10-25T12:01:02+03:00", "reviewers": [
         {"id": "opus", "state": "running", "attempt": 1, "since": "2026-10-25T12:01:03+03:00"},
         {"id": "codex", "state": "waiting", "attempt": 2, "since": "2026-10-25T12:02:10+03:00"},
-        {"id": "quality", "state": "clean", "attempt": 1, "since": "2026-10-25T12:02:41+03:00"}]},
+        {"id": "quality", "state": "clean", "attempt": 1, "since": "2026-10-25T12:02:41+03:00"}], "fix": null},
       "review": {"sha": "0aa1c3e9b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2", "current": false, "status": "posted",
                  "verdict": "posted", "note": "opus, codex", "rounds": 1, "hold": false,
                  "at": "2026-10-25T10:40:12+03:00"},
@@ -178,6 +178,23 @@
                 "at": "2026-10-25T10:32:00+03:00", "verdict": null, "reason": null, "intent": null, "stated": null,
                 "changes": [], "touches": []},
       "fix_queued": false, "override": []
+    },
+    {
+      "key": "sandudorogan/dataspex#57", "repo": "sandudorogan/dataspex", "number": 57,
+      "title": "feat: render nested maps as trees", "url": "https://github.com/sandudorogan/dataspex/pull/57",
+      "author": "sandudorogan", "author_name": "Sandu Dorogan", "mine": true, "draft": false, "labels": [],
+      "head": "4b1f0e9d8c7a6b5f4e3d2c1b0a9f8e7d6c5b4a39", "base": "main", "additions": 88, "deletions": 12,
+      "pushed_at": "2026-10-25T11:40:00+03:00", "updated_at": "2026-10-25T11:52:30+03:00",
+      "requested": false, "bumped": false, "group": "active", "rank": null, "paused": false, "done": false,
+      "status": "fixing", "detail": "since 12:02:15",
+      "active": {"lane": "fix", "since": "2026-10-25T12:02:15+03:00", "reviewers": null,
+                 "fix": {"step": "testing", "since": "2026-10-25T12:02:58+03:00", "conflict": false, "items": [
+                   {"kind": "thread", "title": "[high] The tree drops keys whose value is nil", "author": "opus",
+                    "path": "src/dataspex/tree.cljs", "line": 42},
+                   {"kind": "comment", "title": "Could the nodes start collapsed?", "author": "aino",
+                    "path": null, "line": null},
+                   {"kind": "ci", "title": "test (ubuntu-latest)", "author": null, "path": null, "line": null}]}},
+      "review": null, "findings": null, "fix": null, "fix_queued": false, "scope": null, "override": []
     }
   ]
 }

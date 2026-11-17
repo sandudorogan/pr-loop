@@ -20,7 +20,7 @@ import Testing
     func top() throws {
         let rows = rows(.top(5, in: .live(try Snapshots.queue(items: renumbered))))
         #expect(rows.map(\.ref.number) == [1, 2, 3, 4, 5])
-        #expect(Set(rows.map(\.ref.repo)) == ["iprally/iprally", "iprally/gitops"])
+        #expect(Set(rows.map(\.ref.repo)) == ["iprally/iprally", "iprally/gitops", "sandudorogan/dataspex"])
     }
 
     @Test("a row reads symbol, project, number and the title cut to 44 characters")
@@ -32,8 +32,8 @@ import Testing
                 "iprally #17201  fix(api): retry the export job once",
                 "iprally #17166  refactor(ui): one sub per hop in the filters",
             ])
-        #expect(rows.map(\.symbol) == ["eye", "clock", "checkmark.seal.fill", "minus.circle"])
-        #expect(rows.last?.text == "gitops #412  chore: bump the search image")
+        #expect(rows.map(\.symbol) == ["eye", "clock", "checkmark.seal.fill", "minus.circle", "hammer"])
+        #expect(rows.last?.text == "dataspex #57  feat: render nested maps as trees")
     }
 
     @Test("an empty queue reads empty")

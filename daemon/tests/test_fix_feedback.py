@@ -202,6 +202,22 @@ class Worktree(unittest.TestCase):
         self.assertEqual(Path(self.wt, "feature").read_text(), "f")
 
 
+class Headline(unittest.TestCase):
+    def test_an_agent_thread_reads_its_reviewer_and_title(self):
+        body = "<!-- agent-review: reviewer=opus round=1 sha=h -->\n**[high] One sub per hop**\n\nbody"
+        item = {"kind": "thread", "path": "a.cljs", "line": 4, "comments": [{"author": "me", "body": body}]}
+        self.assertEqual(fix.headline(item), {"kind": "thread", "title": "[high] One sub per hop", "author": "opus",
+                                              "path": "a.cljs", "line": 4})
+
+    def test_a_colleagues_comment_reads_its_first_line(self):
+        item = {"kind": "comment", "author": "aino", "body": "\n`retry` twice?\nmore"}
+        self.assertEqual(fix.headline(item), {"kind": "comment", "title": "retry twice?", "author": "aino",
+                                              "path": None, "line": None})
+
+    def test_a_job_reads_its_name(self):
+        self.assertEqual(fix.headline({"kind": "ci", "name": "lint"})["title"], "lint")
+
+
 class MergeOnly(unittest.TestCase):
     def run_pass(self, mergeable):
         meta = f'{{"state": "OPEN", "headRefName": "b", "headRefOid": "h", "baseRefName": "main", "mergeable": "{mergeable}"}}'
@@ -210,9 +226,10 @@ class MergeOnly(unittest.TestCase):
                 patch.object(fix, "save"), patch.object(fix, "checks", return_value=[]), \
                 patch.object(fix, "feedback") as feedback, patch.object(fix, "worktree", return_value="/wt") as wt, \
                 patch.object(fix, "project_conventions"), patch.object(fix, "merge", return_value=("s", True)), \
-                patch.object(fix, "land", return_value="p") as land:
+                patch.object(fix, "land", return_value="p") as land, patch.object(fix, "progress") as progress:
             out = fix.run(1, merge_only=True)
         feedback.assert_not_called()
+        self.steps = [c.args[1] for c in progress.call_args_list]
         return out, wt, land
 
     def test_a_conflict_is_merged_and_the_feedback_left_alone(self):
@@ -220,6 +237,7 @@ class MergeOnly(unittest.TestCase):
         self.assertEqual((out["status"], out["pushed"], out["fixed"]), ("pushed", "p", 0))
         wt.assert_called_once_with(unittest.mock.ANY, {}, False)
         land.assert_called_once_with("/wt", "b", "h", "", "")
+        self.assertEqual(self.steps, ["collecting", "merging", "pushing"])
 
     def test_no_conflict_left_is_nothing_to_fix(self):
         out, wt, land = self.run_pass("MERGEABLE")

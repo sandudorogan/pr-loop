@@ -14,7 +14,10 @@ import Testing
     func all() throws {
         #expect(
             try keys(QueueFilter())
-                == ["iprally/iprally#17190", "iprally/iprally#17201", "iprally/iprally#17166", "iprally/gitops#412"])
+                == [
+                    "iprally/iprally#17190", "iprally/iprally#17201", "iprally/iprally#17166", "iprally/gitops#412",
+                    "sandudorogan/dataspex#57",
+                ])
     }
 
     @Test("a project keeps only its PRs")
@@ -46,7 +49,7 @@ import Testing
         #expect(
             all.map { $0.rows.map(\.id) } == [
                 ["iprally/iprally#17166", "iprally/iprally#17201"],
-                ["iprally/iprally#17190", "iprally/gitops#412"],
+                ["iprally/iprally#17190", "sandudorogan/dataspex#57", "iprally/gitops#412"],
                 ["iprally/iprally#17120"],
             ])
         #expect(QueueFilter(repo: "iprally/gitops").sections(try Snapshots.queue().items).map(\.kind) == [.mine])

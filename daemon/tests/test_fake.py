@@ -143,7 +143,7 @@ class Config(Fake):
         pools = self.call("GET", "/v1/queue")[1]["lanes"]["pools"]
         self.assertEqual([p["id"] for p in pools], ["review:iprally/iprally", "fix:iprally/iprally", "fix:iprally/gitops",
                                                    "review:sandudorogan/dataspex", "fix:sandudorogan/dataspex"])
-        self.assertEqual(sum(p["busy"] for p in pools), 1)
+        self.assertEqual([p["busy"] for p in pools], [1, 0, 0, 0, 1])
 
     def test_a_stale_base_rev_is_412_and_changes_nothing(self):
         rev = self.rev()
@@ -176,7 +176,7 @@ class Actions(Fake):
         self.assertEqual([self.item(k)["rank"] for k in (f"{IPRALLY}#17201", other)], [1, 2])
         status, body = self.call("POST", "/v1/next", {"prs": [{"repo": IPRALLY, "number": 17300}]})
         self.assertEqual((status, body["next"][0], body["results"]), (200, other, [{"key": other, "bumped": True, "reason": None}]))
-        self.assertEqual(self.keys()[1:3], [other, f"{IPRALLY}#17201"])
+        self.assertEqual(self.keys()[2:4], [other, f"{IPRALLY}#17201"])
         self.assertEqual([(self.item(k)["rank"], self.item(k)["bumped"]) for k in (other, f"{IPRALLY}#17201")], [(1, True), (2, True)])
 
     def test_next_says_why_it_leaves_a_pr(self):

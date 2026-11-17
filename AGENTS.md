@@ -170,7 +170,7 @@ One code path owns each table:
 | `reviewer_results` | review lane | `(repo, number, sha, reviewer)` → `{result, engine, round, digest, conventions, url}`, latest head only |
 | `fixes` | fix lane | `(repo, number)` → `{sha, key, status, note, errors, gate, at}` |
 | `next` | `--next`, `--wait`, `POST /v1/next` | bumped PRs in order |
-| `runs` | live runs | `(repo, number)` → `{pid, lane, since, reviewers}` for `-l` ▶ rows; dead pids ignored |
+| `runs` | live runs | `(repo, number)` → `{pid, lane, since, reviewers, fix}` for `-l` ▶ rows; dead pids ignored. `fix` = the step and items of a fix pass, written by `pr_fix.py` |
 | `events` | daemon | `ready_for_approval` / `ready_withdrawn` for `GET /v1/events`, last 1000 |
 | `history` | both lanes | one row per PR worked on, for `GET /v1/history`; 30 days, at most 500 rows |
 | `pr_overrides` | API (`PATCH`/`DELETE …/config`) | `(repo, number)` → partial `review.*`/`fix.*` config |

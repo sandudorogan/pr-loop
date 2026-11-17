@@ -7,13 +7,42 @@ import Testing
     func queueDecodes() throws {
         let snapshot = try Fixture.decode(QueueSnapshot.self, from: "queue.json")
         #expect(snapshot.rev == "b71e09c4d2a35f18")
-        #expect(snapshot.items.map(\.group) == [.active, .queued, .ready, .idle])
+        #expect(snapshot.items.map(\.group) == [.active, .queued, .ready, .idle, .active])
         #expect(snapshot.projects.map(\.status) == [.active, .active, .active, .noCheckout])
         #expect(snapshot.lanes.pools.map(\.lane) == [.review, .fix])
         let counts: [Int] = [
             snapshot.counts.active, snapshot.counts.queued, snapshot.counts.ready, snapshot.counts.idle,
         ]
-        #expect(counts == [1, 1, 1, 1])
+        #expect(counts == [2, 1, 1, 1])
+    }
+
+    @Test("an active fix says what it works on")
+    func activeFix() throws {
+        let item = try #require(Fixture.decode(QueueSnapshot.self, from: "queue.json").items.last)
+        let fix = try #require(item.active?.fix)
+        #expect(item.active?.lane == .fix)
+        #expect(fix.step == .testing)
+        #expect(fix.items.map(\.kind) == [.thread, .comment, .ci])
+        #expect(
+            fix.help == """
+                Running the gates · 3 items
+                • [high] The tree drops keys whose value is nil (opus, tree.cljs:42)
+                • Could the nodes start collapsed? (aino)
+                • CI job test (ubuntu-latest) failed
+                """)
+    }
+
+    @Test("a merge-only pass names the conflict, a fresh one only its step")
+    func fixHelpWithoutItems() throws {
+        let progress = { (step: String, conflict: Bool) in
+            try JSONDecoder.daemon.decode(
+                FixProgress.self,
+                from: Data(
+                    #"{"step": "\#(step)", "since": "2026-10-25T12:02:58+03:00", "conflict": \#(conflict), "items": []}"#
+                        .utf8))
+        }
+        #expect(try progress("merging", true).help == "Merging the base · 1 item\n• Merge conflict with the base")
+        #expect(try progress("collecting", false).help == "Reading the feedback")
     }
 
     @Test("an active review carries each reviewer's progress")
@@ -53,7 +82,7 @@ import Testing
     func refMatchesKey() throws {
         let items = try Fixture.decode(QueueSnapshot.self, from: "queue.json").items
         #expect(items.allSatisfy { $0.ref.id == $0.key })
-        #expect(items.last?.ref == PRRef(repo: "iprally/gitops", number: 412))
+        #expect(items.last?.ref == PRRef(repo: "sandudorogan/dataspex", number: 57))
     }
 
     @Test("times keep their offset")

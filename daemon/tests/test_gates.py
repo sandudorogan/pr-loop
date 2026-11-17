@@ -244,7 +244,8 @@ class TestsRed(unittest.TestCase):
                 patch.object(fix, "base_tip", return_value="t"), \
                 patch.object(fix, "load", return_value={}), patch.object(fix, "save"), \
                 patch.object(fix, "checks", return_value=[]), patch.object(fix, "failed_jobs", return_value=[]), \
-                patch.object(fix, "feedback", return_value=[{"ref": "t", "kind": "thread", "path": "a"}]), \
+                patch.object(fix, "feedback", return_value=[{"ref": "t", "kind": "thread", "path": "a",
+                                                               "comments": [{"author": "aino", "body": "b"}]}]), \
                 patch.object(fix, "worktree", return_value=scratch.name), patch.object(fix, "project_conventions"), \
                 patch.object(fix, "fix_prompt", return_value="p"), patch.object(fix, "changed", return_value=[]), \
                 patch.object(fix.names, "SCRATCH", scratch.name), \

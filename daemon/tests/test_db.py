@@ -47,7 +47,7 @@ class Connection(DbCase):
         self.assertEqual(c.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         self.assertEqual(c.execute("PRAGMA busy_timeout").fetchone()[0], 10_000)
         self.assertEqual(c.execute("PRAGMA synchronous").fetchone()[0], 1)
-        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 5)
+        self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 6)
         self.assertEqual(len(db.meta_get("events_epoch")), 6)
 
     def test_upgrade_from_version_one_adds_paused_prs(self):
@@ -55,7 +55,7 @@ class Connection(DbCase):
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("PRAGMA user_version = 1")
         db.pause_pr(R, 1, True)
-        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(5,)]))
+        self.assertEqual((list(db.paused_prs()), self.sql("PRAGMA user_version")), ([(R, 1)], [(6,)]))
         db.pause_pr(R, 1, False)
         self.assertEqual(db.paused_prs(), {})
 
@@ -83,6 +83,16 @@ class Connection(DbCase):
         event = db.add_event("ready_for_approval", R, 1, "t", "u", "aino", "a" * 40, author_name="Aino Virtanen")
         self.assertEqual(event["author_name"], "Aino Virtanen")
 
+    def test_upgrade_from_version_five_adds_the_fix_progress(self):
+        os.makedirs(os.path.dirname(self.path))
+        self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        self.sql("CREATE TABLE runs (repo TEXT, number INT, pid INT, lane TEXT, since TEXT, reviewers TEXT, "
+                 "PRIMARY KEY (repo, number))")
+        self.sql("PRAGMA user_version = 5")
+        db.run_start(R, 1, "fix")
+        db.run_fix(R, 1, {"step": "fixing"})
+        self.assertEqual(db.live_runs(R)[1]["fix"], {"step": "fixing"})
+
     def test_upgrade_from_version_four_adds_scopes(self):
         os.makedirs(os.path.dirname(self.path))
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -98,7 +108,7 @@ class Connection(DbCase):
         self.sql("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.sql("INSERT INTO meta VALUES ('imported_at', 'x')")
         self.assertEqual(db.meta_get("imported_at"), "x")
-        self.assertEqual(self.sql("PRAGMA user_version"), [(5,)])
+        self.assertEqual(self.sql("PRAGMA user_version"), [(6,)])
         self.assertEqual(db.review(R, 1), {})
         db.close()
         self.assertEqual(db.meta_get("imported_at"), "x")
@@ -263,6 +273,8 @@ class Runs(DbCase):
         db.run_start(R, 1, "review")
         db.run_update(R, 1, [{"id": "opus", "state": "posted"}])
         self.assertEqual(db.live_runs(R)[1]["reviewers"], [{"id": "opus", "state": "posted"}])
+        db.run_fix(R, 2, {"step": "fixing"})
+        self.assertNotIn(2, db.live_runs(R))
         db.run_end(R, 1)
         self.assertEqual(db.live_runs(R), {})
 

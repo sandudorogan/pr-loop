@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS fix_state (repo TEXT, number INT, session TEXT, handl
 CREATE TABLE IF NOT EXISTS clean_reviews (repo TEXT, number INT, sha TEXT, reviewer TEXT, at TEXT,
   PRIMARY KEY (repo, number, sha, reviewer));
 CREATE TABLE IF NOT EXISTS next (pos INTEGER PRIMARY KEY, repo TEXT, number INT, UNIQUE (repo, number));
-CREATE TABLE IF NOT EXISTS runs (repo TEXT, number INT, pid INT, lane TEXT, since TEXT, reviewers TEXT,
+CREATE TABLE IF NOT EXISTS runs (repo TEXT, number INT, pid INT, lane TEXT, since TEXT, reviewers TEXT, fix TEXT,
   PRIMARY KEY (repo, number));
 CREATE INDEX IF NOT EXISTS runs_pid ON runs (pid);
 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE, type TEXT, repo TEXT,
@@ -53,15 +53,18 @@ def _schema(c):
             c.execute(statement)
 
 
-def _author_name(c):
-    for table in ("history", "events"):
-        if "author_name" not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
-            c.execute(f"ALTER TABLE {table} ADD COLUMN author_name TEXT")
+def _columns(*columns):
+    def add(c):
+        for table, column in columns:
+            if column not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
+    return add
 
 
 # Every statement is IF NOT EXISTS, so a version that only adds tables re-runs the schema. v2: paused_prs, v3: done_prs,
-# v4: history.author_name and events.author_name (a fresh db already has them from the schema), v5: scopes.
-UPGRADES = [_schema] * 3 + [_author_name, _schema]
+# v4: history.author_name and events.author_name (a fresh db already has them from the schema), v5: scopes, v6: runs.fix.
+UPGRADES = [_schema] * 3 + [_columns(("history", "author_name"), ("events", "author_name")), _schema,
+                            _columns(("runs", "fix"))]
 
 _local = threading.local()
 COMMITS = []
@@ -365,16 +368,22 @@ def run_update(repo, n, reviewers):
         c.execute("UPDATE runs SET reviewers = ? WHERE repo = ? AND number = ?", (_dump(reviewers), repo, int(n)))
 
 
+def run_fix(repo, n, fix):
+    with tx() as c:
+        c.execute("UPDATE runs SET fix = ? WHERE repo = ? AND number = ?", (_dump(fix), repo, int(n)))
+
+
 def run_end(repo, n):
     with tx() as c:
         c.execute("DELETE FROM runs WHERE repo = ? AND number = ?", (repo, int(n)))
 
 
 def live_runs(repo=None):
-    """{number: {lane, since, reviewers, pid}} of the runs whose process lives. All repos give {(repo, number): …}."""
+    """{number: {lane, since, reviewers, fix, pid}} of the runs whose process lives. All repos give {(repo, number): …}."""
     rows = [r for r in _all("SELECT * FROM runs WHERE ? IS NULL OR repo = ?", repo, repo) if _alive(r["pid"])]
     return {(r["number"] if repo else (r["repo"], r["number"])):
-            {"lane": r["lane"], "since": r["since"], "reviewers": _load(r["reviewers"]), "pid": r["pid"]}
+            {"lane": r["lane"], "since": r["since"], "reviewers": _load(r["reviewers"]),
+             "fix": _load(r["fix"]), "pid": r["pid"]}
             for r in rows}
 
 

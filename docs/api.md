@@ -207,7 +207,7 @@ On a connect error, back off 2 s → 30 s and show "daemon down".
       "active": {"lane": "review", "since": "2026-10-25T12:01:02+03:00", "reviewers": [
         {"id": "opus", "state": "running", "attempt": 1, "since": "2026-10-25T12:01:03+03:00"},
         {"id": "codex", "state": "waiting", "attempt": 2, "since": "2026-10-25T12:02:10+03:00"},
-        {"id": "quality", "state": "clean", "attempt": 1, "since": "2026-10-25T12:02:41+03:00"}]},
+        {"id": "quality", "state": "clean", "attempt": 1, "since": "2026-10-25T12:02:41+03:00"}], "fix": null},
       "review": {"sha": "0aa1c3e9b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2", "current": false, "status": "posted",
                  "verdict": "posted", "note": "opus, codex", "rounds": 1, "hold": false,
                  "at": "2026-10-25T10:40:12+03:00"},
@@ -334,7 +334,10 @@ Snapshot rules (they reproduce `show()` and `row()` in `queue.py`):
 | `rank` | int \| null | 1..n review order, `queued` only (the `-l` number) |
 | `status` | string | the `-l` status column (table below) |
 | `detail` | string | the `-l` detail column, human text; do not parse |
-| `active` | `{lane: "review" \| "fix", since: string, reviewers: [reviewer progress] \| null}` \| null | a live run holds the PR; `reviewers` is null on the fix lane |
+| `active` | `{lane: "review" \| "fix", since: string, reviewers: [reviewer progress] \| null, fix: fix progress \| null}` \| null | a live run holds the PR; `reviewers` is null on the fix lane, `fix` on the review lane and until `pr_fix.py` writes its first step |
+| `active.fix.step` | `collecting` \| `merging` \| `fixing` \| `testing` \| `pushing` | reading the feedback · Codex merging the base · Codex fixing (again after red gates) · the gates · land, reply, resolve |
+| `active.fix.since`, `conflict` | string, bool | when this step began; the pass merges a base conflict first |
+| `active.fix.items[]` | `{kind, title, author, path, line}` | the feedback the pass handed Codex: `kind` = `thread` \| `review` \| `comment` \| `ci`; `title` = an agent finding's `[severity] title`, else the first line (≤ 120 chars), or the job name; `author` = the agent reviewer id, else the login, null for `ci`; `path`, `line` only on a thread (`line` null when outdated). The app's Fixing tooltip |
 | `active.reviewers[].id` | string | reviewer id from the config |
 | `active.reviewers[].state` | `running` \| `waiting` \| `posted` \| `clean` \| `failed` \| `limited` | `running` = an attempt is in flight; `waiting` = backoff before the next attempt; `posted` = left findings to fix; `clean` = `stop: true` (no findings or notes only); `failed` = all `ATTEMPTS` failed; `limited` = both engines at their usage limit |
 | `active.reviewers[].attempt` | int 1–3 | current or last attempt (`run_reviewer()` loop) |

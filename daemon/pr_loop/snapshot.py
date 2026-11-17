@@ -73,7 +73,8 @@ def entry(pr, rows, runs, cfg, first, override, paused, done):
         "paused": bool(paused), "done": done,
         "status": status, "detail": detail,
         "active": run and {"lane": run["lane"], "since": run["since"],
-                           "reviewers": run["reviewers"] if run["lane"] == "review" else None},
+                           "reviewers": run["reviewers"] if run["lane"] == "review" else None,
+                           "fix": run["fix"] if run["lane"] == "fix" else None},
         "review": {k: v for k, v in seen.items() if k != "files"} | {"current": seen["sha"] == head, "at": iso(seen["at"])}
         if seen else None,
         "findings": findings(repo, seen, rows["results"].get(n), head, cfg, override),
