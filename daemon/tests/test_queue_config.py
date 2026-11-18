@@ -151,7 +151,8 @@ class Gates(Configured):
         self.assertEqual(rq.decide(pr(repo=NEW), {"rounds": 2, **self.seen}, files, False),
                          ("needs-human", "2 rounds in a row with findings, review it by hand or run --pr 1"))
         self.assertIsNone(rq.decide(pr(), {"rounds": 2, **self.seen}, files, False))
-        self.assertEqual(rq.decide(pr(repo=NEW, additions=11), {}, {}, False)[0], "too-big")
+        with patch.object(rq, "written", return_value=11):
+            self.assertEqual(rq.decide(pr(repo=NEW, additions=11), {}, {}, False)[0], "too-big")
         self.assertEqual(rq.decide(pr(repo=NEW), {"files": {"n.txt": "1"}}, {}, False)[0], "trivial")
         self.assertIsNone(rq.decide(pr(repo=NEW), {"files": {"n.md": "1"}}, {}, False))
 

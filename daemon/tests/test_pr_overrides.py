@@ -35,8 +35,9 @@ class Levels(Store):
 
     def test_the_gates_read_the_pr_rounds_and_size(self):
         db.put_pr_override(MONOREPO, 5, {"review": {"max_added": 10}})
-        self.assertEqual(rq.decide(pr(5, additions=11, requested=True), {"sha": "x", "files": {}}, {"a": "1"}, None)[0],
-                         "too-big")
+        with patch.object(rq, "written", return_value=11):
+            self.assertEqual(rq.decide(pr(5, additions=11, requested=True), {"sha": "x", "files": {}}, {"a": "1"}, None)[0],
+                             "too-big")
         self.assertIsNone(rq.decide(pr(6, additions=11, requested=True), {"sha": "x", "files": {}}, {"a": "1"}, None))
 
 

@@ -310,6 +310,14 @@ def fingerprint(pr):
     return files
 
 
+def written(pr):
+    """Added lines of the PR's own diff, without the files its head's .gitattributes marks `linguist-generated`."""
+    stat = sh("git", f"--attr-source={pr['headRefOid']}", "diff", "--numstat", "--no-renames",
+              f"origin/{pr['baseRefName']}...{pr['headRefOid']}", "--", ".",
+              ":(exclude,attr:linguist-generated)", ":(exclude,attr:linguist-generated=true)", repo=pr["repo"])
+    return sum(int(added) for added, *_ in (line.split("\t") for line in stat.splitlines()) if added != "-")
+
+
 def false_clean(res):
     """A reviewer that never ran can still report "no findings" — its summary gives it away."""
     summary = (res.get("summary") or "").strip()
@@ -420,8 +428,8 @@ def decide(pr, seen, files, only):
         return "held", f"clean before, review only on request: --next {pr['number']} or --pr {pr['number']}"
     if seen.get("rounds", 0) >= gate["rounds"]:
         return "needs-human", f"{gate['rounds']} rounds in a row with findings, review it by hand or run --pr {pr['number']}"
-    if pr["additions"] > gate["max_added"]:
-        return "too-big", f"{pr['additions']} added lines, review it by hand"
+    if pr["additions"] > gate["max_added"] and (added := written(pr)) > gate["max_added"]:
+        return "too-big", f"{added} added lines outside generated files, review it by hand"
 
 
 def log_once(repo, n, msg):

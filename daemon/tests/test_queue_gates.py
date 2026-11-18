@@ -72,15 +72,50 @@ class Decide(unittest.TestCase):
         self.assertIsNone(rq.decide(pr(), {"rounds": rq.ROUNDS - 1, **self.seen}, files, False))
 
     def test_too_big_past_the_added_line_cap(self):
-        self.assertEqual(rq.decide(pr(additions=4001), {}, {}, False),
-                         ("too-big", "4001 added lines, review it by hand"))
-        self.assertIsNone(rq.decide(pr(additions=4000), {}, {}, False))
+        with patch.object(rq, "written", return_value=4001):
+            self.assertEqual(rq.decide(pr(additions=5000), {}, {}, False),
+                             ("too-big", "4001 added lines outside generated files, review it by hand"))
+        with patch.object(rq, "written", side_effect=AssertionError):
+            self.assertIsNone(rq.decide(pr(additions=4000), {}, {}, False))
+
+    def test_generated_files_do_not_count_toward_the_cap(self):
+        with patch.object(rq, "written", return_value=4000):
+            self.assertIsNone(rq.decide(pr(additions=5000), {}, {}, False))
 
     def test_gates_run_in_order(self):
         seen = {"hold": True, "rounds": rq.ROUNDS, "files": {"a.py": "1"}}
         self.assertEqual(rq.decide(pr(additions=9999), seen, {"a.py": "1"}, False)[0], "unchanged")
         self.assertEqual(rq.decide(pr(additions=9999), seen, {"a.py": "2"}, False)[0], "held")
         self.assertEqual(rq.decide(pr(additions=9999, requested=True), seen, {"a.py": "2"}, False)[0], "needs-human")
+
+
+class Written(unittest.TestCase):
+    def git(self, *args):
+        return rq.subprocess.run(["git", "-C", self.root, "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+
+    def write(self, rel, text):
+        os.makedirs(os.path.dirname(os.path.join(self.root, rel)), exist_ok=True)
+        with open(os.path.join(self.root, rel), "w") as f:
+            f.write(text)
+
+    def test_counts_the_own_diff_without_the_files_the_head_marks_generated(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = tmp.name
+        self.git("init", "-q", "-b", "main")
+        self.write("src.py", "a\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.write(".gitattributes", "gen/** linguist-generated\n*_pb2.py linguist-generated=true\n")
+        self.write("gen/A.java", "x\n" * 50)
+        self.write("api_pb2.py", "x\n" * 20)
+        self.write("src.py", "a\nb\nc\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "head")
+        with patch.object(rq, "root", return_value=self.root):
+            self.assertEqual(rq.written(pr(head=self.git("rev-parse", "HEAD"))), 2 + 2)
 
 
 class FeedbackKey(unittest.TestCase):

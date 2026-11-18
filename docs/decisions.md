@@ -124,6 +124,13 @@ stale `loyto/node_modules` held echarts 5.5.0, the echarts wrapper needs 6.1.0's
 `tests-red` before Karma started. The root install and `ui/shadow-cljs.edn` (`:js-package-dirs`) never read that
 folder, so the gate loses nothing. A standalone `npm install` in `loyto/` puts it back.
 
+**D41. Generated files do not count toward `too-big`** (2026-11-18). Past `review.max_added`, the gate counts the
+added lines of the PR's own diff again, without the files the head's `.gitattributes` marks `linguist-generated`
+(`set` or `=true`, the attribute GitHub already reads). *Why:* iprally#17808 added 5070 lines and was parked
+`too-big`, but 4574 of them were protoc output under `proto/gen/`: the change I wrote was 496 lines. The project
+already marks its generated files, so the daemon reads that mark and keeps no list of its own. The git call runs
+only when GitHub's total is past the cap, so a normal PR costs nothing.
+
 **D37. `no-auto-fix` still merges a conflicting base** (2026-11-13). On a labeled PR of mine that conflicts with
 its base, the fix lane runs `pr_fix.py run --merge-only`: it merges the base (Codex resolves the markers), pushes,
 and hands Codex no feedback and no red CI. A project whose `fix.enabled` is false still merges nothing. A fix

@@ -816,7 +816,7 @@ by mtime (§4.5).
 | `fix.enabled` | bool | on in both daemons | fix lane for the owner's PRs in a project |
 | `review.workers` | int 1–8 | `WORKERS = 3` | shared pool size (separate off); per-project pool size from the effective config (separate on) |
 | `review.rounds` | int 1–50 | `ROUNDS = 8` | rounds in a row with findings before `needs-human` |
-| `review.max_added` | int 1–100000 | `MAX_ADDED = 4000` | added lines over this → `too-big` |
+| `review.max_added` | int 1–100000 | `MAX_ADDED = 4000` | added lines over this, outside the files the head's `.gitattributes` marks `linguist-generated` → `too-big` |
 | `review.trivial` | [glob] ≤ 50, non-empty | `TRIVIAL` | a change to only these files → `trivial` |
 | `review.timeout_s` | int 60–14400 | `IPR_REVIEW_TIMEOUT` (2700) | per engine call in `pr_review.py` |
 | `review.reviewers` | [reviewer] 1–8, unique `id` | `REVIEWERS` (both files) | the daemon runs every `enabled` one in parallel per PR |
